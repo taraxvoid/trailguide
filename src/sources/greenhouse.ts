@@ -1,3 +1,4 @@
+import { matchesLocation } from "./location.ts";
 import { companiesForAts } from "./seed.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
@@ -37,9 +38,7 @@ export function createGreenhouseSource(): Source {
           if (!matchesRole(job.title, params.role)) continue;
           if (
             params.location &&
-            !job.location.name
-              .toLowerCase()
-              .includes(params.location.toLowerCase())
+            !matchesLocation(job.location.name, params.location)
           ) {
             continue;
           }
