@@ -6,7 +6,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -41,18 +41,16 @@ const FAIL_ON = [
   // modifying/statically linking the library, not on depending on it as-is.
 ].join(";");
 
-const result = spawnSync(
-  "bunx",
-  ["license-checker", "--summary", "--failOn", FAIL_ON],
-  {
-    cwd: ROOT,
-    stdio: "inherit",
-  },
-);
+const BIN = join(ROOT, "node_modules", ".bin", "license-checker");
+
+const result = spawnSync(BIN, ["--summary", "--failOn", FAIL_ON], {
+  cwd: ROOT,
+  stdio: "inherit",
+});
 
 if (result.error) {
   console.error(
-    `\ncheck:licenses failed - could not run license-checker: ${result.error.message}`,
+    `\ncheck:licenses failed - could not run ${BIN}: ${result.error.message}`,
   );
   process.exit(1);
 }

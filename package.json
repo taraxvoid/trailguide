@@ -16,7 +16,6 @@
     "test": "bun test",
     "postinstall": "bunx @biomejs/biome migrate --write",
     "smoke-live": "bun run tests/smoke-live.ts",
-    "lint:actions": "bun run scripts/lint-actions.js",
     "check:licenses": "bun scripts/check-licenses.ts"
   },
   "engines": {
@@ -24,7 +23,6 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "actionlint": "^2.0.6",
     "@biomejs/biome": "^1.9.4",
     "@lizenz/checker": "^0.0.2",
     "@types/bun": "^1.1.14"
