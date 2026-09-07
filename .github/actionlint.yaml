@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # Self-hosted runners provisioned via ~/projects/flock (the igor runner image).
+  labels:
+    - igor
