@@ -14,7 +14,9 @@ interface JSearchJob {
 }
 
 interface JSearchResponse {
-  data: JSearchJob[];
+  data: {
+    jobs: JSearchJob[];
+  };
 }
 
 function toRemoteType(job: JSearchJob): NormalizedJob["remoteType"] {
@@ -33,7 +35,7 @@ export function createJSearchSource(apiKey: string): Source {
     name: "jsearch",
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const query = [params.role, params.location].filter(Boolean).join(" in ");
-      const url = new URL("https://jsearch.p.rapidapi.com/search");
+      const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
       url.searchParams.set("query", query);
       if (params.remote === "remote") {
         url.searchParams.set("remote_jobs_only", "true");
@@ -52,7 +54,7 @@ export function createJSearchSource(apiKey: string): Source {
       }
 
       const body = (await res.json()) as JSearchResponse;
-      return body.data.map((job) => ({
+      return body.data.jobs.map((job) => ({
         sourceId: job.job_id,
         source: "jsearch",
         title: job.job_title,
