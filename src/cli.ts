@@ -6,7 +6,21 @@ import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
-import type { RemoteType, Source } from "./sources/types.ts";
+import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
+
+const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
+const CLEARANCE_PATTERN = /\bclearance\b/i;
+
+function isInternship(job: NormalizedJob): boolean {
+  return INTERNSHIP_PATTERN.test(job.title);
+}
+
+function requiresClearance(job: NormalizedJob): boolean {
+  return (
+    CLEARANCE_PATTERN.test(job.title) ||
+    CLEARANCE_PATTERN.test(job.description ?? "")
+  );
+}
 
 function buildSources(): Source[] {
   const sources: Source[] = [createGreenhouseSource(), createLeverSource()];
@@ -38,13 +52,14 @@ async function main() {
       json: { type: "boolean", default: false },
       csv: { type: "boolean", default: false },
       db: { type: "string", default: "igor.db" },
+      clearance: { type: "boolean", default: false },
     },
   });
 
   const command = positionals[0];
   if (command !== "search") {
     console.error(
-      "Usage: igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite]",
+      "Usage: igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [--clearance]",
     );
     process.exit(1);
   }
@@ -76,7 +91,9 @@ async function main() {
     ),
   );
 
-  const jobs = dedupe(results.flat());
+  const jobs = dedupe(results.flat())
+    .filter((job) => !isInternship(job))
+    .filter((job) => values.clearance || !requiresClearance(job));
   const db = openDb(values.db as string);
   const newJobs = upsertJobs(db, jobs);
 
