@@ -1,0 +1,28 @@
+[
+  {
+    "id": "abc-123",
+    "text": "Senior Software Engineer, Streaming",
+    "categories": {
+      "location": "Remote - USA",
+      "team": "Engineering",
+      "commitment": "Full-time"
+    },
+    "workplaceType": "remote",
+    "hostedUrl": "https://jobs.lever.co/netflix/abc-123",
+    "createdAt": 1753920000000,
+    "descriptionPlain": "Work on streaming infrastructure at Netflix."
+  },
+  {
+    "id": "def-456",
+    "text": "Marketing Manager",
+    "categories": {
+      "location": "Los Gatos, CA",
+      "team": "Marketing",
+      "commitment": "Full-time"
+    },
+    "workplaceType": "onsite",
+    "hostedUrl": "https://jobs.lever.co/netflix/def-456",
+    "createdAt": 1753920000000,
+    "descriptionPlain": "Lead marketing campaigns."
+  }
+]

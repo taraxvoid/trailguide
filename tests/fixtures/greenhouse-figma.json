@@ -1,0 +1,20 @@
+{
+  "jobs": [
+    {
+      "id": 1001,
+      "title": "Senior Software Engineer, Backend",
+      "location": { "name": "San Francisco, CA (Remote-friendly)" },
+      "absolute_url": "https://job-boards.greenhouse.io/figma/jobs/1001",
+      "updated_at": "2026-08-01T00:00:00Z",
+      "content": "Build backend systems at Figma."
+    },
+    {
+      "id": 1002,
+      "title": "Product Designer",
+      "location": { "name": "San Francisco, CA" },
+      "absolute_url": "https://job-boards.greenhouse.io/figma/jobs/1002",
+      "updated_at": "2026-08-01T00:00:00Z",
+      "content": "Design products at Figma."
+    }
+  ]
+}

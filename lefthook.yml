@@ -1,0 +1,15 @@
+# Local git hooks. Every command below shells out to a binary already on
+# PATH — lefthook doesn't manage tool versions itself. Pin those yourself:
+#   - biome: pinned in package.json/bun.lock, run via `bunx`
+#   - gitleaks: installed locally (see `just doctor`), not version-pinned here
+#
+# Install: `brew install lefthook && lefthook install`
+
+pre-commit:
+  parallel: true
+  commands:
+    biome-check:
+      glob: "*.{ts,js,json}"
+      run: bunx @biomejs/biome check {staged_files}
+    gitleaks:
+      run: gitleaks protect --staged --redact -v --no-banner
