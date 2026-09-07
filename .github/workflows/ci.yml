@@ -15,6 +15,7 @@ permissions:
 
 jobs:
   lint:
+  name: Lint
     # TODO: switch to `runs-on: igor` once the companion runner-igor.yaml
     # HelmRelease is merged in ~/projects/flock and the GitHub App install
     # covers this repo.
@@ -41,7 +42,8 @@ jobs:
 
       - run: just lint
 
-  test:
+  validate:
+    Name: Validate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
