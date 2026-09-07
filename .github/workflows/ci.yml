@@ -5,6 +5,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,43 +15,35 @@ permissions:
   contents: read
 
 jobs:
-  lint:
-    # TODO: switch to `runs-on: igor` once the companion runner-igor.yaml
-    # HelmRelease is merged in ~/projects/flock and the GitHub App install
-    # covers this repo.
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate
+    runs-on: igor
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: oven-sh/setup-bun@v2
+      - name: Cache npm packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          bun-version: latest
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
 
-      - run: bun install --frozen-lockfile
+      - name: Install npm packages
+        run: bun install --frozen-lockfile
 
-      - name: Install gitleaks
-        run: |
-          set -euo pipefail
-          curl -sSfL -o gitleaks.tar.gz \
-            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
-          tar -xzf gitleaks.tar.gz gitleaks
-          sudo mv gitleaks /usr/local/bin/gitleaks
+      - name: Lint Github Actions
+        run: actionlint
 
-      - uses: extractions/setup-just@v3
+      - name: Scan for secrets
+        run: gitleaks detect --source . --redact
 
-      - run: just lint
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # 4.0.0
 
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7.0.1
+      - name: Lint
+        run: just lint
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: Test
+        run: just test
 
-      - run: bun install --frozen-lockfile
-
-      - run: bun test
