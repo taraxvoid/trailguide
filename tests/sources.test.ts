@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
+import { createAshbySource } from "../src/sources/ashby.ts";
 import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
 import { createLeverSource } from "../src/sources/lever.ts";
 import { companiesForAts } from "../src/sources/seed.ts";
+import ashbyFixture from "./fixtures/ashby-ramp.json";
 import greenhouseFixture from "./fixtures/greenhouse-figma.json";
 import leverFixture from "./fixtures/lever-netflix.json";
 
@@ -41,6 +43,24 @@ describe("lever source", () => {
     expect(jobs).toHaveLength(companiesForAts("lever").length);
     expect(jobs[0]?.title).toBe("Senior Software Engineer, Streaming");
     expect(jobs[0]?.source).toBe("lever");
+    expect(jobs[0]?.remoteType).toBe("remote");
+  });
+});
+
+describe("ashby source", () => {
+  it("normalizes jobs and filters by role", async () => {
+    // The fixture stands in for every seeded ashby company, so one
+    // matching job per company is expected back.
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(ashbyFixture)),
+    );
+
+    const source = createAshbySource();
+    const jobs = await source.search({ role: "engineer" });
+
+    expect(jobs).toHaveLength(companiesForAts("ashby").length);
+    expect(jobs[0]?.title).toBe("Senior Software Engineer, Infrastructure");
+    expect(jobs[0]?.source).toBe("ashby");
     expect(jobs[0]?.remoteType).toBe("remote");
   });
 });
