@@ -21,7 +21,9 @@
   "engines": {
     "bun": ">=1.4.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "commander": "^15.0.0"
+  },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
     "@lizenz/checker": "^0.0.2",
