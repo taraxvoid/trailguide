@@ -12,18 +12,18 @@ const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
 const CLEARANCE_PATTERN =
   /\b(?:clearance|DoD|department of defense|department of war)\b/i;
 
-function isInternship(job: NormalizedJob): boolean {
+export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
 }
 
-function requiresClearance(job: NormalizedJob): boolean {
+export function requiresClearance(job: NormalizedJob): boolean {
   return (
     CLEARANCE_PATTERN.test(job.title) ||
     CLEARANCE_PATTERN.test(job.description ?? "")
   );
 }
 
-function buildSources(): Source[] {
+export function buildSources(): Source[] {
   const sources: Source[] = [createGreenhouseSource(), createLeverSource()];
 
   if (process.env.JSEARCH_API_KEY) {
@@ -38,7 +38,7 @@ function buildSources(): Source[] {
   return sources;
 }
 
-interface SearchOptions {
+export interface SearchOptions {
   location?: string;
   remote?: RemoteType;
   role: string;
@@ -48,7 +48,7 @@ interface SearchOptions {
   clearance: boolean;
 }
 
-async function runSearch(options: SearchOptions): Promise<void> {
+export async function runSearch(options: SearchOptions): Promise<void> {
   const sources = buildSources();
   const results = await Promise.all(
     sources.map((source) =>
@@ -99,35 +99,45 @@ async function runSearch(options: SearchOptions): Promise<void> {
   }
 }
 
-const program = new Command();
+export function createProgram(
+  searchAction: (options: SearchOptions) => Promise<void> = runSearch,
+): Command {
+  const program = new Command();
 
-program.name("igor").description("A minion to find software engineering jobs");
+  program
+    .name("igor")
+    .description("A minion to find software engineering jobs");
 
-program
-  .command("search")
-  .description("Search job sources and store results")
-  .requiredOption("--role <query>", "role/title to search for")
-  .option("--location <city>", "location to search in")
-  .addOption(
-    new Option("--remote <type>", "remote|hybrid|onsite").choices([
-      "remote",
-      "hybrid",
-      "onsite",
-    ]),
-  )
-  .option("--json", "output all stored jobs as JSON", false)
-  .option("--csv", "output all stored jobs as CSV", false)
-  .option("--db <path>", "path to sqlite db", "igor.db")
-  .option("--clearance", "include jobs requiring clearance", false)
-  .action(async (options: SearchOptions) => {
-    await runSearch(options);
-  });
+  program
+    .command("search")
+    .description("Search job sources and store results")
+    .requiredOption("--role <query>", "role/title to search for")
+    .option("--location <city>", "location to search in")
+    .addOption(
+      new Option("--remote <type>", "remote|hybrid|onsite").choices([
+        "remote",
+        "hybrid",
+        "onsite",
+      ]),
+    )
+    .option("--json", "output all stored jobs as JSON", false)
+    .option("--csv", "output all stored jobs as CSV", false)
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--clearance", "include jobs requiring clearance", false)
+    .action(async (options: SearchOptions) => {
+      await searchAction(options);
+    });
 
-async function main() {
-  await program.parseAsync(Bun.argv);
+  return program;
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+async function main() {
+  await createProgram().parseAsync(Bun.argv);
+}
+
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
