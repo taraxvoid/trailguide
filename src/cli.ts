@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import { parseArgs } from "node:util";
+import { Command, Option } from "commander";
 import { allJobs, openDb, upsertJobs } from "./db.ts";
 import { dedupe, dedupeKey } from "./dedupe.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
@@ -38,50 +38,25 @@ function buildSources(): Source[] {
   return sources;
 }
 
-function isRemoteType(value: string): value is RemoteType {
-  return value === "remote" || value === "hybrid" || value === "onsite";
+interface SearchOptions {
+  location?: string;
+  remote?: RemoteType;
+  role: string;
+  json: boolean;
+  csv: boolean;
+  db: string;
+  clearance: boolean;
 }
 
-async function main() {
-  const { values, positionals } = parseArgs({
-    args: Bun.argv.slice(2),
-    allowPositionals: true,
-    options: {
-      location: { type: "string" },
-      remote: { type: "string" },
-      role: { type: "string" },
-      json: { type: "boolean", default: false },
-      csv: { type: "boolean", default: false },
-      db: { type: "string", default: "igor.db" },
-      clearance: { type: "boolean", default: false },
-    },
-  });
-
-  const command = positionals[0];
-  if (command !== "search") {
-    console.error(
-      "Usage: igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [--clearance]",
-    );
-    process.exit(1);
-  }
-
-  if (!values.role) {
-    console.error("--role is required");
-    process.exit(1);
-  }
-  if (values.remote && !isRemoteType(values.remote)) {
-    console.error("--remote must be one of: remote, hybrid, onsite");
-    process.exit(1);
-  }
-
+async function runSearch(options: SearchOptions): Promise<void> {
   const sources = buildSources();
   const results = await Promise.all(
     sources.map((source) =>
       source
         .search({
-          role: values.role as string,
-          location: values.location,
-          remote: values.remote as RemoteType | undefined,
+          role: options.role,
+          location: options.location,
+          remote: options.remote,
         })
         .catch((err) => {
           console.error(
@@ -94,13 +69,13 @@ async function main() {
 
   const jobs = dedupe(results.flat())
     .filter((job) => !isInternship(job))
-    .filter((job) => values.clearance || !requiresClearance(job));
-  const db = openDb(values.db as string);
+    .filter((job) => options.clearance || !requiresClearance(job));
+  const db = openDb(options.db);
   const newJobs = upsertJobs(db, jobs);
 
-  if (values.json) {
+  if (options.json) {
     console.log(JSON.stringify(allJobs(db), null, 2));
-  } else if (values.csv) {
+  } else if (options.csv) {
     const rows = allJobs(db);
     console.log("title,company,location,remoteType,url");
     for (const job of rows) {
@@ -119,9 +94,37 @@ async function main() {
       );
     }
     console.log(
-      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${values.db}`,
+      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${options.db}`,
     );
   }
+}
+
+const program = new Command();
+
+program.name("igor").description("A minion to find software engineering jobs");
+
+program
+  .command("search")
+  .description("Search job sources and store results")
+  .requiredOption("--role <query>", "role/title to search for")
+  .option("--location <city>", "location to search in")
+  .addOption(
+    new Option("--remote <type>", "remote|hybrid|onsite").choices([
+      "remote",
+      "hybrid",
+      "onsite",
+    ]),
+  )
+  .option("--json", "output all stored jobs as JSON", false)
+  .option("--csv", "output all stored jobs as CSV", false)
+  .option("--db <path>", "path to sqlite db", "igor.db")
+  .option("--clearance", "include jobs requiring clearance", false)
+  .action(async (options: SearchOptions) => {
+    await runSearch(options);
+  });
+
+async function main() {
+  await program.parseAsync(Bun.argv);
 }
 
 main().catch((err) => {
