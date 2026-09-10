@@ -2,7 +2,7 @@ import seedData from "../../seed/ats-companies.json" with { type: "json" };
 
 export interface SeedCompany {
   company: string;
-  ats: "greenhouse" | "lever";
+  ats: "greenhouse" | "lever" | "ashby";
   slug: string;
 }
 

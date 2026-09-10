@@ -10,4 +10,7 @@
   { "company": "DLR Group", "ats": "greenhouse", "slug": "dlrgroup" },
   { "company": "Applied Underwriters", "ats": "lever", "slug": "auw" },
   { "company": "Streck", "ats": "lever", "slug": "streck" }
+  { "company": "Renuity", "ats": "ashby", "slug": "renuity" },
+  { "company": "Remarcable", "ats": "ashby", "slug": "remarcable-inc" },
+  { "company": "Galliant", "ats": "ashby", "slug": "galliant" }
 ]
