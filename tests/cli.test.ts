@@ -78,9 +78,9 @@ describe("buildSources", () => {
     process.env = { ...originalEnv };
   });
 
-  it("always includes greenhouse and lever", () => {
+  it("job sources exist", () => {
     const names = buildSources().map((s) => s.name);
-    expect(names).toEqual(["greenhouse", "lever"]);
+    expect(names).toEqual(["greenhouse", "lever", "ashby"]);
   });
 
   it("adds jsearch when JSEARCH_API_KEY is set", () => {
