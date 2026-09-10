@@ -13,16 +13,41 @@ concurrency:
 
 permissions:
   contents: read
+  pull-requests: write
+  
 
 jobs:
   validate:
     name: Validate
-    runs-on: igor
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+           fetch-depth: 0
+        
+      - name: Secrets scan
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+          
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: changes
+        with:
+          filters: |
+            lockfile:
+              - 'bun.lock'
+            scripts:
+              - 'scripts/**'
+            workflows:
+              - '.github/workflows/**'
 
-      - name: Cache npm packages
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: ".bun-version"
+          
+      - name: Cache NPM packages
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.bun/install/cache
@@ -30,14 +55,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      - name: Install npm packages
+      - name: Install NPM packages
         run: bun install --frozen-lockfile
 
-      - name: Lint Github Actions
-        run: actionlint
-
-      - name: Scan for secrets
-        run: gitleaks detect --source . --redact
+      - name: Lint CI workflows
+        if: steps.changes.outputs.workflows == 'true'
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7/scripts/download-actionlint.bash \
+            | bash -s -- 1.7.12 "$RUNNER_TEMP"
+          "$RUNNER_TEMP/actionlint" -color
+        shell: bash
 
       - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # 4.0.0
 
@@ -46,4 +73,3 @@ jobs:
 
       - name: Test
         run: just test
-
