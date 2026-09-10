@@ -1,3 +1,4 @@
+import { matchesLocation } from "./location.ts";
 import { companiesForAts } from "./seed.ts";
 import type {
   NormalizedJob,
@@ -52,9 +53,7 @@ export function createLeverSource(): Source {
           if (!matchesRole(job.text, params.role)) continue;
           if (
             params.location &&
-            !job.categories.location
-              .toLowerCase()
-              .includes(params.location.toLowerCase())
+            !matchesLocation(job.categories.location, params.location)
           ) {
             continue;
           }
