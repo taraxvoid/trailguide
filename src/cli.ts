@@ -3,6 +3,7 @@ import { Command, Option } from "commander";
 import { allJobs, openDb, upsertJobs } from "./db.ts";
 import { dedupe, dedupeKey } from "./dedupe.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
+import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
@@ -24,7 +25,11 @@ export function requiresClearance(job: NormalizedJob): boolean {
 }
 
 export function buildSources(): Source[] {
-  const sources: Source[] = [createGreenhouseSource(), createLeverSource()];
+  const sources: Source[] = [
+    createGreenhouseSource(),
+    createLeverSource(),
+    createAshbySource(),
+  ];
 
   if (process.env.JSEARCH_API_KEY) {
     sources.push(createJSearchSource(process.env.JSEARCH_API_KEY));

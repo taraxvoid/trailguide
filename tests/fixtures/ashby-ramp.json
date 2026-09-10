@@ -1,0 +1,27 @@
+{
+  "jobs": [
+    {
+      "id": "2001",
+      "title": "Senior Software Engineer, Infrastructure",
+      "location": "New York, NY (HQ)",
+      "secondaryLocations": [{ "location": "Remote (US)" }],
+      "employmentType": "FullTime",
+      "isRemote": true,
+      "workplaceType": "Remote",
+      "publishedAt": "2026-08-01T00:00:00.000+00:00",
+      "jobUrl": "https://jobs.ashbyhq.com/ramp/2001",
+      "descriptionPlain": "Build infrastructure at Ramp."
+    },
+    {
+      "id": "2002",
+      "title": "Product Designer",
+      "location": "New York, NY (HQ)",
+      "employmentType": "FullTime",
+      "isRemote": false,
+      "workplaceType": "Onsite",
+      "publishedAt": "2026-08-01T00:00:00.000+00:00",
+      "jobUrl": "https://jobs.ashbyhq.com/ramp/2002",
+      "descriptionPlain": "Design products at Ramp."
+    }
+  ]
+}
