@@ -10,8 +10,8 @@ import { createLeverSource } from "./sources/lever.ts";
 import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
-const CLEARANCE_PATTERN =
-  /\b(?:clearance|DoD|department of defense|department of war)\b/i;
+const GOVMIL_PATTERN =
+  /\b(?:Offutt|military|warfighter|clearance|DoD|department of defense|department of war)\b/i;
 
 export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
@@ -19,8 +19,7 @@ export function isInternship(job: NormalizedJob): boolean {
 
 export function requiresClearance(job: NormalizedJob): boolean {
   return (
-    CLEARANCE_PATTERN.test(job.title) ||
-    CLEARANCE_PATTERN.test(job.description ?? "")
+    GOVMIL_PATTERN.test(job.title) || GOVMIL_PATTERN.test(job.description ?? "")
   );
 }
 
