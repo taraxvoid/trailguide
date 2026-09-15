@@ -11,7 +11,7 @@ import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
 const GOVMIL_PATTERN =
-  /\b(?:Offutt|military|warfighter|clearance|DoD|department of defense|department of war)\b/i;
+  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war)\b/i;
 
 export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
