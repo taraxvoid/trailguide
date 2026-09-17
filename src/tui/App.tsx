@@ -14,7 +14,8 @@ interface AppProps {
   jobs: StoredJob[];
 }
 
-const FIXED_LINES = 7;
+const FIXED_LINES = 9;
+const JOB_ROW_LINES = 2;
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -41,7 +42,10 @@ export default function JobBrowser({ jobs }: AppProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
 
-  const visibleCount = Math.max(1, rows - FIXED_LINES);
+  const visibleCount = Math.max(
+    1,
+    Math.floor((rows - FIXED_LINES) / JOB_ROW_LINES),
+  );
 
   useEffect(() => {
     setSelectedIndex((prev) => Math.min(prev, Math.max(0, jobs.length - 1)));

@@ -100,24 +100,36 @@ describe("buildSources", () => {
 
 describe("clear command parsing", () => {
   function programWithSpy() {
-    const program = createProgram();
+    const calls: { db: string }[] = [];
+    const program = createProgram(
+      async () => {},
+      async (options) => {
+        calls.push(options);
+      },
+    );
     program.exitOverride();
     program.configureOutput({ writeErr: () => {} });
     for (const cmd of program.commands) {
       cmd.exitOverride();
       cmd.configureOutput({ writeErr: () => {} });
     }
-    return program;
+    return { program, calls };
   }
 
   it("parses clear with defaults", async () => {
-    const program = programWithSpy();
+    const { program, calls } = programWithSpy();
     await program.parseAsync(["node", "igor", "clear"]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ db: "igor.db" });
   });
 
   it("parses clear with --db", async () => {
-    const program = programWithSpy();
+    const { program, calls } = programWithSpy();
     await program.parseAsync(["node", "igor", "clear", "--db", "test.db"]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ db: "test.db" });
   });
 });
 

@@ -104,8 +104,16 @@ export async function runSearch(options: SearchOptions): Promise<void> {
   }
 }
 
+export async function runClear(options: { db: string }): Promise<void> {
+  const db = openDb(options.db);
+  clearJobs(db);
+  db.close();
+  console.log(`Cleared all jobs from ${options.db}`);
+}
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<void> = runSearch,
+  clearAction: (options: { db: string }) => Promise<void> = runClear,
 ): Command {
   const program = new Command();
 
@@ -146,10 +154,7 @@ export function createProgram(
     .description("Clear all stored jobs from the database")
     .option("--db <path>", "path to sqlite db", "igor.db")
     .action(async (options: { db: string }) => {
-      const db = openDb(options.db);
-      clearJobs(db);
-      db.close();
-      console.log(`Cleared all jobs from ${options.db}`);
+      await clearAction(options);
     });
 
   return program;
