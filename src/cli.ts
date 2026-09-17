@@ -11,16 +11,16 @@ import {
   upsertJobs,
 } from "./db.ts";
 import type { ListingState } from "./db.ts";
-import { dedupe } from "./dedupe.ts";
 import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
+import { dedupe, dedupeKey } from "./dedupe.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
-import type { NormalizedJob, Source } from "./sources/types.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
+import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
 const GOVMIL_PATTERN =
@@ -248,6 +248,10 @@ export function createProgram(
     .option("--db <path>", "path to sqlite db", "igor.db")
     .action(async (options: { db: string }) => {
       await clearAction(options);
+      const db = openDb(options.db);
+      clearJobs(db);
+      db.close();
+      console.log(`Cleared all jobs from ${options.db}`);
     });
 
   program

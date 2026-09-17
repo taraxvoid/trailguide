@@ -35,6 +35,7 @@
     "@lizenz/checker": "^0.0.2",
     "@types/bun": "^1.1.14",
     "@types/react": "^19.3.0",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "@types/react": "^19.3.0"
   }
 }
