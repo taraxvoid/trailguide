@@ -66,6 +66,18 @@ igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [
 - `--csv` — print all jobs currently stored in the db as CSV
 - `--db` — path to the sqlite db (default `igor.db`)
 
+## TUI
+
+Browse stored jobs interactively:
+
+```bash
+igor tui [--db <path>]
+```
+
+- ↑↓ — navigate job list
+- ↵ — quit
+- q — quit
+
 Internship postings are always filtered out. Results are deduped across
 sources and persisted to the sqlite db so repeated searches only flag what's
 `NEW`.

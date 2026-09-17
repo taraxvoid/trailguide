@@ -93,3 +93,7 @@ export function allJobs(db: Database): StoredJob[] {
     lastSeenAt: row.last_seen_at ?? "",
   }));
 }
+
+export function clearJobs(db: Database): void {
+  db.run("DELETE FROM jobs");
+}

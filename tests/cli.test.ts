@@ -98,6 +98,29 @@ describe("buildSources", () => {
   });
 });
 
+describe("clear command parsing", () => {
+  function programWithSpy() {
+    const program = createProgram();
+    program.exitOverride();
+    program.configureOutput({ writeErr: () => {} });
+    for (const cmd of program.commands) {
+      cmd.exitOverride();
+      cmd.configureOutput({ writeErr: () => {} });
+    }
+    return program;
+  }
+
+  it("parses clear with defaults", async () => {
+    const program = programWithSpy();
+    await program.parseAsync(["node", "igor", "clear"]);
+  });
+
+  it("parses clear with --db", async () => {
+    const program = programWithSpy();
+    await program.parseAsync(["node", "igor", "clear", "--db", "test.db"]);
+  });
+});
+
 describe("search command parsing", () => {
   function programWithSpy() {
     const calls: SearchOptions[] = [];

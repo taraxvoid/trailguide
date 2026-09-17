@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { Command, Option } from "commander";
-import { allJobs, openDb, upsertJobs } from "./db.ts";
+import { allJobs, clearJobs, openDb, upsertJobs } from "./db.ts";
 import { dedupe, dedupeKey } from "./dedupe.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
@@ -8,6 +8,7 @@ import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
 import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
+import { runTui } from "./tui/index.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
 const GOVMIL_PATTERN =
@@ -130,6 +131,25 @@ export function createProgram(
     .option("--clearance", "include jobs requiring clearance", false)
     .action(async (options: SearchOptions) => {
       await searchAction(options);
+    });
+
+  program
+    .command("tui")
+    .description("Browse jobs in an interactive TUI")
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .action(async (options: { db: string }) => {
+      await runTui({ db: options.db });
+    });
+
+  program
+    .command("clear")
+    .description("Clear all stored jobs from the database")
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .action(async (options: { db: string }) => {
+      const db = openDb(options.db);
+      clearJobs(db);
+      db.close();
+      console.log(`Cleared all jobs from ${options.db}`);
     });
 
   return program;
