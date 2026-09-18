@@ -80,7 +80,14 @@ describe("buildSources", () => {
 
   it("job sources exist", () => {
     const names = buildSources().map((s) => s.name);
-    expect(names).toEqual(["greenhouse", "lever", "ashby"]);
+    expect(names).toEqual([
+      "greenhouse",
+      "lever",
+      "ashby",
+      "remoteok",
+      "remotive",
+      "weworkremotely",
+    ]);
   });
 
   it("adds jsearch when JSEARCH_API_KEY is set", () => {

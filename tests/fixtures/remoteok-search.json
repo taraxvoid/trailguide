@@ -1,0 +1,23 @@
+[
+  { "legal": "API Terms of Service: Please link back to Remote OK." },
+  {
+    "id": "remoteok-1",
+    "position": "Senior Backend Engineer",
+    "company": "Acme Remote Co",
+    "location": "",
+    "tags": ["engineer", "golang"],
+    "description": "<p>Build backend systems.<br>Fully distributed team.</p>",
+    "date": "2026-08-01T00:00:00Z",
+    "url": "https://remoteok.com/remote-jobs/remoteok-1"
+  },
+  {
+    "id": "remoteok-2",
+    "position": "Product Designer",
+    "company": "Acme Remote Co",
+    "location": "United States",
+    "tags": ["design"],
+    "description": "<p>Design products.</p>",
+    "date": "2026-08-02T00:00:00Z",
+    "url": "https://remoteok.com/remote-jobs/remoteok-2"
+  }
+]

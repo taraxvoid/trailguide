@@ -2,6 +2,9 @@ import { createAdzunaSource } from "../src/sources/adzuna.ts";
 import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
 import { createLeverSource } from "../src/sources/lever.ts";
+import { createRemoteOkSource } from "../src/sources/remoteok.ts";
+import { createRemotiveSource } from "../src/sources/remotive.ts";
+import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
 
 /**
  * Hits real, live third-party APIs. Not run in CI on every PR (would burn
@@ -12,7 +15,13 @@ async function main() {
   const params = { role: "engineer", location: "Remote" as const };
   let ran = 0;
 
-  for (const source of [createGreenhouseSource(), createLeverSource()]) {
+  for (const source of [
+    createGreenhouseSource(),
+    createLeverSource(),
+    createRemoteOkSource(),
+    createRemotiveSource(),
+    createWeWorkRemotelySource(),
+  ]) {
     ran++;
     const jobs = await source.search(params);
     console.log(`[${source.name}] ${jobs.length} jobs`);

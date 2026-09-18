@@ -4,12 +4,20 @@ import { createAshbySource } from "../src/sources/ashby.ts";
 import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
 import { createLeverSource } from "../src/sources/lever.ts";
+import { createRemoteOkSource } from "../src/sources/remoteok.ts";
+import { createRemotiveSource } from "../src/sources/remotive.ts";
 import { companiesForAts } from "../src/sources/seed.ts";
+import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
 import adzunaFixture from "./fixtures/adzuna-search.json";
 import ashbyFixture from "./fixtures/ashby-ramp.json";
 import greenhouseFixture from "./fixtures/greenhouse-figma.json";
 import jsearchFixture from "./fixtures/jsearch-search.json";
 import leverFixture from "./fixtures/lever-netflix.json";
+import remoteokFixture from "./fixtures/remoteok-search.json";
+import remotiveFixture from "./fixtures/remotive-search.json";
+import weworkremotelyFixture from "./fixtures/weworkremotely-programming.rss" with {
+  type: "text",
+};
 
 const originalFetch = globalThis.fetch;
 
@@ -197,6 +205,157 @@ describe("adzuna source", () => {
     const source = createAdzunaSource("app-id", "app-key");
     await expect(source.search({ role: "engineer" })).rejects.toThrow(
       "Adzuna request failed: 503",
+    );
+  });
+});
+
+describe("remoteok source", () => {
+  it("skips the legal notice entry and normalizes jobs", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(remoteokFixture)),
+    ) as unknown as typeof fetch;
+
+    const source = createRemoteOkSource();
+    const jobs = await source.search({ role: "engineer" });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      sourceId: "remoteok-1",
+      source: "remoteok",
+      title: "Senior Backend Engineer",
+      company: "Acme Remote Co",
+      location: "Worldwide",
+      remoteType: "remote",
+      url: "https://remoteok.com/remote-jobs/remoteok-1",
+    });
+    expect(jobs[0]?.description).toBe(
+      "Build backend systems.\nFully distributed team.",
+    );
+  });
+
+  it("matches role against tags as well as the title", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(remoteokFixture)),
+    ) as unknown as typeof fetch;
+
+    const source = createRemoteOkSource();
+    const jobs = await source.search({ role: "golang" });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.title).toBe("Senior Backend Engineer");
+  });
+
+  it("throws when the request fails", async () => {
+    globalThis.fetch = mock(
+      async () => new Response("nope", { status: 500 }),
+    ) as unknown as typeof fetch;
+
+    const source = createRemoteOkSource();
+    await expect(source.search({ role: "engineer" })).rejects.toThrow(
+      "RemoteOK request failed: 500",
+    );
+  });
+});
+
+describe("remotive source", () => {
+  it("normalizes jobs and includes the role in the query", async () => {
+    let requestedUrl: string | undefined;
+    globalThis.fetch = mock(async (input: unknown) => {
+      requestedUrl = String(input);
+      return new Response(JSON.stringify(remotiveFixture));
+    }) as unknown as typeof fetch;
+
+    const source = createRemotiveSource();
+    const jobs = await source.search({ role: "engineer" });
+
+    expect(requestedUrl).toContain("search=engineer");
+    expect(jobs).toHaveLength(2);
+    expect(jobs[0]).toMatchObject({
+      sourceId: "4242",
+      source: "remotive",
+      title: "Backend Engineer",
+      company: "Remotive Corp",
+      location: "USA Only",
+      remoteType: "remote",
+      url: "https://remotive.com/remote-jobs/software-dev/backend-engineer-4242",
+    });
+    expect(jobs[0]?.description).toBe(
+      "Build backend systems at Remotive Corp.",
+    );
+  });
+
+  it("filters by location", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(remotiveFixture)),
+    ) as unknown as typeof fetch;
+
+    const source = createRemotiveSource();
+    const jobs = await source.search({
+      role: "engineer",
+      location: "worldwide",
+    });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.company).toBe("Worldwide Corp");
+  });
+
+  it("throws when the request fails", async () => {
+    globalThis.fetch = mock(
+      async () => new Response("nope", { status: 500 }),
+    ) as unknown as typeof fetch;
+
+    const source = createRemotiveSource();
+    await expect(source.search({ role: "engineer" })).rejects.toThrow(
+      "Remotive request failed: 500",
+    );
+  });
+});
+
+describe("weworkremotely source", () => {
+  it("parses RSS items, splitting company from title", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(weworkremotelyFixture),
+    ) as unknown as typeof fetch;
+
+    const source = createWeWorkRemotelySource();
+    const jobs = await source.search({ role: "engineer" });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      sourceId:
+        "https://weworkremotely.com/remote-jobs/acme-co-backend-engineer",
+      source: "weworkremotely",
+      title: "Backend Engineer",
+      company: "Acme Co",
+      location: "Anywhere in the World",
+      remoteType: "remote",
+      url: "https://weworkremotely.com/remote-jobs/acme-co-backend-engineer",
+    });
+    expect(jobs[0]?.description).toBe(
+      "Build backend systems.\nOwn services end to end.",
+    );
+  });
+
+  it("filters by location", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(weworkremotelyFixture),
+    ) as unknown as typeof fetch;
+
+    const source = createWeWorkRemotelySource();
+    const jobs = await source.search({ role: "designer", location: "usa" });
+
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.company).toBe("Widgets Inc");
+  });
+
+  it("throws when the request fails", async () => {
+    globalThis.fetch = mock(
+      async () => new Response("nope", { status: 500 }),
+    ) as unknown as typeof fetch;
+
+    const source = createWeWorkRemotelySource();
+    await expect(source.search({ role: "engineer" })).rejects.toThrow(
+      "We Work Remotely request failed: 500",
     );
   });
 });

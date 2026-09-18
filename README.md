@@ -21,7 +21,8 @@ cp .env.example .env
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
 
-Greenhouse, Lever, and Ashby sources work with no credentials.
+Greenhouse, Lever, Ashby, RemoteOK, Remotive, and We Work Remotely sources
+work with no credentials.
 
 ## Running `igor` on your PATH
 
