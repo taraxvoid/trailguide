@@ -2,7 +2,6 @@ import type { Database } from "bun:sqlite";
 import {
   Box,
   type Key,
-  Spacer,
   Text,
   useApp,
   useInput,
@@ -18,7 +17,17 @@ interface AppProps {
   db: Database;
 }
 
-const FIXED_LINES = 8;
+// Chrome heights below are line counts for the JSX blocks they mirror -
+// keep them in sync when the layout changes, since visibleCount depends on
+// knowing exactly how many non-list rows are on screen in each state.
+const HEADER_LINES = 3; // paddingY 1 (top+bottom) + 1 content line
+const GAP_LINE = 1; // blank line between sections
+const SEPARATOR_LINES = 1;
+const FOOTER_LINES = 6; // marginTop 1 + border 2 + paddingY 2 + content 1
+const STATUS_LINES = 2; // marginTop 1 + content 1
+const DETAIL_CHROME_LINES = 8; // gap 1 + border 2 + paddingY 2 + title/company/url 3
+const DESCRIPTION_GAP_AND_PREVIEW_LINES = 3; // gap 1 + 2-line preview
+const DESCRIPTION_PREVIEW_LINES = 2;
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -54,7 +63,7 @@ function formatState(state: ListingState): string {
 export default function JobBrowser({ db }: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
-  const { rows } = useWindowSize();
+  const { rows, columns } = useWindowSize();
   const [jobs, setJobs] = useState<StoredJob[]>(() => allJobs(db));
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
@@ -65,7 +74,30 @@ export default function JobBrowser({ db }: AppProps) {
     [jobs],
   );
 
-  const visibleCount = Math.max(1, rows - FIXED_LINES);
+  const selectedJob = visibleJobs[selectedIndex] ?? null;
+
+  const descriptionMaxChars =
+    Math.max(20, columns - 6) * DESCRIPTION_PREVIEW_LINES;
+
+  // The detail panel and status message are mutually exclusive and occupy
+  // very different heights (an ~8-11 line bordered box vs. a single line),
+  // so the number of rows available to the scrollable list has to be
+  // recomputed for whichever one is actually on screen right now.
+  const bottomSectionLines = statusMessage
+    ? STATUS_LINES
+    : selectedJob
+      ? DETAIL_CHROME_LINES +
+        (selectedJob.description ? DESCRIPTION_GAP_AND_PREVIEW_LINES : 0)
+      : 0;
+
+  const chromeLines =
+    HEADER_LINES +
+    GAP_LINE +
+    SEPARATOR_LINES +
+    FOOTER_LINES +
+    bottomSectionLines;
+
+  const visibleCount = Math.max(1, rows - chromeLines);
 
   useEffect(() => {
     setSelectedIndex((prev) =>
@@ -81,8 +113,6 @@ export default function JobBrowser({ db }: AppProps) {
       return prev;
     });
   }, [selectedIndex, visibleCount]);
-
-  const selectedJob = visibleJobs[selectedIndex] ?? null;
 
   const showStatus = useCallback((msg: string) => {
     setStatusMessage(msg);
@@ -181,7 +211,7 @@ export default function JobBrowser({ db }: AppProps) {
         </Text>
       </Box>
 
-      <Spacer />
+      <Box height={GAP_LINE} />
 
       <Text dimColor>{"─".repeat(40)}</Text>
 
@@ -214,7 +244,7 @@ export default function JobBrowser({ db }: AppProps) {
 
       {selectedJob && !statusMessage && (
         <>
-          <Spacer />
+          <Box height={GAP_LINE} />
           <Box
             paddingY={1}
             borderStyle="single"
@@ -234,8 +264,10 @@ export default function JobBrowser({ db }: AppProps) {
             <Text dimColor>{selectedJob.url}</Text>
             {selectedJob.description && (
               <>
-                <Spacer />
-                <Text dimColor>{truncate(selectedJob.description, 300)}</Text>
+                <Box height={GAP_LINE} />
+                <Text dimColor>
+                  {truncate(selectedJob.description, descriptionMaxChars)}
+                </Text>
               </>
             )}
           </Box>
@@ -261,7 +293,7 @@ function JobRow({ job, isSelected }: JobRowProps) {
   return (
     <Box
       paddingX={1}
-      paddingY={0.5}
+      marginBottom={1}
       flexDirection="column"
       backgroundColor={isSelected ? "black" : undefined}
     >

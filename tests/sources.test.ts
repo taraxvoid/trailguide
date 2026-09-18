@@ -29,6 +29,19 @@ describe("greenhouse source", () => {
     expect(jobs[0]?.source).toBe("greenhouse");
     expect(jobs[0]?.remoteType).toBe("remote");
   });
+
+  it("strips HTML markup from the job description", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(greenhouseFixture)),
+    ) as unknown as typeof fetch;
+
+    const source = createGreenhouseSource();
+    const jobs = await source.search({ role: "engineer" });
+
+    expect(jobs[0]?.description).toBe(
+      "Build backend systems at Figma.\nOwn services end to end",
+    );
+  });
 });
 
 describe("lever source", () => {
