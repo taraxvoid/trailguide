@@ -12,5 +12,7 @@
   { "company": "Streck", "ats": "lever", "slug": "streck" },
   { "company": "Renuity", "ats": "ashby", "slug": "renuity" },
   { "company": "Remarcable", "ats": "ashby", "slug": "remarcable-inc" },
-  { "company": "Galliant", "ats": "ashby", "slug": "galliant" }
+  { "company": "Galliant", "ats": "ashby", "slug": "galliant" },
+  { "company": "Spreetail", "ats": "lever", "slug": "spreetail" },
+  { "company": "Gallup", "ats": "greenhouse", "slug": "gallup" }
 ]
