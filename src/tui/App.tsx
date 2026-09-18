@@ -28,6 +28,7 @@ const STATUS_LINES = 2; // marginTop 1 + content 1
 const DETAIL_CHROME_LINES = 8; // gap 1 + border 2 + paddingY 2 + title/company/url 3
 const DESCRIPTION_GAP_AND_PREVIEW_LINES = 3; // gap 1 + 2-line preview
 const DESCRIPTION_PREVIEW_LINES = 2;
+const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -97,7 +98,10 @@ export default function JobBrowser({ db }: AppProps) {
     FOOTER_LINES +
     bottomSectionLines;
 
-  const visibleCount = Math.max(1, rows - chromeLines);
+  const visibleCount = Math.max(
+    1,
+    Math.floor((rows - chromeLines) / ROW_LINES),
+  );
 
   useEffect(() => {
     setSelectedIndex((prev) =>
