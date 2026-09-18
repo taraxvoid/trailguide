@@ -1,0 +1,30 @@
+{
+  "data": {
+    "jobs": [
+      {
+        "job_id": "jsearch-1",
+        "job_title": "Senior Software Engineer, Platform",
+        "employer_name": "Stripe",
+        "job_city": "San Francisco",
+        "job_state": "CA",
+        "job_country": "US",
+        "job_is_remote": true,
+        "job_apply_link": "https://stripe.com/jobs/platform-1",
+        "job_posted_at_datetime_utc": "2026-08-01T00:00:00Z",
+        "job_description": "Build payment infrastructure at Stripe."
+      },
+      {
+        "job_id": "jsearch-2",
+        "job_title": "Support Engineer",
+        "employer_name": "Stripe",
+        "job_city": null,
+        "job_state": null,
+        "job_country": null,
+        "job_is_remote": false,
+        "job_apply_link": "https://stripe.com/jobs/support-2",
+        "job_posted_at_datetime_utc": null,
+        "job_description": null
+      }
+    ]
+  }
+}
