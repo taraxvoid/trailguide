@@ -19,6 +19,25 @@ function matchesRole(title: string, role: string): boolean {
   return title.toLowerCase().includes(role.toLowerCase());
 }
 
+const HTML_BLOCK_TAGS = /<\/(p|div|li|br|ul|ol|h[1-6])\s*>|<(br)\s*\/?>/gi;
+
+function stripHtml(html: string): string {
+  return html
+    .replace(HTML_BLOCK_TAGS, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .join("\n")
+    .trim();
+}
+
 export function createGreenhouseSource(): Source {
   return {
     name: "greenhouse",
@@ -53,7 +72,7 @@ export function createGreenhouseSource(): Source {
               : "unknown",
             url: job.absolute_url,
             postedAt: job.updated_at,
-            description: job.content,
+            description: stripHtml(job.content),
           });
         }
       }
