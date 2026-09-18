@@ -191,7 +191,7 @@ describe("search command parsing", () => {
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
-      role: "engineer",
+      role: ["engineer"],
       json: false,
       csv: false,
       clearance: false,
@@ -221,14 +221,34 @@ describe("search command parsing", () => {
     ]);
 
     expect(calls[0]).toMatchObject({
-      role: "engineer",
-      location: "Seattle",
+      role: ["engineer"],
+      location: ["Seattle"],
       remote: true,
       onsite: true,
       json: true,
       csv: false,
       clearance: true,
       db: "custom.db",
+    });
+  });
+
+  it("collects multiple --location and --role values", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "igor",
+      "search",
+      "--role",
+      "engineer",
+      "manager",
+      "--location",
+      "Omaha",
+      "San Francisco",
+    ]);
+
+    expect(calls[0]).toMatchObject({
+      role: ["engineer", "manager"],
+      location: ["Omaha", "San Francisco"],
     });
   });
 });
