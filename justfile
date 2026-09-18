@@ -19,7 +19,11 @@ lint:
 test:
     bun test
 
-check: lint test
+typecheck:
+    bun run typecheck
+
+check:
+    bun run check
 
 # hits real third-party APIs; skips sources with no credentials set
 smoke-live:

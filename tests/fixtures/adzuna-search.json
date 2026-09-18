@@ -1,0 +1,13 @@
+{
+  "results": [
+    {
+      "id": "adzuna-1",
+      "title": "Backend Engineer",
+      "company": { "display_name": "Acme Corp" },
+      "location": { "display_name": "Omaha, NE" },
+      "redirect_url": "https://adzuna.com/land/ad/adzuna-1?utm_source=api",
+      "created": "2026-08-01T00:00:00Z",
+      "description": "Work on backend systems at Acme Corp."
+    }
+  ]
+}

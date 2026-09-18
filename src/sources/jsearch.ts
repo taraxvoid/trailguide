@@ -37,7 +37,7 @@ export function createJSearchSource(apiKey: string): Source {
       const query = [params.role, params.location].filter(Boolean).join(" in ");
       const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
       url.searchParams.set("query", query);
-      if (params.remote === "remote") {
+      if (params.remote) {
         url.searchParams.set("remote_jobs_only", "true");
       }
 

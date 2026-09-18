@@ -71,5 +71,8 @@ jobs:
       - name: Lint
         run: just lint
 
+      - name: Typecheck
+        run: just typecheck
+
       - name: Test
         run: just test

@@ -66,6 +66,18 @@ igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [
 - `--csv` — print all jobs currently stored in the db as CSV
 - `--db` — path to the sqlite db (default `igor.db`)
 
+## TUI
+
+Browse stored jobs interactively:
+
+```bash
+igor tui [--db <path>]
+```
+
+- ↑↓ — navigate job list
+- ↵ — quit
+- q — quit
+
 Internship postings are always filtered out. Results are deduped across
 sources and persisted to the sqlite db so repeated searches only flag what's
 `NEW`.
@@ -80,7 +92,8 @@ igor search --role "backend engineer" --location remote --remote remote
 
 ```bash
 just lint      # biome + gitleaks
+just typecheck # tsc --noEmit
 just test      # bun test
-just check     # lint + test
+just check     # lint + typecheck + test
 just smoke-live  # hits real third-party APIs; skips sources with no credentials set
 ```

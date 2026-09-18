@@ -98,6 +98,41 @@ describe("buildSources", () => {
   });
 });
 
+describe("clear command parsing", () => {
+  function programWithSpy() {
+    const calls: { db: string }[] = [];
+    const program = createProgram(
+      async () => {},
+      async (options) => {
+        calls.push(options);
+      },
+    );
+    program.exitOverride();
+    program.configureOutput({ writeErr: () => {} });
+    for (const cmd of program.commands) {
+      cmd.exitOverride();
+      cmd.configureOutput({ writeErr: () => {} });
+    }
+    return { program, calls };
+  }
+
+  it("parses clear with defaults", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync(["node", "igor", "clear"]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ db: "igor.db" });
+  });
+
+  it("parses clear with --db", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync(["node", "igor", "clear", "--db", "test.db"]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({ db: "test.db" });
+  });
+});
+
 describe("search command parsing", () => {
   function programWithSpy() {
     const calls: SearchOptions[] = [];
@@ -120,19 +155,34 @@ describe("search command parsing", () => {
     ).rejects.toThrow(/--role/);
   });
 
-  it("rejects an invalid --remote value", async () => {
-    const { program } = programWithSpy();
-    await expect(
-      program.parseAsync([
-        "node",
-        "igor",
-        "search",
-        "--role",
-        "engineer",
-        "--remote",
-        "bogus",
-      ]),
-    ).rejects.toThrow(/Allowed choices/);
+  it("accepts --remote as a boolean flag", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "igor",
+      "search",
+      "--role",
+      "engineer",
+      "--remote",
+    ]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.remote).toBe(true);
+  });
+
+  it("accepts --onsite as a boolean flag", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "igor",
+      "search",
+      "--role",
+      "engineer",
+      "--onsite",
+    ]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.onsite).toBe(true);
   });
 
   it("applies defaults when only --role is given", async () => {
@@ -147,7 +197,8 @@ describe("search command parsing", () => {
       clearance: false,
       db: "igor.db",
     });
-    expect(calls[0]?.remote).toBeUndefined();
+    expect(calls[0]?.remote).toBe(false);
+    expect(calls[0]?.onsite).toBe(false);
     expect(calls[0]?.location).toBeUndefined();
   });
 
@@ -162,7 +213,7 @@ describe("search command parsing", () => {
       "--location",
       "Seattle",
       "--remote",
-      "hybrid",
+      "--onsite",
       "--json",
       "--clearance",
       "--db",
@@ -172,7 +223,8 @@ describe("search command parsing", () => {
     expect(calls[0]).toMatchObject({
       role: "engineer",
       location: "Seattle",
-      remote: "hybrid",
+      remote: true,
+      onsite: true,
       json: true,
       csv: false,
       clearance: true,
