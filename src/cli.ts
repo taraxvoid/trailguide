@@ -16,6 +16,7 @@ import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
+import { createJobApsSource } from "./sources/jobaps.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
@@ -41,6 +42,7 @@ export function buildSources(): Source[] {
     createGreenhouseSource(),
     createLeverSource(),
     createAshbySource(),
+    createJobApsSource(),
   ];
 
   if (process.env.JSEARCH_API_KEY) {
