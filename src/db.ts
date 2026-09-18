@@ -52,7 +52,7 @@ export function upsertJobs(
   const insert = db.prepare(`
     INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state)
     VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state)
-    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = $state
+    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state)
   `);
   const exists = db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?");
 
@@ -60,7 +60,8 @@ export function upsertJobs(
     for (const job of batch) {
       const key = listingId(job);
       const isNew = exists.get(key) === null;
-      const jobState = states?.get(key) ?? "active";
+      const explicitState = states?.get(key) ?? null;
+      const jobState = explicitState ?? "active";
       insert.run({
         $listingId: key,
         $sourceId: job.sourceId,
@@ -76,6 +77,7 @@ export function upsertJobs(
         $lastSeenAt: now,
         $lastCheckedAt: now,
         $state: jobState,
+        $explicitState: explicitState,
       });
       if (isNew) {
         newJobs.push({

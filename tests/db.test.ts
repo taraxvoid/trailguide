@@ -140,6 +140,33 @@ describe("upsertJobs", () => {
     expect(allJobs(db)).toHaveLength(1);
     db.close();
   });
+
+  it("does not overwrite an existing job's state on re-search without an explicit override", () => {
+    const db = freshDb();
+    const jobs = [mockJob({ sourceId: "job-1", source: "jsearch" })];
+    upsertJobs(db, jobs);
+    setJobState(db, "jsearch:job-1", "applied", "2024-01-01T00:00:00Z");
+
+    upsertJobs(db, jobs);
+
+    expect(first(allJobs(db)).state).toBe("applied");
+    db.close();
+  });
+
+  it("still applies an explicit state override on conflict", () => {
+    const db = freshDb();
+    const jobs = [mockJob({ sourceId: "job-1", source: "jsearch" })];
+    upsertJobs(db, jobs);
+    setJobState(db, "jsearch:job-1", "applied", "2024-01-01T00:00:00Z");
+
+    const states = new Map<string, ListingState>([
+      ["jsearch:job-1", "inactive"],
+    ]);
+    upsertJobs(db, jobs, states);
+
+    expect(first(allJobs(db)).state).toBe("inactive");
+    db.close();
+  });
 });
 
 describe("allJobs", () => {
