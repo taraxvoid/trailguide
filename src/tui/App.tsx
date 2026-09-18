@@ -26,7 +26,6 @@ const SEPARATOR_LINES = 1;
 const FOOTER_LINES = 6; // marginTop 1 + border 2 + paddingY 2 + content 1
 const STATUS_LINES = 2; // marginTop 1 + content 1
 const DETAIL_CHROME_LINES = 8; // gap 1 + border 2 + paddingY 2 + title/company/url 3
-const DESCRIPTION_GAP_AND_PREVIEW_LINES = 3; // gap 1 + 2-line preview
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
@@ -69,6 +68,7 @@ export default function JobBrowser({ db }: AppProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const visibleJobs = useMemo(
     () => jobs.filter((j) => j.state === "active" || j.state === "applied"),
@@ -77,8 +77,18 @@ export default function JobBrowser({ db }: AppProps) {
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
+  const descriptionCharsPerLine = Math.max(20, columns - 6);
   const descriptionMaxChars =
-    Math.max(20, columns - 6) * DESCRIPTION_PREVIEW_LINES;
+    descriptionCharsPerLine * DESCRIPTION_PREVIEW_LINES;
+
+  const descriptionLineCount = selectedJob?.description
+    ? isExpanded
+      ? Math.max(
+          1,
+          Math.ceil(selectedJob.description.length / descriptionCharsPerLine),
+        )
+      : DESCRIPTION_PREVIEW_LINES
+    : 0;
 
   // The detail panel and status message are mutually exclusive and occupy
   // very different heights (an ~8-11 line bordered box vs. a single line),
@@ -88,7 +98,7 @@ export default function JobBrowser({ db }: AppProps) {
     ? STATUS_LINES
     : selectedJob
       ? DETAIL_CHROME_LINES +
-        (selectedJob.description ? DESCRIPTION_GAP_AND_PREVIEW_LINES : 0)
+        (selectedJob.description ? GAP_LINE + descriptionLineCount : 0)
       : 0;
 
   const chromeLines =
@@ -108,6 +118,11 @@ export default function JobBrowser({ db }: AppProps) {
       Math.min(prev, Math.max(0, visibleJobs.length - 1)),
     );
   }, [visibleJobs.length]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the selection changes
+  useEffect(() => {
+    setIsExpanded(false);
+  }, [selectedIndex]);
 
   useEffect(() => {
     setScrollOffset((prev) => {
@@ -161,7 +176,9 @@ export default function JobBrowser({ db }: AppProps) {
         return;
       }
       if (key.return) {
-        exit();
+        if (selectedJob?.description) {
+          setIsExpanded((prev) => !prev);
+        }
         return;
       }
       if (input === "o" && selectedJob) {
@@ -187,6 +204,7 @@ export default function JobBrowser({ db }: AppProps) {
       visibleJobs.length,
       selectedJob,
       selectedJob?.url,
+      selectedJob?.description,
       handleRefresh,
       handleStateChange,
     ],
@@ -270,7 +288,9 @@ export default function JobBrowser({ db }: AppProps) {
               <>
                 <Box height={GAP_LINE} />
                 <Text dimColor>
-                  {truncate(selectedJob.description, descriptionMaxChars)}
+                  {isExpanded
+                    ? selectedJob.description
+                    : truncate(selectedJob.description, descriptionMaxChars)}
                 </Text>
               </>
             )}
@@ -280,8 +300,8 @@ export default function JobBrowser({ db }: AppProps) {
 
       <Box paddingY={1} marginTop={1} borderStyle="single" borderColor="gray">
         <Text dimColor>
-          [↑↓/k/j] navigate [↵] select [o] open [e] archive [a] applied [⌃r]
-          refresh [q] quit
+          [↑↓/k/j] navigate [↵] expand/collapse [o] open [e] archive [a] applied
+          [⌃r] refresh [q] quit
         </Text>
       </Box>
     </Box>
