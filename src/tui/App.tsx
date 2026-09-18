@@ -23,11 +23,14 @@ interface AppProps {
 const HEADER_LINES = 3; // paddingY 1 (top+bottom) + 1 content line
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
-const FOOTER_LINES = 6; // marginTop 1 + border 2 + paddingY 2 + content 1
+const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
 const STATUS_LINES = 2; // marginTop 1 + content 1
-const DETAIL_CHROME_LINES = 8; // gap 1 + border 2 + paddingY 2 + title/company/url 3
+const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url wrap, measured below)
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
+
+const FOOTER_TEXT =
+  "[↑↓/k/j] navigate [↵] expand/collapse [o] open [e] archive [a] applied [⌃r] refresh [q] quit";
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -42,9 +45,59 @@ function formatRemote(type: string): string | null {
   }
 }
 
-function truncate(value: string, maxLen: number): string {
-  if (value.length <= maxLen) return value;
-  return `${value.slice(0, Math.max(0, maxLen - 1))}…`;
+// Some sources (e.g. Adzuna) hand back descriptions with embedded hard line
+// breaks, which Ink renders as forced line breaks the chrome math below
+// doesn't budget for. Collapsing to single-line text first means the only
+// line breaks left are the ones wrapText introduces itself, so the line
+// count it reports always matches what actually gets rendered.
+function collapseWhitespace(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+// Greedy word-wrap, matching how Ink wraps <Text>. Chrome height budgeting
+// needs the *actual* wrapped line count (title/company/url/footer text can
+// all wrap depending on job content and terminal width) rather than an
+// assumed "1 line" - an underestimate here overflows the terminal height
+// and permanently scrolls the header out of view, since Ink repaints with
+// relative cursor moves and never recovers a scroll caused that way.
+function wrapText(text: string, width: number): string[] {
+  const words = text.split(" ").filter(Boolean);
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length <= width) {
+      current = candidate;
+      continue;
+    }
+    if (current) lines.push(current);
+    // A single word longer than the width (a URL, typically) can't be
+    // wrapped at a space, so hard-break it into width-sized chunks.
+    let rest = word;
+    while (rest.length > width) {
+      lines.push(rest.slice(0, width));
+      rest = rest.slice(width);
+    }
+    current = rest;
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
+// Slices pre-wrapped lines down to maxLines, ellipsizing the last shown
+// line when content was cut off.
+function previewLines(
+  lines: string[],
+  maxLines: number,
+  width: number,
+): string[] {
+  if (lines.length <= maxLines) return lines;
+  const shown = lines.slice(0, maxLines);
+  const last = shown[maxLines - 1] ?? "";
+  shown[maxLines - 1] =
+    last.length >= width ? `${last.slice(0, width - 1)}…` : `${last}…`;
+  return shown;
 }
 
 function formatState(state: ListingState): string {
@@ -77,18 +130,45 @@ export default function JobBrowser({ db }: AppProps) {
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
-  const descriptionCharsPerLine = Math.max(20, columns - 6);
-  const descriptionMaxChars =
-    descriptionCharsPerLine * DESCRIPTION_PREVIEW_LINES;
+  // Both the detail box and the footer box share the same layout (outer
+  // paddingX 2 + border 1 on each side), so their wrappable text sees the
+  // same content width.
+  const contentWidth = Math.max(20, columns - 6);
 
-  const descriptionLineCount = selectedJob?.description
-    ? isExpanded
-      ? Math.max(
-          1,
-          Math.ceil(selectedJob.description.length / descriptionCharsPerLine),
-        )
-      : DESCRIPTION_PREVIEW_LINES
+  const description = selectedJob?.description
+    ? collapseWhitespace(selectedJob.description)
+    : null;
+
+  const descriptionAllLines = description
+    ? wrapText(description, contentWidth)
+    : [];
+  const descriptionShownLines = isExpanded
+    ? descriptionAllLines
+    : previewLines(
+        descriptionAllLines,
+        DESCRIPTION_PREVIEW_LINES,
+        contentWidth,
+      );
+  const descriptionLineCount = descriptionShownLines.length;
+
+  const titleLine = selectedJob
+    ? `${selectedJob.title} ${formatState(selectedJob.state)}`.trim()
+    : "";
+  const companyLine = selectedJob
+    ? `${selectedJob.company}${
+        formatRemote(selectedJob.remoteType)
+          ? ` · ${formatRemote(selectedJob.remoteType)}`
+          : ""
+      } · ${selectedJob.location}`
+    : "";
+
+  const detailContentLines = selectedJob
+    ? wrapText(titleLine, contentWidth).length +
+      wrapText(companyLine, contentWidth).length +
+      wrapText(selectedJob.url, contentWidth).length
     : 0;
+
+  const footerLines = wrapText(FOOTER_TEXT, contentWidth).length;
 
   // The detail panel and status message are mutually exclusive and occupy
   // very different heights (an ~8-11 line bordered box vs. a single line),
@@ -97,19 +177,26 @@ export default function JobBrowser({ db }: AppProps) {
   const bottomSectionLines = statusMessage
     ? STATUS_LINES
     : selectedJob
-      ? DETAIL_CHROME_LINES +
-        (selectedJob.description ? GAP_LINE + descriptionLineCount : 0)
+      ? DETAIL_FIXED_LINES +
+        detailContentLines +
+        (description ? GAP_LINE + descriptionLineCount : 0)
       : 0;
 
   const chromeLines =
     HEADER_LINES +
     GAP_LINE +
     SEPARATOR_LINES +
-    FOOTER_LINES +
+    FOOTER_FIXED_LINES +
+    footerLines +
     bottomSectionLines;
 
+  // No floor of 1 here: when the chrome (header/detail/footer) alone
+  // already fills the terminal, forcing a row anyway would overflow the
+  // terminal height and permanently scroll the header out of view (Ink
+  // repaints via relative cursor moves and can't recover from that). An
+  // empty list area is the correct degraded state, not an overflowed one.
   const visibleCount = Math.max(
-    1,
+    0,
     Math.floor((rows - chromeLines) / ROW_LINES),
   );
 
@@ -284,14 +371,10 @@ export default function JobBrowser({ db }: AppProps) {
               · {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
-            {selectedJob.description && (
+            {description && (
               <>
                 <Box height={GAP_LINE} />
-                <Text dimColor>
-                  {isExpanded
-                    ? selectedJob.description
-                    : truncate(selectedJob.description, descriptionMaxChars)}
-                </Text>
+                <Text dimColor>{descriptionShownLines.join("\n")}</Text>
               </>
             )}
           </Box>
@@ -299,10 +382,7 @@ export default function JobBrowser({ db }: AppProps) {
       )}
 
       <Box paddingY={1} marginTop={1} borderStyle="single" borderColor="gray">
-        <Text dimColor>
-          [↑↓/k/j] navigate [↵] expand/collapse [o] open [e] archive [a] applied
-          [⌃r] refresh [q] quit
-        </Text>
+        <Text dimColor>{FOOTER_TEXT}</Text>
       </Box>
     </Box>
   );
