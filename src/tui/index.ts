@@ -1,6 +1,6 @@
 import { render } from "ink";
 import React from "react";
-import { allJobs, openDb } from "../db.ts";
+import { openDb } from "../db.ts";
 import JobBrowser from "./App.tsx";
 
 export interface TuiOptions {
@@ -9,10 +9,9 @@ export interface TuiOptions {
 
 export async function runTui(options: TuiOptions): Promise<void> {
   const db = openDb(options.db);
-  const jobs = allJobs(db);
 
   const { unmount, waitUntilExit } = render(
-    React.createElement(JobBrowser, { jobs }),
+    React.createElement(JobBrowser, { db }),
     { exitOnCtrlC: true },
   );
 

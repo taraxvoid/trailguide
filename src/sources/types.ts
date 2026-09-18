@@ -16,7 +16,8 @@ export interface NormalizedJob {
 export interface SearchParams {
   role: string;
   location?: string;
-  remote?: RemoteType;
+  remote?: boolean;
+  onsite?: boolean;
 }
 
 export interface Source {

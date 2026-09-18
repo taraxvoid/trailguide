@@ -92,7 +92,8 @@ igor search --role "backend engineer" --location remote --remote remote
 
 ```bash
 just lint      # biome + gitleaks
+just typecheck # tsc --noEmit
 just test      # bun test
-just check     # lint + test
+just check     # lint + typecheck + test
 just smoke-live  # hits real third-party APIs; skips sources with no credentials set
 ```

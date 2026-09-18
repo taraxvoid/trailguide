@@ -19,7 +19,7 @@ describe("greenhouse source", () => {
     // matching job per company is expected back.
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(greenhouseFixture)),
-    );
+    ) as unknown as typeof fetch;
 
     const source = createGreenhouseSource();
     const jobs = await source.search({ role: "engineer" });
@@ -35,7 +35,7 @@ describe("lever source", () => {
   it("normalizes jobs and filters by role", async () => {
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(leverFixture)),
-    );
+    ) as unknown as typeof fetch;
 
     const source = createLeverSource();
     const jobs = await source.search({ role: "engineer" });
@@ -53,7 +53,7 @@ describe("ashby source", () => {
     // matching job per company is expected back.
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(ashbyFixture)),
-    );
+    ) as unknown as typeof fetch;
 
     const source = createAshbySource();
     const jobs = await source.search({ role: "engineer" });
