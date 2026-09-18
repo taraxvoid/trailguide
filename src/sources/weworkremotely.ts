@@ -21,7 +21,7 @@ function decodeEntities(text: string): string {
 }
 
 function extractTag(block: string, tag: string): string {
-  const match = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
+  const match = block.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`));
   return match?.[1]?.trim() ?? "";
 }
 
