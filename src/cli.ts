@@ -58,10 +58,10 @@ export function buildSources(): Source[] {
 }
 
 export interface SearchOptions {
-  location?: string;
+  location?: string[];
   remote?: boolean;
   onsite?: boolean;
-  role: string;
+  role: string[];
   json: boolean;
   csv: boolean;
   db: string;
@@ -227,8 +227,14 @@ export function createProgram(
   program
     .command("search")
     .description("Search job sources and store results")
-    .requiredOption("--role <query>", "role/title to search for")
-    .option("--location <city>", "location to search in")
+    .requiredOption(
+      "--role <query...>",
+      "role/title to search for (accepts multiple values)",
+    )
+    .option(
+      "--location <city...>",
+      "location(s) to search in (accepts multiple values)",
+    )
     .option("--remote", "only search for remote jobs", false)
     .option("--onsite", "only search for onsite/hybrid jobs", false)
     .option("--json", "output all stored jobs as JSON", false)

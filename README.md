@@ -56,11 +56,11 @@ bun run src/cli.ts search --role "software engineer"
 ## Usage
 
 ```bash
-igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [--clearance] [--json] [--csv] [--db <path>]
+igor search --role <query...> [--location <city...>] [--remote remote|hybrid|onsite] [--clearance] [--json] [--csv] [--db <path>]
 ```
 
-- `--role` (required) — title/keyword to search for
-- `--location` — filter by location text
+- `--role` (required) — title/keyword to search for; accepts multiple values, e.g. `--role engineer manager`
+- `--location` — filter by location text; accepts multiple values, e.g. `--location Omaha "San Francisco"`
 - `--remote` — one of `remote`, `hybrid`, `onsite`
 - `--clearance` — include jobs that mention a clearance requirement (excluded by default)
 - `--json` — print all jobs currently stored in the db as JSON
