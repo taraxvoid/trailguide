@@ -11,14 +11,14 @@ import {
   upsertJobs,
 } from "./db.ts";
 import type { ListingState } from "./db.ts";
-import { dedupe, dedupeKey } from "./dedupe.ts";
+import { dedupe } from "./dedupe.ts";
 import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
-import type { NormalizedJob, RemoteType, Source } from "./sources/types.ts";
+import type { NormalizedJob, Source } from "./sources/types.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
