@@ -1,4 +1,5 @@
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import { companiesForAts } from "./seed.ts";
 import type {
   NormalizedJob,
@@ -17,8 +18,9 @@ interface LeverJob {
   descriptionPlain: string;
 }
 
-function matchesRole(title: string, role: string): boolean {
-  return title.toLowerCase().includes(role.toLowerCase());
+function matchesRole(title: string, role: string | string[]): boolean {
+  const lowerTitle = title.toLowerCase();
+  return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
 function toRemoteType(workplaceType: string | null): RemoteType {

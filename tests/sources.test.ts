@@ -34,6 +34,18 @@ describe("greenhouse source", () => {
     expect(jobs[0]?.remoteType).toBe("remote");
   });
 
+  it("matches any of multiple roles", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(greenhouseFixture)),
+    ) as unknown as typeof fetch;
+
+    const source = createGreenhouseSource();
+    const jobs = await source.search({ role: ["engineer", "designer"] });
+
+    expect(jobs).toHaveLength(companiesForAts("greenhouse").length * 2);
+    expect(jobs.map((j) => j.title)).toContain("Product Designer");
+  });
+
   it("strips HTML markup from the job description", async () => {
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(greenhouseFixture)),
@@ -149,6 +161,31 @@ describe("jsearch source", () => {
       "JSearch request failed: 500",
     );
   });
+
+  it("issues one request per role/location combination and merges results", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = mock(async (input: unknown) => {
+      requestedUrls.push(String(input));
+      return new Response(JSON.stringify(jsearchFixture));
+    }) as unknown as typeof fetch;
+
+    const source = createJSearchSource("test-api-key");
+    const jobs = await source.search({
+      role: ["engineer", "manager"],
+      location: ["Omaha", "San Francisco"],
+    });
+
+    expect(requestedUrls).toHaveLength(4);
+    expect(
+      requestedUrls.some((url) => url.includes("query=engineer+in+Omaha")),
+    ).toBe(true);
+    expect(
+      requestedUrls.some((url) =>
+        url.includes("query=manager+in+San+Francisco"),
+      ),
+    ).toBe(true);
+    expect(jobs).toHaveLength(2 * 4);
+  });
 });
 
 describe("adzuna source", () => {
@@ -198,5 +235,32 @@ describe("adzuna source", () => {
     await expect(source.search({ role: "engineer" })).rejects.toThrow(
       "Adzuna request failed: 503",
     );
+  });
+
+  it("issues one request per role/location combination and merges results", async () => {
+    const requestedUrls: string[] = [];
+    globalThis.fetch = mock(async (input: unknown) => {
+      requestedUrls.push(String(input));
+      return new Response(JSON.stringify(adzunaFixture));
+    }) as unknown as typeof fetch;
+
+    const source = createAdzunaSource("app-id", "app-key");
+    const jobs = await source.search({
+      role: ["engineer", "manager"],
+      location: ["Omaha", "London"],
+    });
+
+    expect(requestedUrls).toHaveLength(4);
+    expect(
+      requestedUrls.some(
+        (url) => url.includes("what=engineer") && url.includes("where=Omaha"),
+      ),
+    ).toBe(true);
+    expect(
+      requestedUrls.some(
+        (url) => url.includes("what=manager") && url.includes("where=London"),
+      ),
+    ).toBe(true);
+    expect(jobs).toHaveLength(1 * 4);
   });
 });
