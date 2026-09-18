@@ -122,6 +122,7 @@ export default function JobBrowser({ db }: AppProps) {
   const [scrollOffset, setScrollOffset] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const visibleJobs = useMemo(
     () => jobs.filter((j) => j.state === "active" || j.state === "applied"),
@@ -226,12 +227,19 @@ export default function JobBrowser({ db }: AppProps) {
   }, []);
 
   const handleRefresh = useCallback(async () => {
-    const result = await refreshListings(db);
-    setJobs(allJobs(db));
-    showStatus(
-      `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.deactivated} inactive`,
-    );
-  }, [db, showStatus]);
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setStatusMessage("Refreshing…");
+    try {
+      const result = await refreshListings(db);
+      setJobs(allJobs(db));
+      showStatus(
+        `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.deactivated} inactive`,
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [db, isRefreshing, showStatus]);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
@@ -251,7 +259,7 @@ export default function JobBrowser({ db }: AppProps) {
         return;
       }
       if (key.ctrl && input === "r") {
-        handleRefresh();
+        if (!isRefreshing) handleRefresh();
         return;
       }
       if (key.upArrow || input === "k") {
@@ -292,6 +300,7 @@ export default function JobBrowser({ db }: AppProps) {
       selectedJob,
       selectedJob?.url,
       selectedJob?.description,
+      isRefreshing,
       handleRefresh,
       handleStateChange,
     ],
