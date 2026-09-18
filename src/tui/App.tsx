@@ -229,9 +229,14 @@ export default function JobBrowser({ db }: AppProps) {
     const result = await refreshListings(db);
     setJobs(allJobs(db));
     showStatus(
-      `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.deactivated} inactive`,
+      `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.archived} archived`,
     );
   }, [db, showStatus]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount only
+  useEffect(() => {
+    handleRefresh();
+  }, []);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
