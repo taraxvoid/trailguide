@@ -19,7 +19,10 @@ import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJobApsSource } from "./sources/jobaps.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
+import { createRemoteOkSource } from "./sources/remoteok.ts";
+import { createRemotiveSource } from "./sources/remotive.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
+import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
@@ -42,6 +45,9 @@ export function buildSources(): Source[] {
     createGreenhouseSource(),
     createLeverSource(),
     createAshbySource(),
+    createRemoteOkSource(),
+    createRemotiveSource(),
+    createWeWorkRemotelySource(),
     createJobApsSource(),
   ];
 

@@ -3,6 +3,9 @@ import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
 import { createJobApsSource } from "../src/sources/jobaps.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
 import { createLeverSource } from "../src/sources/lever.ts";
+import { createRemoteOkSource } from "../src/sources/remoteok.ts";
+import { createRemotiveSource } from "../src/sources/remotive.ts";
+import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
 
 /**
  * Hits real, live third-party APIs. Not run in CI on every PR (would burn
@@ -16,6 +19,9 @@ async function main() {
   for (const source of [
     createGreenhouseSource(),
     createLeverSource(),
+    createRemoteOkSource(),
+    createRemotiveSource(),
+    createWeWorkRemotelySource(),
     createJobApsSource(),
   ]) {
     ran++;
