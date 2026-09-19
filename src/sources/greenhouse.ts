@@ -1,5 +1,6 @@
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import { companiesForAts } from "./seed.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
@@ -16,8 +17,9 @@ interface GreenhouseResponse {
   jobs: GreenhouseJob[];
 }
 
-function matchesRole(title: string, role: string): boolean {
-  return title.toLowerCase().includes(role.toLowerCase());
+function matchesRole(title: string, role: string | string[]): boolean {
+  const lowerTitle = title.toLowerCase();
+  return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
 export function createGreenhouseSource(): Source {

@@ -21,8 +21,7 @@ cp .env.example .env
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
 
-Greenhouse, Lever, Ashby, RemoteOK, Remotive, and We Work Remotely sources
-work with no credentials.
+Other sources don't require creds
 
 ## Running `igor` on your PATH
 
@@ -56,11 +55,11 @@ bun run src/cli.ts search --role "software engineer"
 ## Usage
 
 ```bash
-igor search --role <query> [--location <city>] [--remote remote|hybrid|onsite] [--clearance] [--json] [--csv] [--db <path>]
+igor search --role <query...> [--location <city...>] [--remote remote|hybrid|onsite] [--clearance] [--json] [--csv] [--db <path>]
 ```
 
-- `--role` (required) — title/keyword to search for
-- `--location` — filter by location text
+- `--role` (required) — title/keyword to search for; accepts multiple values, e.g. `--role engineer manager`
+- `--location` — filter by location text; accepts multiple values, e.g. `--location Omaha "San Francisco"`
 - `--remote` — one of `remote`, `hybrid`, `onsite`
 - `--clearance` — include jobs that mention a clearance requirement (excluded by default)
 - `--json` — print all jobs currently stored in the db as JSON

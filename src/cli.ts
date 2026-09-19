@@ -16,6 +16,7 @@ import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
+import { createJobApsSource } from "./sources/jobaps.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
 import { createRemoteOkSource } from "./sources/remoteok.ts";
@@ -47,6 +48,7 @@ export function buildSources(): Source[] {
     createRemoteOkSource(),
     createRemotiveSource(),
     createWeWorkRemotelySource(),
+    createJobApsSource(),
   ];
 
   if (process.env.JSEARCH_API_KEY) {
@@ -62,10 +64,10 @@ export function buildSources(): Source[] {
 }
 
 export interface SearchOptions {
-  location?: string;
+  location?: string[];
   remote?: boolean;
   onsite?: boolean;
-  role: string;
+  role: string[];
   json: boolean;
   csv: boolean;
   db: string;
@@ -177,7 +179,7 @@ export async function refreshListings(db: Database): Promise<{
   checked: number;
   skipped: number;
   activated: number;
-  deactivated: number;
+  archived: number;
 }> {
   const activeJobs = jobsByState(db, "active");
   const now = Date.now();
@@ -185,7 +187,7 @@ export async function refreshListings(db: Database): Promise<{
   let checked = 0;
   let skipped = 0;
   let activated = 0;
-  let deactivated = 0;
+  let archived = 0;
 
   for (const job of activeJobs) {
     const lastChecked = new Date(job.lastCheckedAt).getTime();
@@ -195,13 +197,16 @@ export async function refreshListings(db: Database): Promise<{
     }
     checked++;
     const dead = await isUrlDead(job.url);
-    const state: ListingState = dead ? "inactive" : "active";
+    // A job that dies after having been active is auto-archived rather than
+    // left "inactive" - "inactive" is reserved for jobs that were already
+    // dead the first time we saw them during search.
+    const state: ListingState = dead ? "archived" : "active";
     setJobState(db, job.listingId, state, new Date().toISOString());
-    if (dead) deactivated++;
+    if (dead) archived++;
     else activated++;
   }
 
-  return { checked, skipped, activated, deactivated };
+  return { checked, skipped, activated, archived };
 }
 
 export async function runRefresh(options: { db: string }): Promise<void> {
@@ -209,7 +214,7 @@ export async function runRefresh(options: { db: string }): Promise<void> {
   const result = await refreshListings(db);
   db.close();
   console.log(
-    `Refreshed ${result.checked} listings (${result.skipped} skipped within 24h): ${result.activated} active, ${result.deactivated} inactive`,
+    `Refreshed ${result.checked} listings (${result.skipped} skipped within 24h): ${result.activated} active, ${result.archived} archived`,
   );
 }
 
@@ -228,8 +233,14 @@ export function createProgram(
   program
     .command("search")
     .description("Search job sources and store results")
-    .requiredOption("--role <query>", "role/title to search for")
-    .option("--location <city>", "location to search in")
+    .requiredOption(
+      "--role <query...>",
+      "role/title to search for (accepts multiple values)",
+    )
+    .option(
+      "--location <city...>",
+      "location(s) to search in (accepts multiple values)",
+    )
     .option("--remote", "only search for remote jobs", false)
     .option("--onsite", "only search for onsite/hybrid jobs", false)
     .option("--json", "output all stored jobs as JSON", false)

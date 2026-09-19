@@ -1,5 +1,6 @@
 import { createAdzunaSource } from "../src/sources/adzuna.ts";
 import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
+import { createJobApsSource } from "../src/sources/jobaps.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
 import { createLeverSource } from "../src/sources/lever.ts";
 import { createRemoteOkSource } from "../src/sources/remoteok.ts";
@@ -21,6 +22,7 @@ async function main() {
     createRemoteOkSource(),
     createRemotiveSource(),
     createWeWorkRemotelySource(),
+    createJobApsSource(),
   ]) {
     ran++;
     const jobs = await source.search(params);

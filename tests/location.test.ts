@@ -20,4 +20,12 @@ describe("matchesLocation", () => {
   it("does not expand aliases for unrelated queries", () => {
     expect(matchesLocation("La Vista, NE", "chicago")).toBe(false);
   });
+
+  it("matches when any query in a list of locations matches", () => {
+    expect(
+      matchesLocation("San Francisco, CA", ["omaha", "san francisco"]),
+    ).toBe(true);
+    expect(matchesLocation("La Vista, NE", ["chicago", "omaha"])).toBe(true);
+    expect(matchesLocation("Austin, TX", ["omaha", "chicago"])).toBe(false);
+  });
 });

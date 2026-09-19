@@ -1,4 +1,5 @@
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import { companiesForAts } from "./seed.ts";
 import type {
   NormalizedJob,
@@ -28,8 +29,9 @@ interface AshbyResponse {
   jobs: AshbyJob[];
 }
 
-function matchesRole(title: string, role: string): boolean {
-  return title.toLowerCase().includes(role.toLowerCase());
+function matchesRole(title: string, role: string | string[]): boolean {
+  const lowerTitle = title.toLowerCase();
+  return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
 function allLocations(job: AshbyJob): string[] {
@@ -73,7 +75,7 @@ export function createAshbySource(): Source {
           if (
             params.location &&
             !locations.some((loc) =>
-              matchesLocation(loc, params.location as string),
+              matchesLocation(loc, params.location as string | string[]),
             )
           ) {
             continue;
