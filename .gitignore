@@ -1,3 +1,6 @@
+# source resumes
+/input
+
 # sqlite DB 
 *.db
 *.db-journal
