@@ -30,7 +30,21 @@ const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const FOOTER_TEXT =
-  "[↑↓/k/j] navigate [↵] expand/collapse [o] open [e] archive [a] applied [⌃r] refresh [q] quit";
+  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [e] archive [a] applied [⌃r] refresh [q] quit";
+
+const VIEW_TABS = ["active", "applied", "archived"] as const;
+type ViewTab = (typeof VIEW_TABS)[number];
+
+function tabLabel(tab: ViewTab): string {
+  switch (tab) {
+    case "active":
+      return "Active";
+    case "applied":
+      return "Applied";
+    case "archived":
+      return "Archived";
+  }
+}
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -118,6 +132,7 @@ export default function JobBrowser({ db }: AppProps) {
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
   const [jobs, setJobs] = useState<StoredJob[]>(() => allJobs(db));
+  const [viewTab, setViewTab] = useState<ViewTab>("active");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -125,8 +140,8 @@ export default function JobBrowser({ db }: AppProps) {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const visibleJobs = useMemo(
-    () => jobs.filter((j) => j.state === "active" || j.state === "applied"),
-    [jobs],
+    () => jobs.filter((j) => j.state === viewTab),
+    [jobs, viewTab],
   );
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
@@ -207,6 +222,11 @@ export default function JobBrowser({ db }: AppProps) {
     );
   }, [visibleJobs.length]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [viewTab]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the selection changes
   useEffect(() => {
     setIsExpanded(false);
@@ -234,12 +254,17 @@ export default function JobBrowser({ db }: AppProps) {
       const result = await refreshListings(db);
       setJobs(allJobs(db));
       showStatus(
-        `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.deactivated} inactive`,
+        `Refreshed ${result.checked} (${result.skipped} skipped): ${result.activated} active, ${result.archived} archived`,
       );
     } finally {
       setIsRefreshing(false);
     }
   }, [db, isRefreshing, showStatus]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: run once on mount only
+  useEffect(() => {
+    handleRefresh();
+  }, []);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
@@ -268,6 +293,25 @@ export default function JobBrowser({ db }: AppProps) {
       }
       if (key.downArrow || input === "j") {
         setSelectedIndex((prev) => Math.min(visibleJobs.length - 1, prev + 1));
+        return;
+      }
+      if (key.leftArrow || input === "h") {
+        setViewTab(
+          (prev) =>
+            VIEW_TABS[
+              (VIEW_TABS.indexOf(prev) - 1 + VIEW_TABS.length) %
+                VIEW_TABS.length
+            ] as ViewTab,
+        );
+        return;
+      }
+      if (key.rightArrow || input === "l") {
+        setViewTab(
+          (prev) =>
+            VIEW_TABS[
+              (VIEW_TABS.indexOf(prev) + 1) % VIEW_TABS.length
+            ] as ViewTab,
+        );
         return;
       }
       if (key.return) {
@@ -312,8 +356,16 @@ export default function JobBrowser({ db }: AppProps) {
     return visibleJobs.slice(scrollOffset, scrollOffset + visibleCount);
   }, [visibleJobs, scrollOffset, visibleCount]);
 
-  const activeCount = visibleJobs.filter((j) => j.state === "active").length;
-  const appliedCount = visibleJobs.filter((j) => j.state === "applied").length;
+  const tabCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        VIEW_TABS.map((tab) => [
+          tab,
+          jobs.filter((j) => j.state === tab).length,
+        ]),
+      ) as Record<ViewTab, number>,
+    [jobs],
+  );
 
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
@@ -321,11 +373,19 @@ export default function JobBrowser({ db }: AppProps) {
         <Text bold color="green">
           ⚡ igor
         </Text>
-        <Text dimColor>
-          {activeCount > 0 && `${activeCount} active`}
-          {activeCount > 0 && appliedCount > 0 && " · "}
-          {appliedCount > 0 && `${appliedCount} applied`}
-          {visibleJobs.length === 0 && "no jobs"}
+        <Text>
+          {VIEW_TABS.map((tab, i) => (
+            <React.Fragment key={tab}>
+              {i > 0 && <Text dimColor> </Text>}
+              <Text
+                bold={tab === viewTab}
+                color={tab === viewTab ? "green" : undefined}
+                dimColor={tab !== viewTab}
+              >
+                {tabLabel(tab)} ({tabCounts[tab]})
+              </Text>
+            </React.Fragment>
+          ))}
         </Text>
       </Box>
 
