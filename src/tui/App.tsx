@@ -12,6 +12,7 @@ import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import { allJobs, setJobState } from "../db.ts";
+import { tailorResume } from "../tailor/index.ts";
 
 interface AppProps {
   db: Database;
@@ -30,7 +31,7 @@ const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const FOOTER_TEXT =
-  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [e] archive [a] applied [⌃r] refresh [q] quit";
+  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [t] tailor resume [e] archive [a] applied [⌃r] refresh [q] quit";
 
 const VIEW_TABS = ["active", "applied", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -138,6 +139,7 @@ export default function JobBrowser({ db }: AppProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTailoring, setIsTailoring] = useState(false);
 
   const visibleJobs = useMemo(
     () => jobs.filter((j) => j.state === viewTab),
@@ -277,6 +279,33 @@ export default function JobBrowser({ db }: AppProps) {
     [db, visibleJobs, selectedIndex, showStatus],
   );
 
+  const handleTailor = useCallback(async () => {
+    const job = visibleJobs[selectedIndex];
+    if (!job || isTailoring) return;
+    setIsTailoring(true);
+    // No auto-hiding timeout here (unlike showStatus elsewhere) - tailoring
+    // takes tens of seconds on a local model, and the result (including any
+    // warnings about a fallback) is worth leaving on screen until the next
+    // action rather than losing it after 3s.
+    setStatusMessage(
+      "Tailoring resume (this can take a minute on a local model)…",
+    );
+    try {
+      const result = await tailorResume(db, job.listingId);
+      if (!result.ok) {
+        setStatusMessage(`Tailoring failed: ${result.error}`);
+        return;
+      }
+      const warningSuffix =
+        result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
+      setStatusMessage(
+        `Wrote ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
+      );
+    } finally {
+      setIsTailoring(false);
+    }
+  }, [db, visibleJobs, selectedIndex, isTailoring]);
+
   const handleInput = useCallback(
     (input: string, key: Key) => {
       if (key.escape || input === "q") {
@@ -329,6 +358,10 @@ export default function JobBrowser({ db }: AppProps) {
         Bun.spawn({ cmd });
         return;
       }
+      if (input === "t" && selectedJob) {
+        if (!isTailoring) handleTailor();
+        return;
+      }
       if (input === "e") {
         handleStateChange("archived");
         return;
@@ -345,8 +378,10 @@ export default function JobBrowser({ db }: AppProps) {
       selectedJob?.url,
       selectedJob?.description,
       isRefreshing,
+      isTailoring,
       handleRefresh,
       handleStateChange,
+      handleTailor,
     ],
   );
 

@@ -96,11 +96,8 @@ export function upsertJobs(
   return newJobs;
 }
 
-export function allJobs(db: Database): StoredJob[] {
-  const rows = db
-    .query("SELECT * FROM jobs ORDER BY last_seen_at DESC")
-    .all() as Array<Record<string, string>>;
-  return rows.map((row) => ({
+function rowToStoredJob(row: Record<string, string>): StoredJob {
+  return {
     listingId: row.listing_id ?? "",
     sourceId: row.source_id ?? "",
     source: row.source as NormalizedJob["source"],
@@ -115,7 +112,14 @@ export function allJobs(db: Database): StoredJob[] {
     lastSeenAt: row.last_seen_at ?? "",
     lastCheckedAt: row.last_checked_at ?? "",
     state: (row.state as ListingState) ?? "active",
-  }));
+  };
+}
+
+export function allJobs(db: Database): StoredJob[] {
+  const rows = db
+    .query("SELECT * FROM jobs ORDER BY last_seen_at DESC")
+    .all() as Array<Record<string, string>>;
+  return rows.map(rowToStoredJob);
 }
 
 export function jobsByState(db: Database, state: ListingState): StoredJob[] {
@@ -124,22 +128,14 @@ export function jobsByState(db: Database, state: ListingState): StoredJob[] {
       "SELECT * FROM jobs WHERE state = $state ORDER BY last_seen_at DESC",
     )
     .all({ $state: state }) as Array<Record<string, string>>;
-  return rows.map((row) => ({
-    listingId: row.listing_id ?? "",
-    sourceId: row.source_id ?? "",
-    source: row.source as NormalizedJob["source"],
-    title: row.title ?? "",
-    company: row.company ?? "",
-    location: row.location ?? "",
-    remoteType: row.remote_type as NormalizedJob["remoteType"],
-    url: row.url ?? "",
-    postedAt: row.posted_at ?? null,
-    description: row.description ?? null,
-    firstSeenAt: row.first_seen_at ?? "",
-    lastSeenAt: row.last_seen_at ?? "",
-    lastCheckedAt: row.last_checked_at ?? "",
-    state: (row.state as ListingState) ?? "active",
-  }));
+  return rows.map(rowToStoredJob);
+}
+
+export function getJob(db: Database, listingId: string): StoredJob | null {
+  const row = db
+    .prepare("SELECT * FROM jobs WHERE listing_id = $listingId")
+    .get({ $listingId: listingId }) as Record<string, string> | null;
+  return row ? rowToStoredJob(row) : null;
 }
 
 export function setJobState(

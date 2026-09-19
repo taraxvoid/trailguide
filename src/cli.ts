@@ -23,6 +23,7 @@ import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
+import { tailorResume } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
@@ -218,10 +219,42 @@ export async function runRefresh(options: { db: string }): Promise<void> {
   );
 }
 
+export interface TailorCliOptions {
+  db: string;
+  listingId: string;
+  resume?: string;
+  outputDir?: string;
+  ollamaHost?: string;
+  ollamaModel?: string;
+}
+
+export async function runTailor(options: TailorCliOptions): Promise<void> {
+  const db = openDb(options.db);
+  const result = await tailorResume(db, options.listingId, {
+    resumePath: options.resume,
+    outputDir: options.outputDir,
+    ollamaHost: options.ollamaHost,
+    ollamaModel: options.ollamaModel,
+  });
+  db.close();
+
+  for (const warning of result.warnings) console.warn(`warning: ${warning}`);
+
+  if (!result.ok) {
+    console.error(`error: ${result.error}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`Wrote ${result.markdownPath}`);
+  if (result.pdfPath) console.log(`Wrote ${result.pdfPath}`);
+}
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<void> = runSearch,
   clearAction: (options: { db: string }) => Promise<void> = runClear,
   refreshAction: (options: { db: string }) => Promise<void> = runRefresh,
+  tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
 ): Command {
   const program = new Command();
 
@@ -274,6 +307,45 @@ export function createProgram(
     .action(async (options: { db: string }) => {
       await refreshAction(options);
     });
+
+  program
+    .command("tailor")
+    .description(
+      "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF",
+    )
+    .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option(
+      "--resume <path>",
+      "resume master path (default: the one .md file under input/)",
+    )
+    .option(
+      "--output-dir <path>",
+      "where to write the tailored .md/.pdf",
+      "output/resumes",
+    )
+    .option(
+      "--ollama-host <host>",
+      "Ollama host (default: $OLLAMA_HOST or 127.0.0.1:11434)",
+    )
+    .option(
+      "--ollama-model <model>",
+      "Ollama model (default: $OLLAMA_MODEL or qwen3:8b)",
+    )
+    .action(
+      async (
+        listingIdArg: string,
+        options: {
+          db: string;
+          resume?: string;
+          outputDir?: string;
+          ollamaHost?: string;
+          ollamaModel?: string;
+        },
+      ) => {
+        await tailorAction({ ...options, listingId: listingIdArg });
+      },
+    );
 
   return program;
 }

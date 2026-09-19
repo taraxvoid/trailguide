@@ -20,6 +20,7 @@ cp .env.example .env
 
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
+- `OLLAMA_HOST` / `OLLAMA_MODEL` — only needed if you want to override the defaults for `igor tailor` (see below)
 
 Other sources don't require creds
 
@@ -74,13 +75,55 @@ Browse stored jobs interactively:
 igor tui [--db <path>]
 ```
 
-- ↑↓ — navigate job list
-- ↵ — quit
-- q — quit
+- ↑↓ / k j — navigate job list
+- ←→ / h l — switch between Active / Applied / Archived tabs
+- ↵ — expand/collapse the selected job's description
+- o — open the listing URL in your browser
+- t — tailor your resume to the selected job (see below)
+- e — archive
+- a — mark applied
+- ⌃r — refresh (checks whether active listings are still live)
+- q / esc — quit
 
 Internship postings are always filtered out. Results are deduped across
 sources and persisted to the sqlite db so repeated searches only flag what's
 `NEW`.
+
+## Tailoring your resume
+
+`igor tailor <listingId>` (or the `t` key in the TUI) reorders your resume's
+Highlights and each job's accomplishment bullets to foreground whatever's
+most relevant to a specific listing, then renders a PDF. It never invents,
+rewrites, or drops factual content — a local model only ever picks and
+orders *which of your own bullets* to show; everything else (your contact
+info, employer names/dates/titles, education, certifications, skills, ...)
+is reproduced exactly as written.
+
+Setup:
+
+1. Put your resume master in `input/<name>.md` (gitignored - this is your
+   personal resume, not project source). It needs a `## Highlights` section
+   and a `## Career Experience` section with each employer's bullets for
+   tailoring to have anything to work with; other sections and their
+   formatting are free-form and always passed through unchanged.
+2. Install [Typst](https://typst.app) (`brew install typst` or see
+   [installation docs](https://github.com/typst/typst#installation)) - used
+   to render the PDF.
+3. Install [Ollama](https://ollama.com) and pull a thinking-capable model
+   (the default is `qwen3:8b`, a good fit for 16GB of RAM):
+   ```bash
+   ollama pull qwen3:8b
+   ```
+
+```bash
+igor tailor <listingId> [--db <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>]
+```
+
+Output goes to `output/resumes/<company>-<title>.md` and `.pdf` (also
+gitignored). If Ollama or the resume's Highlights section isn't available,
+or the model's response doesn't make sense, tailoring is skipped with a
+warning and the resume is still rendered unmodified - you always get a
+usable PDF out of this, never nothing and never garbage.
 
 Example:
 

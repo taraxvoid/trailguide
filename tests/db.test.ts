@@ -4,6 +4,7 @@ import {
   type ListingState,
   allJobs,
   clearJobs,
+  getJob,
   jobsByState,
   listingId,
   setJobState,
@@ -208,6 +209,25 @@ describe("jobsByState", () => {
     expect(inactiveJobs).toHaveLength(1);
     expect(first(inactiveJobs).listingId).toBe("jsearch:a2");
 
+    db.close();
+  });
+});
+
+describe("getJob", () => {
+  it("returns the job matching listingId", () => {
+    const db = freshDb();
+    upsertJobs(db, [
+      mockJob({ sourceId: "j1", source: "jsearch", title: "Backend Engineer" }),
+    ]);
+
+    const job = getJob(db, "jsearch:j1");
+    expect(job?.title).toBe("Backend Engineer");
+    db.close();
+  });
+
+  it("returns null for an unknown listingId", () => {
+    const db = freshDb();
+    expect(getJob(db, "jsearch:missing")).toBeNull();
     db.close();
   });
 });
