@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>We Work Remotely: Remote jobs in design, programming, marketing and more</title>
+    <link>https://weworkremotely.com/categories/remote-programming-jobs.rss</link>
+    <item>
+      <title>Acme Co: Backend Engineer</title>
+      <region>Anywhere in the World</region>
+      <link>https://weworkremotely.com/remote-jobs/acme-co-backend-engineer</link>
+      <guid>https://weworkremotely.com/remote-jobs/acme-co-backend-engineer</guid>
+      <pubDate>Wed, 19 Aug 2026 20:37:20 +0000</pubDate>
+      <description>&lt;p&gt;Build backend systems.&lt;br&gt;Own services end to end.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Widgets Inc: Product Designer</title>
+      <region>USA Only</region>
+      <link>https://weworkremotely.com/remote-jobs/widgets-inc-product-designer</link>
+      <guid>https://weworkremotely.com/remote-jobs/widgets-inc-product-designer</guid>
+      <pubDate>Wed, 19 Aug 2026 20:36:58 +0000</pubDate>
+      <description>&lt;p&gt;Design products.&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>

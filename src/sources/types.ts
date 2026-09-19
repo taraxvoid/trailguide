@@ -3,7 +3,16 @@ export type RemoteType = "remote" | "hybrid" | "onsite" | "unknown";
 export interface NormalizedJob {
   /** Stable id assigned by the source (not globally unique across sources). */
   sourceId: string;
-  source: "jsearch" | "adzuna" | "greenhouse" | "lever" | "ashby" | "jobaps";
+  source:
+    | "jsearch"
+    | "adzuna"
+    | "greenhouse"
+    | "lever"
+    | "ashby"
+    | "remoteok"
+    | "remotive"
+    | "jobaps"
+    | "weworkremotely";
   title: string;
   company: string;
   location: string;

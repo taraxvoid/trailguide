@@ -21,8 +21,7 @@ cp .env.example .env
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
 
-Greenhouse, Lever, Ashby, and JobAPS (Alameda County, CA government jobs)
-sources work with no credentials.
+Other sources don't require creds
 
 ## Running `igor` on your PATH
 
