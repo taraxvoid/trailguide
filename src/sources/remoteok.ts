@@ -1,5 +1,6 @@
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
 interface RemoteOkJob {
@@ -13,12 +14,14 @@ interface RemoteOkJob {
   url: string;
 }
 
-function matchesRole(job: RemoteOkJob, role: string): boolean {
-  const needle = role.toLowerCase();
-  return (
-    job.position.toLowerCase().includes(needle) ||
-    (job.tags ?? []).some((tag) => tag.toLowerCase().includes(needle))
-  );
+function matchesRole(job: RemoteOkJob, role: string | string[]): boolean {
+  return toArray(role).some((r) => {
+    const needle = r.toLowerCase();
+    return (
+      job.position.toLowerCase().includes(needle) ||
+      (job.tags ?? []).some((tag) => tag.toLowerCase().includes(needle))
+    );
+  });
 }
 
 export function createRemoteOkSource(): Source {

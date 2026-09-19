@@ -1,5 +1,6 @@
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
 interface WwrItem {
@@ -43,8 +44,9 @@ function splitTitle(title: string): { company: string; jobTitle: string } {
   return { company: title.slice(0, idx), jobTitle: title.slice(idx + 2) };
 }
 
-function matchesRole(title: string, role: string): boolean {
-  return title.toLowerCase().includes(role.toLowerCase());
+function matchesRole(title: string, role: string | string[]): boolean {
+  const lowerTitle = title.toLowerCase();
+  return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
 export function createWeWorkRemotelySource(): Source {

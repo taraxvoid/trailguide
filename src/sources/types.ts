@@ -11,7 +11,7 @@ export interface NormalizedJob {
     | "ashby"
     | "remoteok"
     | "remotive"
-    | "jobsaps"
+    | "jobaps"
     | "weworkremotely";
   title: string;
   company: string;

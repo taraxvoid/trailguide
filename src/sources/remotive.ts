@@ -1,5 +1,6 @@
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
+import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
 interface RemotiveJob {
@@ -16,12 +17,18 @@ interface RemotiveResponse {
   jobs: RemotiveJob[];
 }
 
+function matchesRole(title: string, role: string | string[]): boolean {
+  const lowerTitle = title.toLowerCase();
+  return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
+}
+
 export function createRemotiveSource(): Source {
   return {
     name: "remotive",
     async search(params: SearchParams): Promise<NormalizedJob[]> {
+      const roles = toArray(params.role);
       const url = new URL("https://remotive.com/api/remote-jobs");
-      url.searchParams.set("search", params.role);
+      url.searchParams.set("search", roles[0] ?? "");
 
       const res = await fetch(url);
       if (!res.ok) {
@@ -32,6 +39,7 @@ export function createRemotiveSource(): Source {
 
       const body = (await res.json()) as RemotiveResponse;
       return body.jobs
+        .filter((job) => matchesRole(job.title, params.role))
         .filter(
           (job) =>
             !params.location ||
