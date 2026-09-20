@@ -200,6 +200,8 @@ export interface RenderResult {
 export async function compileTypst(
   typstSource: string,
   pdfPath: string,
+  /** Overridable for tests; defaults to the `typst` on PATH. */
+  binary = "typst",
 ): Promise<RenderResult> {
   const typstPath = pdfPath.replace(/\.pdf$/, ".typ");
   await mkdir(dirname(pdfPath), { recursive: true });
@@ -209,11 +211,24 @@ export async function compileTypst(
     .delete()
     .catch(() => {});
 
-  const proc = Bun.spawn({
-    cmd: ["typst", "compile", typstPath, pdfPath],
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  let proc: Bun.Subprocess<"ignore", "pipe", "pipe">;
+  try {
+    proc = Bun.spawn({
+      cmd: [binary, "compile", typstPath, pdfPath],
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+  } catch (err) {
+    // Typst isn't installed (or isn't on PATH). That's a setup gap, not a
+    // broken resume - report it like any other render failure so the caller
+    // still keeps the tailored markdown it just wrote.
+    const reason =
+      (err as { code?: string }).code === "ENOENT"
+        ? `\`${binary}\` not found on PATH - install Typst (e.g. \`brew install typst\`) to render PDFs`
+        : (err as Error).message;
+    return { ok: false, typstPath, pdfPath, stderr: reason };
+  }
+
   const [stderr, exitCode] = await Promise.all([
     new Response(proc.stderr).text(),
     proc.exited,
