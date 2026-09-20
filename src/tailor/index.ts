@@ -117,7 +117,8 @@ export async function tailorResume(
 
   const doc = parseResume(source);
   const hasTailorableSections = doc.sections.some(
-    (s) => s.kind === "highlights" || s.kind === "experience",
+    (s) =>
+      s.kind === "highlights" || s.kind === "experience" || s.kind === "skills",
   );
 
   let tailoredDoc = doc;

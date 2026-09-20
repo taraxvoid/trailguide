@@ -92,20 +92,28 @@ sources and persisted to the sqlite db so repeated searches only flag what's
 ## Tailoring your resume
 
 `igor tailor <listingId>` (or the `t` key in the TUI) reorders your resume's
-Highlights and each job's accomplishment bullets to foreground whatever's
-most relevant to a specific listing, then renders a PDF. It never invents,
-rewrites, or drops factual content — a local model only ever picks and
-orders *which of your own bullets* to show; everything else (your contact
-info, employer names/dates/titles, education, certifications, skills, ...)
-is reproduced exactly as written.
+Highlights, each job's accomplishment bullets, and your Skills section to
+foreground whatever's most relevant to a specific listing, then renders a
+PDF. It never invents, rewrites, or drops factual content — a local model
+only ever picks and orders *which of your own bullets* to show; everything
+else (your contact info, employer names/dates/titles, education,
+certifications, ...) is reproduced exactly as written.
+
+A Skills section is keyword stuffing rather than a set of claims, so it gets
+treated a little differently: its sub-groups ("Technical", "Cyber
+Security", ...) are reordered so the ones a posting cares about lead, and
+individual skill lines a posting has no use for are pruned — a gig that
+never mentions the cloud doesn't need to read your cloud-hosting line. The
+groups themselves are only ever reordered, never dropped.
 
 Setup:
 
 1. Put your resume master in `input/<name>.md` (gitignored - this is your
    personal resume, not project source). It needs a `## Highlights` section
    and a `## Career Experience` section with each employer's bullets for
-   tailoring to have anything to work with; other sections and their
-   formatting are free-form and always passed through unchanged.
+   tailoring to have anything to work with. A section whose heading mentions
+   skills, technologies, or competencies is tailored too. Other sections and
+   their formatting are free-form and always passed through unchanged.
 2. Install [Typst](https://typst.app) (`brew install typst` or see
    [installation docs](https://github.com/typst/typst#installation)) - used
    to render the PDF.

@@ -108,6 +108,12 @@ describe("tailorResume", () => {
                   bulletOrder: ["experience2_0", "experience2_1"],
                 },
               ],
+              // Lead with the security group, and pull the cloud line.
+              skillGroupOrder: ["skill1", "skill0"],
+              skills: [
+                { id: "skill0", bulletOrder: ["skill0_0", "skill0_2"] },
+                { id: "skill1", bulletOrder: ["skill1_0", "skill1_1"] },
+              ],
             }),
           },
         }),
@@ -131,6 +137,11 @@ describe("tailorResume", () => {
     // Employers are never dropped or reordered, only their bullets.
     expect(md).toContain("Beta Industries");
     expect(md).toContain("Gamma LLC");
+    // Skills: the security group leads and the cloud line is gone.
+    expect(md.indexOf("Threat modeling")).toBeLessThan(
+      md.indexOf("Python (expert)"),
+    );
+    expect(md).not.toContain("Cloud/Hosting");
   });
 
   it("renders the resume unmodified (with a warning) when there's no Highlights section", async () => {

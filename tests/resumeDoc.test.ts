@@ -65,6 +65,19 @@ describe("parseResume", () => {
     ]);
   });
 
+  it("parses a Skills section into named groups of addressable lines", () => {
+    const doc = parseResume(fixture);
+    const skills = doc.sections.find((s) => s.kind === "skills");
+    if (skills?.kind !== "skills") throw new Error("expected skills section");
+    expect(skills.groups.map((g) => g.heading)).toEqual([
+      "**Technical**",
+      "### **Security**",
+    ]);
+    expect(skills.groups[0]?.bullets).toHaveLength(3);
+    expect(skills.groups[0]?.bullets[1]?.text).toContain("Cloud/Hosting");
+    expect(skills.groups[1]?.bullets).toHaveLength(2);
+  });
+
   it("assigns stable, unique ids to every bullet", () => {
     const doc = parseResume(fixture);
     const ids: string[] = [];
@@ -75,20 +88,26 @@ describe("parseResume", () => {
         for (const entry of section.entries)
           ids.push(...entry.bullets.map((b) => b.id));
       }
+      if (section.kind === "skills") {
+        for (const group of section.groups)
+          ids.push(...group.bullets.map((b) => b.id));
+      }
     }
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.length).toBeGreaterThan(0);
   });
 
-  it("keeps non-tailorable sections (Education, Certifications, Skills) verbatim", () => {
+  it("keeps sections that state facts (Education, Certifications) verbatim", () => {
     const doc = parseResume(fixture);
     const verbatim = doc.sections.filter((s) => s.kind === "verbatim");
-    expect(verbatim).toHaveLength(4);
+    expect(verbatim).toHaveLength(3);
     const raws = verbatim
       .map((s) => (s.kind === "verbatim" ? s.raw : ""))
       .join("\n");
     expect(raws).toContain("Some Certification");
-    expect(raws).toContain("Python (expert)");
+    expect(raws).toContain("State University");
+    // Skills is a keyword pile, not a claim - it's tailorable, not verbatim.
+    expect(raws).not.toContain("Python (expert)");
   });
 
   it("returns an empty section list (never throws) for a document with no Highlights heading", () => {
@@ -112,6 +131,10 @@ describe("toMarkdown", () => {
       "Shipped a small internal tool",
       "Some Certification",
       "Python (expert)",
+      "Cloud/Hosting",
+      "Threat modeling and secure design review",
+      "**Technical**",
+      "### **Security**",
     ]) {
       expect(out).toContain(needle);
     }
