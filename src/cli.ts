@@ -28,7 +28,7 @@ import { stripTrackingParams } from "./url.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
 const GOVMIL_PATTERN =
-  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war)\b/i;
+  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war|SCI|Top Secret|clearance)\b/i;
 
 export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
