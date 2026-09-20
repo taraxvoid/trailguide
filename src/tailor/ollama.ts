@@ -19,23 +19,27 @@ export function resolveOllamaModel(raw = process.env.OLLAMA_MODEL): string {
   return raw?.trim() || DEFAULT_OLLAMA_MODEL;
 }
 
+const GROUP_BULLETS_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      bulletOrder: { type: "array", items: { type: "string" } },
+    },
+    required: ["id", "bulletOrder"],
+  },
+} as const;
+
 const PLAN_JSON_SCHEMA = {
   type: "object",
   properties: {
     highlightOrder: { type: "array", items: { type: "string" } },
-    experience: {
-      type: "array",
-      items: {
-        type: "object",
-        properties: {
-          id: { type: "string" },
-          bulletOrder: { type: "array", items: { type: "string" } },
-        },
-        required: ["id", "bulletOrder"],
-      },
-    },
+    experience: GROUP_BULLETS_SCHEMA,
+    skillGroupOrder: { type: "array", items: { type: "string" } },
+    skills: GROUP_BULLETS_SCHEMA,
   },
-  required: ["highlightOrder", "experience"],
+  required: ["highlightOrder", "experience", "skillGroupOrder", "skills"],
 } as const;
 
 interface PlanBullet {
@@ -47,9 +51,15 @@ interface PlanJob {
   employer: string;
   bullets: PlanBullet[];
 }
+interface PlanSkillGroup {
+  id: string;
+  name: string;
+  lines: PlanBullet[];
+}
 interface PlanContext {
   highlights: PlanBullet[];
   jobs: PlanJob[];
+  skillGroups: PlanSkillGroup[];
 }
 
 /** Strips a bullet's leading markdown list marker for a cleaner prompt. */
@@ -61,12 +71,32 @@ function plainBulletText(text: string): string {
     .join(" ");
 }
 
+/** Strips heading chrome (hashes, bold markers) off a group heading. */
+function plainHeading(heading: string): string {
+  return heading
+    .replace(/\*\*/g, "")
+    .replace(/^#+\s*/, "")
+    .trim();
+}
+
 /** Extracts only the tailorable content (ids + bullet text) from a resume. */
 export function buildPlanContext(doc: ResumeDoc): PlanContext {
   const highlightsSection = doc.sections.find((s) => s.kind === "highlights");
   const experienceSection = doc.sections.find((s) => s.kind === "experience");
+  const skillsSection = doc.sections.find((s) => s.kind === "skills");
 
   return {
+    skillGroups:
+      skillsSection?.kind === "skills"
+        ? skillsSection.groups.map((g) => ({
+            id: g.id,
+            name: plainHeading(g.heading) || "Skills",
+            lines: g.bullets.map((b) => ({
+              id: b.id,
+              text: plainBulletText(b.text),
+            })),
+          }))
+        : [],
     highlights:
       highlightsSection?.kind === "highlights"
         ? highlightsSection.bullets.map((b) => ({
@@ -78,10 +108,7 @@ export function buildPlanContext(doc: ResumeDoc): PlanContext {
       experienceSection?.kind === "experience"
         ? experienceSection.entries.map((e) => ({
             id: e.id,
-            employer: e.heading
-              .replace(/\*\*/g, "")
-              .replace(/^#+\s*/, "")
-              .trim(),
+            employer: plainHeading(e.heading),
             bullets: e.bullets.map((b) => ({
               id: b.id,
               text: plainBulletText(b.text),
@@ -93,16 +120,19 @@ export function buildPlanContext(doc: ResumeDoc): PlanContext {
 
 const SYSTEM_PROMPT = `You help tailor a resume to a specific job posting by choosing which existing bullet points to lead with - you never write new content.
 
-You will be given the target job, then the resume's Highlights bullets and each employer's accomplishment bullets, each with a short id.
+You will be given the target job, then the resume's Highlights bullets, each employer's accomplishment bullets, and the skills groups with their keyword lines - each with a short id.
 
 Return JSON selecting and ordering those ids, most relevant to this job first:
 - "highlightOrder": the Highlights bullet ids, reordered (you may drop clearly irrelevant ones).
 - "experience": one entry per employer id given to you, each with that employer's bullet ids reordered (you may drop the least relevant ones from older/less-relevant jobs, but keep at least 2 when that many exist).
+- "skillGroupOrder": every skills group id, reordered so the groups this posting cares about come first (e.g. a security group leads for a security role).
+- "skills": one entry per skills group id, each with that group's line ids reordered, most relevant first. Drop lines this posting has no use for - if the job never touches cloud hosting, the cloud-hosting line should go. Keep at least 2 lines per group when that many exist.
 
 Rules:
 - Only use ids you were given. Never invent an id or new text.
-- Include every employer id you were given in "experience", even if its bulletOrder just repeats the original order unchanged.
-- Do not reorder or omit employers themselves - only their bullets.`;
+- Include every employer id you were given in "experience", and every skills group id in both "skillGroupOrder" and "skills", even if the order just repeats the original unchanged.
+- Do not reorder or omit employers themselves - only their bullets.
+- Skills groups may be reordered but never dropped - prune the lines inside them instead.`;
 
 function buildUserPrompt(
   job: { title: string; company: string; description: string | null },
@@ -115,6 +145,7 @@ function buildUserPrompt(
       : "(no job description available)",
     `Highlights:\n${JSON.stringify(context.highlights)}`,
     `Employers (in original, unchangeable order):\n${JSON.stringify(context.jobs)}`,
+    `Skills groups:\n${JSON.stringify(context.skillGroups)}`,
   ].join("\n\n");
 }
 

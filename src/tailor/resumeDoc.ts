@@ -3,13 +3,14 @@
 // without ever inventing or rewriting it.
 //
 // Everything the model is allowed to touch - which Highlights bullets lead,
-// and which accomplishment bullets appear (and in what order) under each
-// job - is represented as small, independently addressable `Bullet` chunks.
+// which accomplishment bullets appear (and in what order) under each job,
+// and which skills lines a keyword-stuffing Skills section leads with - is
+// represented as small, independently addressable `Bullet` chunks.
 // Everything else (contact header, company names/dates/titles, Education,
-// Certifications, Publications, Volunteering, Skills, ...) is captured as
-// opaque `verbatim` text and reproduced byte-for-byte. A tailoring plan can
-// only refer to bullets by the ids assigned here, so the renderer can never
-// emit text that didn't already exist in the master file.
+// Certifications, Publications, Volunteering, ...) is captured as opaque
+// `verbatim` text and reproduced byte-for-byte. A tailoring plan can only
+// refer to bullets by the ids assigned here, so the renderer can never emit
+// text that didn't already exist in the master file.
 
 export interface Bullet {
   id: string;
@@ -17,19 +18,32 @@ export interface Bullet {
   text: string;
 }
 
-export interface ExperienceEntry {
+/**
+ * A heading + preamble + bullets block. Employers under Career Experience
+ * and sub-groups of a Skills section ("**Technical**", "### **Cyber
+ * Security**") have the same shape in this markdown, so they parse the same
+ * way - what differs is what a plan is allowed to do with them (see plan.ts:
+ * employers are fixed, skills groups may be reordered).
+ */
+export interface GroupedEntry {
   id: string;
-  /** Raw heading text for this employer, e.g. "**DataDog, Inc**". */
+  /** Raw heading text for this group, e.g. "**DataDog, Inc**". */
   heading: string;
   /** Raw lines between the heading and the first bullet (dates, location, title). */
   preamble: string;
   bullets: Bullet[];
 }
 
+/** One employer under Career Experience. */
+export type ExperienceEntry = GroupedEntry;
+/** One sub-group of a Skills section, e.g. "Technical" or "Cyber Security". */
+export type SkillGroup = GroupedEntry;
+
 export type Section =
   | { kind: "verbatim"; raw: string }
   | { kind: "highlights"; heading: string; bullets: Bullet[] }
-  | { kind: "experience"; heading: string; entries: ExperienceEntry[] };
+  | { kind: "experience"; heading: string; entries: ExperienceEntry[] }
+  | { kind: "skills"; heading: string; groups: SkillGroup[] };
 
 export interface ResumeDoc {
   /** Raw text before the first top-level section heading (name, contact info). */
@@ -120,17 +134,20 @@ function splitPreambleAndBullets(
 }
 
 /**
- * Splits an experience section's body into per-employer entries. Entries are
- * delimited by a bold-only line ("### **Company**" or a bare "**Company**"
- * paragraph both qualify once heading hashes are stripped) - the same rule
- * regardless of whether the source used a markdown heading for that
- * employer, since real-world exports are inconsistent about it.
+ * Splits a section's body into groups (employers under Career Experience,
+ * sub-groups under Skills). Groups are delimited by a bold-only line
+ * ("### **Company**" or a bare "**Company**" paragraph both qualify once
+ * heading hashes are stripped) - the same rule regardless of whether the
+ * source used a markdown heading there, since real-world exports are
+ * inconsistent about it. A section with no bold-only lines at all yields a
+ * single unnamed group holding its bullets.
  */
-function splitExperienceEntries(
+function splitGroups(
   bodyLines: string[],
   firstHeading: string | null,
-): ExperienceEntry[] {
-  const entries: ExperienceEntry[] = [];
+  idPrefix: string,
+): GroupedEntry[] {
+  const entries: GroupedEntry[] = [];
   let currentHeading = firstHeading;
   let currentLines: string[] = [];
 
@@ -142,10 +159,10 @@ function splitExperienceEntries(
     const index = entries.length;
     const { preamble, bullets } = splitPreambleAndBullets(
       currentLines,
-      `experience${index}_`,
+      `${idPrefix}${index}_`,
     );
     entries.push({
-      id: `experience${index}`,
+      id: `${idPrefix}${index}`,
       heading: currentHeading ?? "",
       preamble,
       bullets,
@@ -168,6 +185,17 @@ function splitExperienceEntries(
 
   return entries;
 }
+
+/**
+ * Matches the heading of a keyword-list section ("Skills Summary",
+ * "Technical Skills", "Core Competencies", "Technologies"). These are the
+ * one place on a resume where the content is a keyword pile rather than a
+ * claim, so tailoring may reorder *and* prune it: a posting that never
+ * mentions the cloud doesn't need to read a cloud-hosting line first, or at
+ * all. Anything not matched here (Education, Certifications, ...) stays
+ * verbatim, since dropping a line there would be omitting a fact.
+ */
+const SKILLS_HEADING = /\b(skills?|competenc(?:y|ies)|technolog(?:y|ies))\b/i;
 
 /**
  * Parses a resume master file into a {@link ResumeDoc}. Section detection is
@@ -244,7 +272,7 @@ export function parseResume(source: string): ResumeDoc {
             : null;
         }
       }
-      const entries = splitExperienceEntries(bodyLines, fusedFirstHeading);
+      const entries = splitGroups(bodyLines, fusedFirstHeading, "experience");
       sections.push({
         kind: "experience",
         heading: fusedFirstHeading
@@ -254,6 +282,12 @@ export function parseResume(source: string): ResumeDoc {
           : headingLine,
         entries,
       });
+      continue;
+    }
+
+    if (SKILLS_HEADING.test(start.text)) {
+      const groups = splitGroups(bodyLines, null, "skill");
+      sections.push({ kind: "skills", heading: headingLine, groups });
       continue;
     }
 
@@ -278,8 +312,10 @@ export function toMarkdown(doc: ResumeDoc): string {
       parts.push([section.heading, body].filter(Boolean).join("\n\n"));
       continue;
     }
-    // experience
-    const entryBlocks = section.entries.map((entry) => {
+    // experience / skills: both are a heading followed by grouped entries
+    const groups =
+      section.kind === "experience" ? section.entries : section.groups;
+    const entryBlocks = groups.map((entry) => {
       const bulletText = entry.bullets.map((b) => b.text).join("\n");
       return [entry.heading, entry.preamble, bulletText]
         .filter((s) => s.length > 0)

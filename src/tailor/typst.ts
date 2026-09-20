@@ -153,6 +153,24 @@ export function toTypst(doc: ResumeDoc): string {
       parts.push(section.bullets.map((b) => blockToTypst(b.text)).join("\n"));
       continue;
     }
+    if (section.kind === "skills") {
+      parts.push(`== ${inlineToTypst(headingText(section.heading))}`);
+      for (const group of section.groups) {
+        // Unlike employers, a skills group's heading keeps whatever form it
+        // had in the master (a "###" heading stays a heading, a bare bold
+        // paragraph stays a bold paragraph) - blockToTypst handles both, so
+        // tailoring never restyles the section it reorders.
+        if (group.heading.trim().length > 0) {
+          parts.push(blockToTypst(group.heading));
+        }
+        if (group.preamble.trim().length > 0) {
+          parts.push(blockToTypst(group.preamble));
+        }
+        parts.push(group.bullets.map((b) => blockToTypst(b.text)).join("\n"));
+      }
+      continue;
+    }
+
     parts.push(`== ${inlineToTypst(headingText(section.heading))}`);
     for (const entry of section.entries) {
       parts.push(`=== ${inlineToTypst(headingText(entry.heading))}`);

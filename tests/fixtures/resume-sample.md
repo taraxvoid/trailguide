@@ -54,4 +54,13 @@ Other City, ST
 
 ## **Skills Summary**
 
+**Technical**
+
 - **Languages**: Python (expert), Go (intermediate)
+- **Cloud/Hosting**: AWS, GCP, On-Prem
+- **CI/CD:** Docker, Terraform, GitHub Actions
+
+### **Security**
+
+- Threat modeling and secure design review
+- Source code security, secrets scanning and DevSecOps
