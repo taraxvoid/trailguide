@@ -109,6 +109,24 @@ describe("renderResumePdf", () => {
       .catch(() => {});
   });
 
+  it("reports a missing typst binary as a render failure instead of throwing", async () => {
+    // A machine without Typst installed is a setup gap, not a crash: the
+    // caller still has its tailored markdown and needs a usable message
+    // back rather than an exception out of Bun.spawn.
+    const outPath = `${import.meta.dir}/../output/test-tmp/resume-no-typst.pdf`;
+    const result = await compileTypst(
+      "= Hello",
+      outPath,
+      "typst-that-is-not-installed",
+    );
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toContain("not found on PATH");
+    expect(await Bun.file(outPath).exists()).toBe(false);
+    await Bun.file(result.typstPath)
+      .delete()
+      .catch(() => {});
+  });
+
   it("never leaves a PDF behind when given genuinely broken Typst source", async () => {
     if (!(await typstAvailable())) {
       console.warn("skipping: `typst` not found on PATH");
