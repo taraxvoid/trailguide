@@ -192,10 +192,17 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
     if (viewTab === "archived")
       return jobs.filter((j) => j.state === "archived");
     return [
-      ...jobs.filter((j) => j.state === "applied"),
+      // Applied and tailored first, then the rest of applied (stable sort).
+      ...jobs
+        .filter((j) => j.state === "applied")
+        .sort(
+          (x, y) =>
+            Number(tailoredIds.has(y.listingId)) -
+            Number(tailoredIds.has(x.listingId)),
+        ),
       ...jobs.filter((j) => j.state === "active"),
     ];
-  }, [jobs, viewTab]);
+  }, [jobs, viewTab, tailoredIds]);
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
