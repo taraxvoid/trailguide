@@ -15,18 +15,22 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
-  getTailoredResume,
+  getTailorRun,
+  runningTailorIds,
   setJobState,
+  startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
-import { tailorOrRegenerate } from "../tailor/index.ts";
 
 interface AppProps {
   db: Database;
+  /** Path to the sqlite file, passed to the detached `igor tailor` children. */
+  dbPath: string;
   /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
   version?: string | null;
 }
@@ -46,6 +50,7 @@ const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 const NEON_GREEN = "#39ff14";
 const NEON_BLUE = "#4dd2ff";
 const PULSE_TICK_MS = 150;
+const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
 
 // Slow sine pulse between full neon green and a dim floor.
@@ -159,7 +164,7 @@ function formatState(state: ListingState): string {
   }
 }
 
-export default function JobBrowser({ db, version = null }: AppProps) {
+export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
@@ -170,11 +175,14 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // Listings with a tailor/regen in flight. Runs are independent per listing,
-  // so any number can be going at once.
-  const [tailoringIds, setTailoringIds] = useState<Set<string>>(new Set());
+  // Listings with a tailor/regen in flight. Each is a detached `igor tailor`
+  // process (so it survives quitting the TUI); the tailor_runs table is the
+  // source of truth and is polled below.
+  const [tailoringIds, setTailoringIds] = useState<Set<string>>(() =>
+    runningTailorIds(db),
+  );
   const [pulseTick, setPulseTick] = useState(0);
-  const quitArmed = useRef(false);
+  const prevRunning = useRef<Set<string>>(tailoringIds);
   const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
     tailoredListingIds(db),
   );
@@ -330,14 +338,32 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     [db, visibleJobs, selectedIndex, showStatus],
   );
 
-  const setTailoring = useCallback((listingId: string, on: boolean) => {
-    setTailoringIds((prev) => {
-      const next = new Set(prev);
-      if (on) next.add(listingId);
-      else next.delete(listingId);
-      return next;
-    });
-  }, []);
+  // Poll for runs started/finished by (possibly earlier or other) processes.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const running = runningTailorIds(db);
+      const finished = [...prevRunning.current].filter(
+        (id) => !running.has(id),
+      );
+      prevRunning.current = running;
+      setTailoringIds((prev) =>
+        prev.size === running.size && [...prev].every((id) => running.has(id))
+          ? prev
+          : running,
+      );
+      if (finished.length > 0) {
+        setTailoredIds(tailoredListingIds(db));
+        // Several can finish in one tick; the last one's outcome is shown.
+        const run = getTailorRun(db, finished[finished.length - 1] as string);
+        if (run?.message) {
+          setStatusMessage(
+            run.ok ? run.message : `Tailoring failed: ${run.message}`,
+          );
+        }
+      }
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [db]);
 
   useEffect(() => {
     if (tailoringIds.size === 0) return;
@@ -345,55 +371,39 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     return () => clearInterval(timer);
   }, [tailoringIds.size]);
 
-  const handleTailor = useCallback(async () => {
+  const handleTailor = useCallback(() => {
     const job = visibleJobs[selectedIndex];
     if (!job || tailoringIds.has(job.listingId)) return;
-    setTailoring(job.listingId, true);
-    // No auto-hiding timeout here (unlike showStatus elsewhere) - tailoring
-    // takes tens of seconds on a local model, and the result (including any
-    // warnings about a fallback) is worth leaving on screen until the next
-    // action rather than losing it after 3s.
-    // Only a guess for the progress message - tailorOrRegenerate makes the
-    // real call (e.g. a tracked .md deleted since means a fresh tailor).
-    const regenerating = getTailoredResume(db, job.listingId) !== null;
+    // Detached so it outlives the TUI. IGOR_NO_DELEGATE keeps the recorded
+    // pid the real worker rather than a checkout-delegating wrapper.
+    const proc = Bun.spawn({
+      cmd: [
+        process.execPath,
+        `${import.meta.dir}/../cli.ts`,
+        "tailor",
+        job.listingId,
+        "--db",
+        dbPath,
+      ],
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { ...process.env, [NO_DELEGATE_ENV]: "1" },
+      detached: true,
+    });
+    proc.unref();
+    // Record the child's pid now so the bar pulses immediately, before the
+    // child has finished starting up.
+    startTailorRun(db, job.listingId, proc.pid);
+    const running = runningTailorIds(db);
+    prevRunning.current = running;
+    setTailoringIds(running);
     setStatusMessage(
-      regenerating
-        ? "Regenerating PDF from the tailored markdown…"
-        : "Tailoring resume (this can take a minute on a local model)…",
+      `Tailoring ${job.title} @ ${job.company} in the background (survives quitting)…`,
     );
-    try {
-      const result = await tailorOrRegenerate(db, job.listingId);
-      if (!result.ok) {
-        setStatusMessage(`Tailoring failed: ${result.error}`);
-        return;
-      }
-      const warningSuffix =
-        result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
-      const verb = result.action === "regenerated" ? "Regenerated" : "Wrote";
-      setStatusMessage(
-        `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
-      );
-    } finally {
-      setTailoredIds(tailoredListingIds(db));
-      setTailoring(job.listingId, false);
-    }
-  }, [db, visibleJobs, selectedIndex, tailoringIds, setTailoring]);
+  }, [db, dbPath, visibleJobs, selectedIndex, tailoringIds]);
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
-      const isQuit = key.escape || input === "q";
-      // Tailoring is in-process work, so quitting drops it. Require a second
-      // quit press while runs are in flight; any other key disarms.
-      if (isQuit && tailoringIds.size > 0 && !quitArmed.current) {
-        quitArmed.current = true;
-        const n = tailoringIds.size;
-        showStatus(
-          `${n} tailoring run${n === 1 ? "" : "s"} in progress. Quit again to abort.`,
-        );
-        return;
-      }
-      if (!isQuit) quitArmed.current = false;
-      if (isQuit) {
+      if (key.escape || input === "q") {
         exit();
         return;
       }
@@ -457,8 +467,6 @@ export default function JobBrowser({ db, version = null }: AppProps) {
       exit,
       visibleJobs.length,
       visibleCount,
-      tailoringIds,
-      showStatus,
       selectedJob,
       selectedJob?.url,
       selectedJob?.description,

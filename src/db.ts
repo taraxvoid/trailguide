@@ -19,6 +19,8 @@ export function listingId(
 
 export function openDb(path = "igor.db"): Database {
   const db = new Database(path);
+  // The TUI and detached `igor tailor` processes write the same file.
+  db.run("PRAGMA busy_timeout = 5000");
   db.run(`
     CREATE TABLE IF NOT EXISTS jobs (
       listing_id TEXT PRIMARY KEY,
@@ -53,6 +55,18 @@ export function openDb(path = "igor.db"): Database {
       markdown_path TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
+    )
+  `);
+  // Background `igor tailor` runs, so the TUI can show progress (and pick
+  // it back up after being restarted). finished_at is NULL while running.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tailor_runs (
+      listing_id TEXT PRIMARY KEY,
+      pid INTEGER NOT NULL,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      ok INTEGER,
+      message TEXT
     )
   `);
   return db;
@@ -267,4 +281,113 @@ export function setTailoredResume(
     VALUES ($listingId, $markdownPath, $now, $now)
     ON CONFLICT(listing_id) DO UPDATE SET markdown_path = $markdownPath, updated_at = $now
   `).run({ $listingId: listingId, $markdownPath: markdownPath, $now: now });
+}
+
+export interface TailorRun {
+  listingId: string;
+  pid: number;
+  startedAt: string;
+  finishedAt: string | null;
+  ok: boolean | null;
+  message: string | null;
+}
+
+function pidAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    // EPERM means it exists but isn't ours.
+    return (err as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+function toRun(row: Record<string, unknown>): TailorRun {
+  return {
+    listingId: row.listing_id as string,
+    pid: row.pid as number,
+    startedAt: row.started_at as string,
+    finishedAt: (row.finished_at as string | null) ?? null,
+    ok: row.ok === null || row.ok === undefined ? null : row.ok === 1,
+    message: (row.message as string | null) ?? null,
+  };
+}
+
+export function getTailorRun(
+  db: Database,
+  listingId: string,
+): TailorRun | null {
+  const row = db
+    .prepare("SELECT * FROM tailor_runs WHERE listing_id = $listingId")
+    .get({ $listingId: listingId }) as Record<string, unknown> | null;
+  return row ? toRun(row) : null;
+}
+
+/**
+ * Marks a run as started by `pid`. Returns false if a different live process
+ * already has one running for this listing (re-claiming with the same pid is
+ * fine: the TUI records the child's pid before the child starts).
+ */
+export function startTailorRun(
+  db: Database,
+  listingId: string,
+  pid: number,
+  now = new Date().toISOString(),
+): boolean {
+  const existing = getTailorRun(db, listingId);
+  if (
+    existing &&
+    existing.finishedAt === null &&
+    existing.pid !== pid &&
+    pidAlive(existing.pid)
+  ) {
+    return false;
+  }
+  db.prepare(
+    `INSERT INTO tailor_runs (listing_id, pid, started_at, finished_at, ok, message)
+     VALUES ($listingId, $pid, $now, NULL, NULL, NULL)
+     ON CONFLICT(listing_id) DO UPDATE SET pid = $pid, started_at = $now, finished_at = NULL, ok = NULL, message = NULL`,
+  ).run({ $listingId: listingId, $pid: pid, $now: now });
+  return true;
+}
+
+export function finishTailorRun(
+  db: Database,
+  listingId: string,
+  ok: boolean,
+  message: string,
+  now = new Date().toISOString(),
+): void {
+  db.prepare(
+    "UPDATE tailor_runs SET finished_at = $now, ok = $ok, message = $message WHERE listing_id = $listingId",
+  ).run({
+    $listingId: listingId,
+    $now: now,
+    $ok: ok ? 1 : 0,
+    $message: message,
+  });
+}
+
+/**
+ * Listings with a tailor run in flight. Runs whose process died without
+ * finishing (killed, crashed) are closed out as failed rather than pulsing
+ * forever.
+ */
+export function runningTailorIds(db: Database): Set<string> {
+  const rows = db
+    .prepare("SELECT * FROM tailor_runs WHERE finished_at IS NULL")
+    .all() as Record<string, unknown>[];
+  const running = new Set<string>();
+  for (const row of rows) {
+    const run = toRun(row);
+    if (pidAlive(run.pid)) running.add(run.listingId);
+    else
+      finishTailorRun(
+        db,
+        run.listingId,
+        false,
+        "tailor process exited unexpectedly",
+      );
+  }
+  return running;
 }

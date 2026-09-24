@@ -14,7 +14,7 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const version = git ? formatGitVersion(git) : null;
 
   const { unmount, waitUntilExit } = render(
-    React.createElement(JobBrowser, { db, version }),
+    React.createElement(JobBrowser, { db, dbPath: options.db, version }),
     { exitOnCtrlC: true },
   );
 
