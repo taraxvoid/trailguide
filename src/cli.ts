@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
+import { dirname } from "node:path";
 import { Command, Option } from "commander";
+import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   parseBoundary,
   parseRange,
@@ -30,6 +32,7 @@ import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
+import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
@@ -270,10 +273,48 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
   console.log(JSON.stringify(jobs, null, 2));
 }
 
+export interface TailorCliOptions {
+  db: string;
+  listingId: string;
+  resume?: string;
+  outputDir?: string;
+  ollamaHost?: string;
+  ollamaModel?: string;
+  fresh?: boolean;
+}
+
+export async function runTailor(options: TailorCliOptions): Promise<void> {
+  const db = openDb(options.db);
+  const result = await tailorOrRegenerate(db, options.listingId, {
+    fresh: options.fresh,
+    resumePath: options.resume,
+    outputDir: options.outputDir,
+    ollamaHost: options.ollamaHost,
+    ollamaModel: options.ollamaModel,
+  });
+  db.close();
+
+  for (const warning of result.warnings) console.warn(`warning: ${warning}`);
+
+  if (!result.ok) {
+    console.error(`error: ${result.error}`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (result.action === "regenerated") {
+    console.log(`Regenerated from ${result.markdownPath}`);
+  } else {
+    console.log(`Wrote ${result.markdownPath}`);
+  }
+  if (result.pdfPath) console.log(`Wrote ${result.pdfPath}`);
+}
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<void> = runSearch,
   clearAction: (options: { db: string }) => Promise<void> = runClear,
   refreshAction: (options: { db: string }) => Promise<void> = runRefresh,
+  tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
 ): Command {
   const program = new Command();
 
@@ -355,6 +396,51 @@ export function createProgram(
       }
     });
 
+  program
+    .command("tailor")
+    .description(
+      "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
+    )
+    .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option(
+      "--resume <path>",
+      "resume master path (default: the one .md file under input/)",
+    )
+    .option(
+      "--output-dir <path>",
+      "where to write the tailored .md/.pdf",
+      "output/resumes",
+    )
+    .option(
+      "--ollama-host <host>",
+      "Ollama host (default: $OLLAMA_HOST or 127.0.0.1:11434)",
+    )
+    .option(
+      "--ollama-model <model>",
+      "Ollama model (default: $OLLAMA_MODEL or qwen3:8b)",
+    )
+    .option(
+      "--fresh",
+      "re-tailor from the resume master even if a tailored .md already exists (overwrites it)",
+      false,
+    )
+    .action(
+      async (
+        listingIdArg: string,
+        options: {
+          db: string;
+          resume?: string;
+          outputDir?: string;
+          ollamaHost?: string;
+          ollamaModel?: string;
+          fresh?: boolean;
+        },
+      ) => {
+        await tailorAction({ ...options, listingId: listingIdArg });
+      },
+    );
+
   return program;
 }
 
@@ -366,6 +452,10 @@ async function main() {
 }
 
 if (import.meta.main) {
+  const delegate = delegateTarget(process.cwd(), dirname(import.meta.dir));
+  if (delegate) {
+    process.exit(await runDelegate(delegate, Bun.argv.slice(2)));
+  }
   main().catch((err) => {
     console.error(err);
     process.exit(1);

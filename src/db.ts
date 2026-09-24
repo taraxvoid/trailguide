@@ -43,6 +43,18 @@ export function openDb(path = "igor.db"): Database {
   if (!cols.some((c) => c.name === "state_changed_at")) {
     db.run("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
   }
+  // Which tailored markdown file belongs to which listing. That .md is the
+  // canonical resume for the job once generated (it's meant to be
+  // hand-edited afterwards), so its PDF is regenerated from it rather than
+  // re-tailored from the master.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tailored_resumes (
+      listing_id TEXT PRIMARY KEY,
+      markdown_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
   return db;
 }
 
@@ -102,11 +114,8 @@ export function upsertJobs(
   return newJobs;
 }
 
-export function allJobs(db: Database): StoredJob[] {
-  const rows = db
-    .query("SELECT * FROM jobs ORDER BY last_seen_at DESC")
-    .all() as Array<Record<string, string>>;
-  return rows.map((row) => ({
+function rowToStoredJob(row: Record<string, string>): StoredJob {
+  return {
     listingId: row.listing_id ?? "",
     sourceId: row.source_id ?? "",
     source: row.source as NormalizedJob["source"],
@@ -121,7 +130,14 @@ export function allJobs(db: Database): StoredJob[] {
     lastSeenAt: row.last_seen_at ?? "",
     lastCheckedAt: row.last_checked_at ?? "",
     state: (row.state as ListingState) ?? "active",
-  }));
+  };
+}
+
+export function allJobs(db: Database): StoredJob[] {
+  const rows = db
+    .query("SELECT * FROM jobs ORDER BY last_seen_at DESC")
+    .all() as Array<Record<string, string>>;
+  return rows.map(rowToStoredJob);
 }
 
 export function jobsByState(db: Database, state: ListingState): StoredJob[] {
@@ -130,22 +146,14 @@ export function jobsByState(db: Database, state: ListingState): StoredJob[] {
       "SELECT * FROM jobs WHERE state = $state ORDER BY last_seen_at DESC",
     )
     .all({ $state: state }) as Array<Record<string, string>>;
-  return rows.map((row) => ({
-    listingId: row.listing_id ?? "",
-    sourceId: row.source_id ?? "",
-    source: row.source as NormalizedJob["source"],
-    title: row.title ?? "",
-    company: row.company ?? "",
-    location: row.location ?? "",
-    remoteType: row.remote_type as NormalizedJob["remoteType"],
-    url: row.url ?? "",
-    postedAt: row.posted_at ?? null,
-    description: row.description ?? null,
-    firstSeenAt: row.first_seen_at ?? "",
-    lastSeenAt: row.last_seen_at ?? "",
-    lastCheckedAt: row.last_checked_at ?? "",
-    state: (row.state as ListingState) ?? "active",
-  }));
+  return rows.map(rowToStoredJob);
+}
+
+export function getJob(db: Database, listingId: string): StoredJob | null {
+  const row = db
+    .prepare("SELECT * FROM jobs WHERE listing_id = $listingId")
+    .get({ $listingId: listingId }) as Record<string, string> | null;
+  return row ? rowToStoredJob(row) : null;
 }
 
 export function setJobState(
@@ -203,4 +211,60 @@ export function jobsInStateBetween(
 
 export function clearJobs(db: Database): void {
   db.run("DELETE FROM jobs");
+}
+
+export interface TailoredResumeRecord {
+  listingId: string;
+  markdownPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getTailoredResume(
+  db: Database,
+  listingId: string,
+): TailoredResumeRecord | null {
+  const row = db
+    .prepare("SELECT * FROM tailored_resumes WHERE listing_id = $listingId")
+    .get({ $listingId: listingId }) as Record<string, string> | null;
+  if (!row) return null;
+  return {
+    listingId: row.listing_id ?? "",
+    markdownPath: row.markdown_path ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+export function tailoredListingIds(db: Database): Set<string> {
+  const rows = db.prepare("SELECT listing_id FROM tailored_resumes").all() as {
+    listing_id: string;
+  }[];
+  return new Set(rows.map((r) => r.listing_id));
+}
+
+/** Returns the listing whose tailored resume lives at `markdownPath`, if any. */
+export function tailoredResumeOwner(
+  db: Database,
+  markdownPath: string,
+): string | null {
+  const row = db
+    .prepare(
+      "SELECT listing_id FROM tailored_resumes WHERE markdown_path = $markdownPath",
+    )
+    .get({ $markdownPath: markdownPath }) as { listing_id: string } | null;
+  return row?.listing_id ?? null;
+}
+
+export function setTailoredResume(
+  db: Database,
+  listingId: string,
+  markdownPath: string,
+): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO tailored_resumes (listing_id, markdown_path, created_at, updated_at)
+    VALUES ($listingId, $markdownPath, $now, $now)
+    ON CONFLICT(listing_id) DO UPDATE SET markdown_path = $markdownPath, updated_at = $now
+  `).run({ $listingId: listingId, $markdownPath: markdownPath, $now: now });
 }

@@ -17,7 +17,7 @@ lint:
     gitleaks detect --no-banner --redact
 
 test:
-    bun test
+    bun run test
 
 typecheck:
     bun run typecheck
