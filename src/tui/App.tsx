@@ -39,6 +39,17 @@ const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const NEON_GREEN = "#39ff14";
 const NEON_BLUE = "#4dd2ff";
+const PULSE_TICK_MS = 150;
+const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
+
+// Slow sine pulse between full neon green and a dim floor.
+function pulseColor(tick: number): string {
+  const phase = (tick % PULSE_PERIOD_TICKS) / PULSE_PERIOD_TICKS;
+  const level = 0.2 + 0.8 * (0.5 + 0.5 * Math.cos(phase * 2 * Math.PI));
+  const [r, g, b] = [0x39, 0xff, 0x14].map((c) => Math.round(c * level));
+  return `#${[r, g, b].map((c) => (c as number).toString(16).padStart(2, "0")).join("")}`;
+}
+
 const SECTION_HEADER_LINES = 1;
 // Worst case in the active view: an "Applied" header and an "Active" header.
 const MAX_SECTION_HEADERS = 2;
@@ -153,7 +164,10 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isTailoring, setIsTailoring] = useState(false);
+  // Listings with a tailor/regen in flight. Runs are independent per listing,
+  // so any number can be going at once.
+  const [tailoringIds, setTailoringIds] = useState<Set<string>>(new Set());
+  const [pulseTick, setPulseTick] = useState(0);
   const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
     tailoredListingIds(db),
   );
@@ -309,10 +323,25 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     [db, visibleJobs, selectedIndex, showStatus],
   );
 
+  const setTailoring = useCallback((listingId: string, on: boolean) => {
+    setTailoringIds((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(listingId);
+      else next.delete(listingId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (tailoringIds.size === 0) return;
+    const timer = setInterval(() => setPulseTick((t) => t + 1), PULSE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [tailoringIds.size]);
+
   const handleTailor = useCallback(async () => {
     const job = visibleJobs[selectedIndex];
-    if (!job || isTailoring) return;
-    setIsTailoring(true);
+    if (!job || tailoringIds.has(job.listingId)) return;
+    setTailoring(job.listingId, true);
     // No auto-hiding timeout here (unlike showStatus elsewhere) - tailoring
     // takes tens of seconds on a local model, and the result (including any
     // warnings about a fallback) is worth leaving on screen until the next
@@ -339,9 +368,9 @@ export default function JobBrowser({ db, version = null }: AppProps) {
       );
     } finally {
       setTailoredIds(tailoredListingIds(db));
-      setIsTailoring(false);
+      setTailoring(job.listingId, false);
     }
-  }, [db, visibleJobs, selectedIndex, isTailoring]);
+  }, [db, visibleJobs, selectedIndex, tailoringIds, setTailoring]);
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
@@ -393,7 +422,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         return;
       }
       if (key.ctrl && input === "t" && selectedJob) {
-        if (!isTailoring) handleTailor();
+        handleTailor();
         return;
       }
       if (input === "e") {
@@ -413,7 +442,6 @@ export default function JobBrowser({ db, version = null }: AppProps) {
       selectedJob?.url,
       selectedJob?.description,
       isRefreshing,
-      isTailoring,
       handleRefresh,
       handleStateChange,
       handleTailor,
@@ -511,6 +539,11 @@ export default function JobBrowser({ db, version = null }: AppProps) {
                   job={job}
                   isSelected={actualIndex === selectedIndex}
                   isTailored={tailoredIds.has(job.listingId)}
+                  pulse={
+                    tailoringIds.has(job.listingId)
+                      ? pulseColor(pulseTick)
+                      : null
+                  }
                 />
               </React.Fragment>
             );
@@ -583,9 +616,10 @@ interface JobRowProps {
   job: StoredJob;
   isSelected: boolean;
   isTailored: boolean;
+  pulse: string | null;
 }
 
-function JobRow({ job, isSelected, isTailored }: JobRowProps) {
+function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
   return (
     <Box marginBottom={1}>
       {/* Two thin status slots. Applied (blue) owns the left slot; tailored
@@ -593,7 +627,7 @@ function JobRow({ job, isSelected, isTailored }: JobRowProps) {
       {[0, 1].map((slot) => {
         const slots = [
           job.state === "applied" ? NEON_BLUE : null,
-          isTailored ? NEON_GREEN : null,
+          pulse ?? (isTailored ? NEON_GREEN : null),
         ].filter((c): c is string => c !== null);
         const color = slots[slot];
         return (
