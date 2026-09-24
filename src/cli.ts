@@ -2,9 +2,16 @@
 import type { Database } from "bun:sqlite";
 import { Command, Option } from "commander";
 import {
+  parseBoundary,
+  parseRange,
+  truncateWords,
+  weekRange,
+} from "./dateRange.ts";
+import {
   allJobs,
   clearJobs,
   jobsByState,
+  jobsInStateBetween,
   listingId,
   openDb,
   setJobState,
@@ -218,6 +225,51 @@ export async function runRefresh(options: { db: string }): Promise<void> {
   );
 }
 
+const LISTING_STATES: ListingState[] = [
+  "active",
+  "archived",
+  "inactive",
+  "applied",
+];
+
+export interface JobsCliOptions {
+  db: string;
+  state: string;
+  when?: string;
+  since?: string;
+  until?: string;
+  words: number;
+}
+
+/** Emits jobs in a state as JSON, filtered by when they entered that state. */
+export function runJobs(options: JobsCliOptions, now = new Date()): void {
+  if (!LISTING_STATES.includes(options.state as ListingState)) {
+    throw new Error(
+      `Unknown state "${options.state}". Use one of: ${LISTING_STATES.join(", ")}`,
+    );
+  }
+  const state = options.state as ListingState;
+  let from: Date | null = null;
+  let to: Date | null = null;
+  if (options.when) {
+    ({ from, to } = parseRange(options.when, now));
+  } else if (options.since || options.until) {
+    if (options.since) from = parseBoundary(options.since, now);
+    if (options.until) to = parseBoundary(options.until, now);
+  } else if (state === "applied") {
+    // Default for applied: the last full Sunday-to-Saturday week.
+    ({ from, to } = weekRange(now, -1));
+  }
+
+  const db = openDb(options.db);
+  const jobs = jobsInStateBetween(db, state, from, to).map((job) => ({
+    ...job,
+    description: truncateWords(job.description, options.words),
+  }));
+  db.close();
+  console.log(JSON.stringify(jobs, null, 2));
+}
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<void> = runSearch,
   clearAction: (options: { db: string }) => Promise<void> = runClear,
@@ -273,6 +325,34 @@ export function createProgram(
     .option("--db <path>", "path to sqlite db", "igor.db")
     .action(async (options: { db: string }) => {
       await refreshAction(options);
+    });
+
+  program
+    .command("jobs")
+    .description(
+      "Emit stored jobs in a state as JSON, filtered by when they entered that state (applied defaults to last Sunday-Saturday week)",
+    )
+    .argument("[state]", `one of: ${LISTING_STATES.join(", ")}`, "applied")
+    .option(
+      "--when <range>",
+      'mnemonic range: "today", "yesterday", "this week", "last week", "this month", "last month", "last 7 days"',
+    )
+    .option("--since <date>", "start (inclusive), e.g. 2026-09-01")
+    .option("--until <date>", "end (exclusive), e.g. 2026-09-08")
+    .option(
+      "--words <n>",
+      "truncate descriptions to this many words",
+      (v) => Number.parseInt(v, 10),
+      200,
+    )
+    .option("--db <path>", "path to sqlite db", "igor.db")
+    .action((stateArg: string, options: Omit<JobsCliOptions, "state">) => {
+      try {
+        runJobs({ ...options, state: stateArg });
+      } catch (err) {
+        console.error(`error: ${err instanceof Error ? err.message : err}`);
+        process.exitCode = 1;
+      }
     });
 
   return program;
