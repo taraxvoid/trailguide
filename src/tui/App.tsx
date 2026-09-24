@@ -22,6 +22,7 @@ import {
   allJobs,
   getTailorRun,
   runningTailorIds,
+  setJobApplied,
   setJobState,
   startTailorRun,
   tailoredListingIds,
@@ -157,9 +158,10 @@ interface StatusTag {
   color: string | undefined;
 }
 
-function statusTags(state: ListingState, tailored: boolean): StatusTag[] {
+function statusTags(job: StoredJob, tailored: boolean): StatusTag[] {
+  const { state } = job;
   const tags: StatusTag[] = [];
-  if (state === "applied") tags.push({ label: "[applied]", color: NEON_BLUE });
+  if (job.appliedAt) tags.push({ label: "[applied]", color: NEON_BLUE });
   if (tailored) tags.push({ label: "[tailored]", color: NEON_GREEN });
   if (state === "archived")
     tags.push({ label: "[archived]", color: MUTED_YELLOW });
@@ -249,7 +251,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
   const descriptionLineCount = descriptionShownLines.length;
 
   const selectedTags = selectedJob
-    ? statusTags(selectedJob.state, selectedIsTailored === true)
+    ? statusTags(selectedJob, selectedIsTailored === true)
     : [];
   const titleLine = selectedJob
     ? [selectedJob.title, ...selectedTags.map((t) => t.label)].join(" ")
@@ -355,6 +357,16 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
       if (!job) return;
+      // On an archived job [a] toggles the applied mark without unarchiving.
+      if (state === "applied" && job.state === "archived") {
+        const now = new Date().toISOString();
+        setJobApplied(db, job.listingId, !job.appliedAt, now);
+        setJobs(allJobs(db));
+        showStatus(
+          `${job.appliedAt ? "unmarked applied" : "applied"}: ${job.title} @ ${job.company}`,
+        );
+        return;
+      }
       // Pressing [a] on an already-applied job undoes it.
       const next =
         state === "applied" && job.state === "applied" ? "active" : state;
@@ -665,8 +677,8 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
           {FOOTER_MID}
           <Text
             dimColor={false}
-            bold={selectedJob?.state === "applied"}
-            color={selectedJob?.state === "applied" ? NEON_BLUE : undefined}
+            bold={!!selectedJob?.appliedAt}
+            color={selectedJob?.appliedAt ? NEON_BLUE : undefined}
           >
             applied
           </Text>
@@ -691,7 +703,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
           (green), archived (muted yellow). */}
       {[0, 1, 2].map((slot) => {
         const slots = [
-          job.state === "applied" ? NEON_BLUE : null,
+          job.appliedAt ? NEON_BLUE : null,
           pulse ?? (isTailored ? NEON_GREEN : null),
           job.state === "archived" ? MUTED_YELLOW : null,
         ].filter((c): c is string => c !== null);
@@ -719,7 +731,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
             {job.title}
           </Text>
           <Text dimColor> @ {job.company}</Text>
-          <StatusTags tags={statusTags(job.state, isTailored)} />
+          <StatusTags tags={statusTags(job, isTailored)} />
         </Box>
         <Box marginLeft={isSelected ? 3 : 0}>
           <Text dimColor>

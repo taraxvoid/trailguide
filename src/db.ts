@@ -9,6 +9,8 @@ export interface StoredJob extends NormalizedJob {
   lastSeenAt: string;
   lastCheckedAt: string;
   state: ListingState;
+  /** When the job was marked applied; survives archiving (state is single-valued). */
+  appliedAt: string | null;
 }
 
 export function listingId(
@@ -44,6 +46,12 @@ export function openDb(path = "igor.db"): Database {
   }>;
   if (!cols.some((c) => c.name === "state_changed_at")) {
     db.run("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
+  }
+  if (!cols.some((c) => c.name === "applied_at")) {
+    db.run("ALTER TABLE jobs ADD COLUMN applied_at TEXT");
+    db.run(
+      "UPDATE jobs SET applied_at = COALESCE(state_changed_at, last_checked_at) WHERE state = 'applied'",
+    );
   }
   // Which tailored markdown file belongs to which listing. That .md is the
   // canonical resume for the job once generated (it's meant to be
@@ -82,9 +90,9 @@ export function upsertJobs(
   const newJobs: StoredJob[] = [];
 
   const insert = db.prepare(`
-    INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state)
-    VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state)
-    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state), state_changed_at = CASE WHEN $explicitState IS NOT NULL AND $explicitState != state THEN $lastCheckedAt ELSE state_changed_at END
+    INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state, applied_at)
+    VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state, $appliedAt)
+    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state), state_changed_at = CASE WHEN $explicitState IS NOT NULL AND $explicitState != state THEN $lastCheckedAt ELSE state_changed_at END, applied_at = CASE WHEN $explicitState = 'applied' THEN COALESCE(applied_at, $lastCheckedAt) WHEN $explicitState = 'active' THEN NULL ELSE applied_at END
   `);
   const exists = db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?");
 
@@ -109,6 +117,7 @@ export function upsertJobs(
         $lastSeenAt: now,
         $lastCheckedAt: now,
         $state: jobState,
+        $appliedAt: jobState === "applied" ? now : null,
         $explicitState: explicitState,
       });
       if (isNew) {
@@ -119,6 +128,7 @@ export function upsertJobs(
           lastSeenAt: now,
           lastCheckedAt: now,
           state: jobState,
+          appliedAt: jobState === "applied" ? now : null,
         });
       }
     }
@@ -144,6 +154,7 @@ function rowToStoredJob(row: Record<string, string>): StoredJob {
     lastSeenAt: row.last_seen_at ?? "",
     lastCheckedAt: row.last_checked_at ?? "",
     state: (row.state as ListingState) ?? "active",
+    appliedAt: row.applied_at ?? null,
   };
 }
 
@@ -178,13 +189,28 @@ export function setJobState(
 ): boolean {
   const result = db
     .prepare(
-      "UPDATE jobs SET state_changed_at = CASE WHEN state != $state THEN $lastCheckedAt ELSE state_changed_at END, state = $state, last_checked_at = $lastCheckedAt WHERE listing_id = $listingId",
+      "UPDATE jobs SET state_changed_at = CASE WHEN state != $state THEN $lastCheckedAt ELSE state_changed_at END, state = $state, applied_at = CASE WHEN $state = 'applied' THEN COALESCE(applied_at, $lastCheckedAt) WHEN $state = 'active' THEN NULL ELSE applied_at END, last_checked_at = $lastCheckedAt WHERE listing_id = $listingId",
     )
     .run({
       $state: state,
       $lastCheckedAt: lastCheckedAt,
       $listingId: listingId,
     });
+  return result.changes > 0;
+}
+
+/** Marks or unmarks applied without touching state (e.g. on archived jobs). */
+export function setJobApplied(
+  db: Database,
+  listingId: string,
+  applied: boolean,
+  now: string,
+): boolean {
+  const result = db
+    .prepare(
+      "UPDATE jobs SET applied_at = CASE WHEN $applied THEN COALESCE(applied_at, $now) ELSE NULL END WHERE listing_id = $listingId",
+    )
+    .run({ $applied: applied ? 1 : 0, $now: now, $listingId: listingId });
   return result.changes > 0;
 }
 
