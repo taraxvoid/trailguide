@@ -76,6 +76,9 @@ Parsing uses `Bun.TOML.parse` (no new dependency), in `src/config.ts`:
 - Precedence, high to low: CLI flags, `IGOR_*` env vars, local `igor.toml`,
   global `config.toml`, built-in defaults.
 - `--config <path>` replaces the whole file chain with that single file.
+- The `IGOR_*` env vars are `IGOR_DB` (database path) and `IGOR_CONFIG` (same
+  effect as `--config`). Relative `[db] path` values resolve against the
+  directory of the config file that set them, not the cwd.
 - DB path: `--db`, then `[db] path`, then the global default. There is no
   legacy `./igor.db` fallback (hard switch).
 - `igor config` prints resolved paths and the merged config.
@@ -90,9 +93,11 @@ Creates the global DB and writes the global `config.toml`. Prompts:
 3. Work type: remote, in-person (onsite or hybrid), or either. Applied as
    `flexibility` on every location entered.
 
-Never overwrites or deletes. If the DB or config already exists, it asks before
-touching it. Non-interactive: `--location`, `--keywords`, `--work`, `--yes`
-skip the prompts. Prints resolved paths and next steps (`igor tui`, Ctrl+S).
+Never deletes anything. An existing DB is kept as is (opening creates tables
+only if missing). If the global config already exists, init asks before
+overwriting it and does nothing if declined; `--yes` answers that question.
+Non-interactive: `--location`, `--keywords`, `--work` skip their prompts.
+Prints resolved paths and next steps (`igor tui`, Ctrl+S).
 
 ## Runs table (replaces `tailor_runs`)
 
@@ -116,9 +121,12 @@ runs(kind TEXT, key TEXT, pid INTEGER, started_at, finished_at, ok, message,
 
 ## CLI changes
 
-- `igor search`: loads the config chain unless `--role` is given. Explicit
-  `--role`, `--location`, and filter flags override the config. Missing config
-  with no flags errors with a hint to run `igor init`.
+- `igor search`: with `--role`, the flags describe the whole search and the
+  config is not read (today's behavior, `--location` optional). Without
+  `--role`, the config supplies keywords and locations, and `--location`,
+  `--remote`/`--onsite`, and `--clearance` override pieces of it. `--remote`
+  with `--onsite` is an error. A missing config with no `--role` errors with a
+  hint to run `igor init`.
 - `igor search` registers itself in `runs` on start and records the outcome on
   finish, whether launched by the TUI or by hand, so manual runs show in the
   TUI.
