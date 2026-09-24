@@ -236,6 +236,13 @@ export function getTailoredResume(
   };
 }
 
+export function tailoredListingIds(db: Database): Set<string> {
+  const rows = db.prepare("SELECT listing_id FROM tailored_resumes").all() as {
+    listing_id: string;
+  }[];
+  return new Set(rows.map((r) => r.listing_id));
+}
+
 /** Returns the listing whose tailored resume lives at `markdownPath`, if any. */
 export function tailoredResumeOwner(
   db: Database,

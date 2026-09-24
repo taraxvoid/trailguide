@@ -11,7 +11,12 @@ import {
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
-import { allJobs, getTailoredResume, setJobState } from "../db.ts";
+import {
+  allJobs,
+  getTailoredResume,
+  setJobState,
+  tailoredListingIds,
+} from "../db.ts";
 import { tailorOrRegenerate } from "../tailor/index.ts";
 
 interface AppProps {
@@ -32,8 +37,12 @@ const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/ur
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
-const FOOTER_TEXT =
-  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] tailor/regenerate resume [e] archive [a] applied [⌃r] refresh [q] quit";
+const NEON_GREEN = "#39ff14";
+
+const FOOTER_BEFORE =
+  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] ";
+const FOOTER_AFTER = " resume [e] archive [a] applied [⌃r] refresh [q] quit";
+const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "applied", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -142,6 +151,9 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTailoring, setIsTailoring] = useState(false);
+  const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
+    tailoredListingIds(db),
+  );
 
   const visibleJobs = useMemo(
     () => jobs.filter((j) => j.state === viewTab),
@@ -154,6 +166,10 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   // paddingX 2 + border 1 on each side), so their wrappable text sees the
   // same content width.
   const contentWidth = Math.max(20, columns - 6);
+
+  const selectedIsTailored = selectedJob
+    ? tailoredIds.has(selectedJob.listingId)
+    : null;
 
   const description = selectedJob?.description
     ? collapseWhitespace(selectedJob.description)
@@ -310,6 +326,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
       );
     } finally {
+      setTailoredIds(tailoredListingIds(db));
       setIsTailoring(false);
     }
   }, [db, visibleJobs, selectedIndex, isTailoring]);
@@ -459,6 +476,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
                 key={job.listingId}
                 job={job}
                 isSelected={actualIndex === selectedIndex}
+                isTailored={tailoredIds.has(job.listingId)}
               />
             );
           })
@@ -502,7 +520,25 @@ export default function JobBrowser({ db, version = null }: AppProps) {
       )}
 
       <Box paddingY={1} marginTop={1} borderStyle="single" borderColor="gray">
-        <Text dimColor>{FOOTER_TEXT}</Text>
+        <Text dimColor>
+          {FOOTER_BEFORE}
+          <Text
+            dimColor={false}
+            bold={selectedIsTailored === false}
+            color={selectedIsTailored === false ? NEON_GREEN : undefined}
+          >
+            tailor
+          </Text>
+          /
+          <Text
+            dimColor={false}
+            bold={selectedIsTailored === true}
+            color={selectedIsTailored === true ? NEON_GREEN : undefined}
+          >
+            regen
+          </Text>
+          {FOOTER_AFTER}
+        </Text>
       </Box>
     </Box>
   );
@@ -511,37 +547,44 @@ export default function JobBrowser({ db, version = null }: AppProps) {
 interface JobRowProps {
   job: StoredJob;
   isSelected: boolean;
+  isTailored: boolean;
 }
 
-function JobRow({ job, isSelected }: JobRowProps) {
+function JobRow({ job, isSelected, isTailored }: JobRowProps) {
   return (
-    <Box
-      paddingX={1}
-      marginBottom={1}
-      flexDirection="column"
-      backgroundColor={isSelected ? "black" : undefined}
-    >
-      <Box>
-        {isSelected && (
-          <Text bold color="green">
-            ▸{" "}
-          </Text>
-        )}
-        <Text bold={isSelected} color={isSelected ? "white" : undefined}>
-          {job.title}
-        </Text>
-        <Text dimColor> @ {job.company}</Text>
-        {formatState(job.state) && (
-          <Text dimColor> {formatState(job.state)}</Text>
-        )}
+    <Box marginBottom={1}>
+      <Box flexDirection="column" width={1}>
+        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
+        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
       </Box>
-      <Box marginLeft={isSelected ? 3 : 0}>
-        <Text dimColor>
-          {formatRemote(job.remoteType)
-            ? `${formatRemote(job.remoteType)} · `
-            : ""}
-          {job.location}
-        </Text>
+      <Box
+        paddingX={1}
+        flexDirection="column"
+        flexGrow={1}
+        backgroundColor={isSelected ? "black" : undefined}
+      >
+        <Box>
+          {isSelected && (
+            <Text bold color="green">
+              ▸{" "}
+            </Text>
+          )}
+          <Text bold={isSelected} color={isSelected ? "white" : undefined}>
+            {job.title}
+          </Text>
+          <Text dimColor> @ {job.company}</Text>
+          {formatState(job.state) && (
+            <Text dimColor> {formatState(job.state)}</Text>
+          )}
+        </Box>
+        <Box marginLeft={isSelected ? 3 : 0}>
+          <Text dimColor>
+            {formatRemote(job.remoteType)
+              ? `${formatRemote(job.remoteType)} · `
+              : ""}
+            {job.location}
+          </Text>
+        </Box>
       </Box>
     </Box>
   );
