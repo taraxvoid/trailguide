@@ -43,6 +43,18 @@ export function openDb(path = "igor.db"): Database {
   if (!cols.some((c) => c.name === "state_changed_at")) {
     db.run("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
   }
+  // Which tailored markdown file belongs to which listing. That .md is the
+  // canonical resume for the job once generated (it's meant to be
+  // hand-edited afterwards), so its PDF is regenerated from it rather than
+  // re-tailored from the master.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tailored_resumes (
+      listing_id TEXT PRIMARY KEY,
+      markdown_path TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    )
+  `);
   return db;
 }
 
@@ -199,4 +211,53 @@ export function jobsInStateBetween(
 
 export function clearJobs(db: Database): void {
   db.run("DELETE FROM jobs");
+}
+
+export interface TailoredResumeRecord {
+  listingId: string;
+  markdownPath: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getTailoredResume(
+  db: Database,
+  listingId: string,
+): TailoredResumeRecord | null {
+  const row = db
+    .prepare("SELECT * FROM tailored_resumes WHERE listing_id = $listingId")
+    .get({ $listingId: listingId }) as Record<string, string> | null;
+  if (!row) return null;
+  return {
+    listingId: row.listing_id ?? "",
+    markdownPath: row.markdown_path ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+/** Returns the listing whose tailored resume lives at `markdownPath`, if any. */
+export function tailoredResumeOwner(
+  db: Database,
+  markdownPath: string,
+): string | null {
+  const row = db
+    .prepare(
+      "SELECT listing_id FROM tailored_resumes WHERE markdown_path = $markdownPath",
+    )
+    .get({ $markdownPath: markdownPath }) as { listing_id: string } | null;
+  return row?.listing_id ?? null;
+}
+
+export function setTailoredResume(
+  db: Database,
+  listingId: string,
+  markdownPath: string,
+): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO tailored_resumes (listing_id, markdown_path, created_at, updated_at)
+    VALUES ($listingId, $markdownPath, $now, $now)
+    ON CONFLICT(listing_id) DO UPDATE SET markdown_path = $markdownPath, updated_at = $now
+  `).run({ $listingId: listingId, $markdownPath: markdownPath, $now: now });
 }

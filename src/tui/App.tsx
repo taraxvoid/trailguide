@@ -11,11 +11,13 @@ import {
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
-import { allJobs, setJobState } from "../db.ts";
-import { tailorResume } from "../tailor/index.ts";
+import { allJobs, getTailoredResume, setJobState } from "../db.ts";
+import { tailorOrRegenerate } from "../tailor/index.ts";
 
 interface AppProps {
   db: Database;
+  /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
+  version?: string | null;
 }
 
 // Chrome heights below are line counts for the JSX blocks they mirror -
@@ -31,7 +33,7 @@ const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const FOOTER_TEXT =
-  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [t] tailor resume [e] archive [a] applied [⌃r] refresh [q] quit";
+  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] tailor/regenerate resume [e] archive [a] applied [⌃r] refresh [q] quit";
 
 const VIEW_TABS = ["active", "applied", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -128,7 +130,7 @@ function formatState(state: ListingState): string {
   }
 }
 
-export default function JobBrowser({ db }: AppProps) {
+export default function JobBrowser({ db, version = null }: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
@@ -287,19 +289,25 @@ export default function JobBrowser({ db }: AppProps) {
     // takes tens of seconds on a local model, and the result (including any
     // warnings about a fallback) is worth leaving on screen until the next
     // action rather than losing it after 3s.
+    // Only a guess for the progress message - tailorOrRegenerate makes the
+    // real call (e.g. a tracked .md deleted since means a fresh tailor).
+    const regenerating = getTailoredResume(db, job.listingId) !== null;
     setStatusMessage(
-      "Tailoring resume (this can take a minute on a local model)…",
+      regenerating
+        ? "Regenerating PDF from the tailored markdown…"
+        : "Tailoring resume (this can take a minute on a local model)…",
     );
     try {
-      const result = await tailorResume(db, job.listingId);
+      const result = await tailorOrRegenerate(db, job.listingId);
       if (!result.ok) {
         setStatusMessage(`Tailoring failed: ${result.error}`);
         return;
       }
       const warningSuffix =
         result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
+      const verb = result.action === "regenerated" ? "Regenerated" : "Wrote";
       setStatusMessage(
-        `Wrote ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
+        `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
       );
     } finally {
       setIsTailoring(false);
@@ -358,7 +366,7 @@ export default function JobBrowser({ db }: AppProps) {
         Bun.spawn({ cmd });
         return;
       }
-      if (input === "t" && selectedJob) {
+      if (key.ctrl && input === "t" && selectedJob) {
         if (!isTailoring) handleTailor();
         return;
       }
@@ -405,9 +413,17 @@ export default function JobBrowser({ db }: AppProps) {
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
-        <Text bold color="green">
-          ⚡ Igor at your sshhservishss ⚡ 
-        </Text>
+        <Box flexShrink={1} marginRight={2}>
+          <Text bold color="green">
+            ⚡ Igor at your sshhservishss ⚡ 
+          </Text>
+          {version && (
+            <Text dimColor wrap="truncate-end">
+              {"  "}
+              {version}
+            </Text>
+          )}
+        </Box>
         <Text>
           {VIEW_TABS.map((tab, i) => (
             <React.Fragment key={tab}>
