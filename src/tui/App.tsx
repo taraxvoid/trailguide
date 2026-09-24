@@ -8,7 +8,13 @@ import {
   useStdin,
   useWindowSize,
 } from "ink";
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
@@ -168,6 +174,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   // so any number can be going at once.
   const [tailoringIds, setTailoringIds] = useState<Set<string>>(new Set());
   const [pulseTick, setPulseTick] = useState(0);
+  const quitArmed = useRef(false);
   const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
     tailoredListingIds(db),
   );
@@ -374,7 +381,19 @@ export default function JobBrowser({ db, version = null }: AppProps) {
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
-      if (key.escape || input === "q") {
+      const isQuit = key.escape || input === "q";
+      // Tailoring is in-process work, so quitting drops it. Require a second
+      // quit press while runs are in flight; any other key disarms.
+      if (isQuit && tailoringIds.size > 0 && !quitArmed.current) {
+        quitArmed.current = true;
+        const n = tailoringIds.size;
+        showStatus(
+          `${n} tailoring run${n === 1 ? "" : "s"} in progress. Quit again to abort.`,
+        );
+        return;
+      }
+      if (!isQuit) quitArmed.current = false;
+      if (isQuit) {
         exit();
         return;
       }
@@ -438,6 +457,8 @@ export default function JobBrowser({ db, version = null }: AppProps) {
       exit,
       visibleJobs.length,
       visibleCount,
+      tailoringIds,
+      showStatus,
       selectedJob,
       selectedJob?.url,
       selectedJob?.description,
