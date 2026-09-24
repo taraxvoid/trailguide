@@ -12,11 +12,13 @@ import {
 import {
   allJobs,
   clearJobs,
+  finishTailorRun,
   jobsByState,
   jobsInStateBetween,
   listingId,
   openDb,
   setJobState,
+  startTailorRun,
   upsertJobs,
 } from "./db.ts";
 import type { ListingState } from "./db.ts";
@@ -285,13 +287,46 @@ export interface TailorCliOptions {
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
   const db = openDb(options.db);
-  const result = await tailorOrRegenerate(db, options.listingId, {
-    fresh: options.fresh,
-    resumePath: options.resume,
-    outputDir: options.outputDir,
-    ollamaHost: options.ollamaHost,
-    ollamaModel: options.ollamaModel,
-  });
+  if (!startTailorRun(db, options.listingId, process.pid)) {
+    db.close();
+    console.error(
+      `error: a tailor run for ${options.listingId} is already in progress`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  let result: Awaited<ReturnType<typeof tailorOrRegenerate>>;
+  try {
+    result = await tailorOrRegenerate(db, options.listingId, {
+      fresh: options.fresh,
+      resumePath: options.resume,
+      outputDir: options.outputDir,
+      ollamaHost: options.ollamaHost,
+      ollamaModel: options.ollamaModel,
+    });
+  } catch (err) {
+    finishTailorRun(db, options.listingId, false, (err as Error).message);
+    db.close();
+    throw err;
+  }
+  const warningSuffix =
+    result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
+  if (result.ok) {
+    const verb = result.action === "regenerated" ? "Regenerated" : "Wrote";
+    finishTailorRun(
+      db,
+      options.listingId,
+      true,
+      `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
+    );
+  } else {
+    finishTailorRun(
+      db,
+      options.listingId,
+      false,
+      `${result.error}${warningSuffix}`,
+    );
+  }
   db.close();
 
   for (const warning of result.warnings) console.warn(`warning: ${warning}`);
