@@ -8,19 +8,29 @@ import {
   useStdin,
   useWindowSize,
 } from "ink";
-import React, { useState, useCallback, useEffect, useMemo } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
-  getTailoredResume,
+  getTailorRun,
+  runningTailorIds,
   setJobState,
+  startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
-import { tailorOrRegenerate } from "../tailor/index.ts";
 
 interface AppProps {
   db: Database;
+  /** Path to the sqlite file, passed to the detached `igor tailor` children. */
+  dbPath: string;
   /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
   version?: string | null;
 }
@@ -38,21 +48,36 @@ const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const NEON_GREEN = "#39ff14";
+const NEON_BLUE = "#4dd2ff";
+const PULSE_TICK_MS = 150;
+const POLL_MS = 1000;
+const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
+
+// Slow sine pulse between full neon green and a dim floor.
+function pulseColor(tick: number): string {
+  const phase = (tick % PULSE_PERIOD_TICKS) / PULSE_PERIOD_TICKS;
+  const level = 0.2 + 0.8 * (0.5 + 0.5 * Math.cos(phase * 2 * Math.PI));
+  const [r, g, b] = [0x39, 0xff, 0x14].map((c) => Math.round(c * level));
+  return `#${[r, g, b].map((c) => (c as number).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const SECTION_HEADER_LINES = 1;
+// Worst case in the active view: an "Applied" header and an "Active" header.
+const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
-  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] ";
-const FOOTER_AFTER = " resume [e] archive [a] applied [⌃r] refresh [q] quit";
+  "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
+const FOOTER_AFTER =
+  " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
 
-const VIEW_TABS = ["active", "applied", "archived"] as const;
+const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
 
 function tabLabel(tab: ViewTab): string {
   switch (tab) {
     case "active":
       return "Active";
-    case "applied":
-      return "Applied";
     case "archived":
       return "Archived";
   }
@@ -139,7 +164,7 @@ function formatState(state: ListingState): string {
   }
 }
 
-export default function JobBrowser({ db, version = null }: AppProps) {
+export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
@@ -150,15 +175,34 @@ export default function JobBrowser({ db, version = null }: AppProps) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isTailoring, setIsTailoring] = useState(false);
+  // Listings with a tailor/regen in flight. Each is a detached `igor tailor`
+  // process (so it survives quitting the TUI); the tailor_runs table is the
+  // source of truth and is polled below.
+  const [tailoringIds, setTailoringIds] = useState<Set<string>>(() =>
+    runningTailorIds(db),
+  );
+  const [pulseTick, setPulseTick] = useState(0);
+  const prevRunning = useRef<Set<string>>(tailoringIds);
   const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
     tailoredListingIds(db),
   );
 
-  const visibleJobs = useMemo(
-    () => jobs.filter((j) => j.state === viewTab),
-    [jobs, viewTab],
-  );
+  // The active view pins applied jobs above the still-active ones.
+  const visibleJobs = useMemo(() => {
+    if (viewTab === "archived")
+      return jobs.filter((j) => j.state === "archived");
+    return [
+      // Applied and tailored first, then the rest of applied (stable sort).
+      ...jobs
+        .filter((j) => j.state === "applied")
+        .sort(
+          (x, y) =>
+            Number(tailoredIds.has(y.listingId)) -
+            Number(tailoredIds.has(x.listingId)),
+        ),
+      ...jobs.filter((j) => j.state === "active"),
+    ];
+  }, [jobs, viewTab, tailoredIds]);
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
@@ -224,7 +268,8 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     SEPARATOR_LINES +
     FOOTER_FIXED_LINES +
     footerLines +
-    bottomSectionLines;
+    bottomSectionLines +
+    (viewTab === "active" ? MAX_SECTION_HEADERS * SECTION_HEADER_LINES : 0);
 
   // No floor of 1 here: when the chrome (header/detail/footer) alone
   // already fills the terminal, forcing a row anyway would overflow the
@@ -290,46 +335,78 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
       if (!job) return;
-      setJobState(db, job.listingId, state, new Date().toISOString());
+      // Pressing [a] on an already-applied job undoes it.
+      const next =
+        state === "applied" && job.state === "applied" ? "active" : state;
+      setJobState(db, job.listingId, next, new Date().toISOString());
       setJobs(allJobs(db));
-      showStatus(`${state}: ${job.title} @ ${job.company}`);
+      showStatus(`${next}: ${job.title} @ ${job.company}`);
     },
     [db, visibleJobs, selectedIndex, showStatus],
   );
 
-  const handleTailor = useCallback(async () => {
-    const job = visibleJobs[selectedIndex];
-    if (!job || isTailoring) return;
-    setIsTailoring(true);
-    // No auto-hiding timeout here (unlike showStatus elsewhere) - tailoring
-    // takes tens of seconds on a local model, and the result (including any
-    // warnings about a fallback) is worth leaving on screen until the next
-    // action rather than losing it after 3s.
-    // Only a guess for the progress message - tailorOrRegenerate makes the
-    // real call (e.g. a tracked .md deleted since means a fresh tailor).
-    const regenerating = getTailoredResume(db, job.listingId) !== null;
-    setStatusMessage(
-      regenerating
-        ? "Regenerating PDF from the tailored markdown…"
-        : "Tailoring resume (this can take a minute on a local model)…",
-    );
-    try {
-      const result = await tailorOrRegenerate(db, job.listingId);
-      if (!result.ok) {
-        setStatusMessage(`Tailoring failed: ${result.error}`);
-        return;
-      }
-      const warningSuffix =
-        result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
-      const verb = result.action === "regenerated" ? "Regenerated" : "Wrote";
-      setStatusMessage(
-        `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
+  // Poll for runs started/finished by (possibly earlier or other) processes.
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const running = runningTailorIds(db);
+      const finished = [...prevRunning.current].filter(
+        (id) => !running.has(id),
       );
-    } finally {
-      setTailoredIds(tailoredListingIds(db));
-      setIsTailoring(false);
-    }
-  }, [db, visibleJobs, selectedIndex, isTailoring]);
+      prevRunning.current = running;
+      setTailoringIds((prev) =>
+        prev.size === running.size && [...prev].every((id) => running.has(id))
+          ? prev
+          : running,
+      );
+      if (finished.length > 0) {
+        setTailoredIds(tailoredListingIds(db));
+        // Several can finish in one tick; the last one's outcome is shown.
+        const run = getTailorRun(db, finished[finished.length - 1] as string);
+        if (run?.message) {
+          setStatusMessage(
+            run.ok ? run.message : `Tailoring failed: ${run.message}`,
+          );
+        }
+      }
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [db]);
+
+  useEffect(() => {
+    if (tailoringIds.size === 0) return;
+    const timer = setInterval(() => setPulseTick((t) => t + 1), PULSE_TICK_MS);
+    return () => clearInterval(timer);
+  }, [tailoringIds.size]);
+
+  const handleTailor = useCallback(() => {
+    const job = visibleJobs[selectedIndex];
+    if (!job || tailoringIds.has(job.listingId)) return;
+    // Detached so it outlives the TUI. IGOR_NO_DELEGATE keeps the recorded
+    // pid the real worker rather than a checkout-delegating wrapper.
+    const proc = Bun.spawn({
+      cmd: [
+        process.execPath,
+        `${import.meta.dir}/../cli.ts`,
+        "tailor",
+        job.listingId,
+        "--db",
+        dbPath,
+      ],
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { ...process.env, [NO_DELEGATE_ENV]: "1" },
+      detached: true,
+    });
+    proc.unref();
+    // Record the child's pid now so the bar pulses immediately, before the
+    // child has finished starting up.
+    startTailorRun(db, job.listingId, proc.pid);
+    const running = runningTailorIds(db);
+    prevRunning.current = running;
+    setTailoringIds(running);
+    setStatusMessage(
+      `Tailoring ${job.title} @ ${job.company} in the background (survives quitting)…`,
+    );
+  }, [db, dbPath, visibleJobs, selectedIndex, tailoringIds]);
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
@@ -349,23 +426,20 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         setSelectedIndex((prev) => Math.min(visibleJobs.length - 1, prev + 1));
         return;
       }
-      if (key.leftArrow || input === "h") {
-        setViewTab(
-          (prev) =>
-            VIEW_TABS[
-              (VIEW_TABS.indexOf(prev) - 1 + VIEW_TABS.length) %
-                VIEW_TABS.length
-            ] as ViewTab,
+      if (key.pageUp || key.leftArrow || input === "h") {
+        setSelectedIndex((prev) =>
+          Math.max(0, prev - Math.max(1, visibleCount)),
         );
         return;
       }
-      if (key.rightArrow || input === "l") {
-        setViewTab(
-          (prev) =>
-            VIEW_TABS[
-              (VIEW_TABS.indexOf(prev) + 1) % VIEW_TABS.length
-            ] as ViewTab,
+      if (key.pageDown || key.rightArrow || input === "l") {
+        setSelectedIndex((prev) =>
+          Math.min(visibleJobs.length - 1, prev + Math.max(1, visibleCount)),
         );
+        return;
+      }
+      if (key.ctrl && input === "e") {
+        setViewTab((prev) => (prev === "active" ? "archived" : "active"));
         return;
       }
       if (key.return) {
@@ -384,7 +458,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         return;
       }
       if (key.ctrl && input === "t" && selectedJob) {
-        if (!isTailoring) handleTailor();
+        handleTailor();
         return;
       }
       if (input === "e") {
@@ -399,11 +473,11 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     [
       exit,
       visibleJobs.length,
+      visibleCount,
       selectedJob,
       selectedJob?.url,
       selectedJob?.description,
       isRefreshing,
-      isTailoring,
       handleRefresh,
       handleStateChange,
       handleTailor,
@@ -416,12 +490,20 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     return visibleJobs.slice(scrollOffset, scrollOffset + visibleCount);
   }, [visibleJobs, scrollOffset, visibleCount]);
 
+  const appliedCount = useMemo(
+    () => jobs.filter((j) => j.state === "applied").length,
+    [jobs],
+  );
+
   const tabCounts = useMemo(
     () =>
       Object.fromEntries(
         VIEW_TABS.map((tab) => [
           tab,
-          jobs.filter((j) => j.state === tab).length,
+          jobs.filter(
+            (j) =>
+              j.state === tab || (tab === "active" && j.state === "applied"),
+          ).length,
         ]),
       ) as Record<ViewTab, number>,
     [jobs],
@@ -442,7 +524,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
           )}
         </Box>
         <Text>
-          {VIEW_TABS.map((tab, i) => (
+          {VIEW_TABS.filter((tab) => tab === viewTab).map((tab, i) => (
             <React.Fragment key={tab}>
               {i > 0 && <Text dimColor> </Text>}
               <Text
@@ -471,13 +553,35 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         ) : (
           visibleSlice.map((job, i) => {
             const actualIndex = scrollOffset + i;
+            const section = job.state === "applied" ? "applied" : "active";
+            const prev = visibleSlice[i - 1];
+            const showHeader =
+              viewTab === "active" &&
+              (i === 0 ||
+                (prev?.state === "applied") !== (section === "applied"));
             return (
-              <JobRow
-                key={job.listingId}
-                job={job}
-                isSelected={actualIndex === selectedIndex}
-                isTailored={tailoredIds.has(job.listingId)}
-              />
+              <React.Fragment key={job.listingId}>
+                {showHeader && (
+                  <Text
+                    bold
+                    color={section === "applied" ? NEON_BLUE : "green"}
+                  >
+                    {section === "applied"
+                      ? `Applied (${appliedCount})`
+                      : `Active (${visibleJobs.length - appliedCount})`}
+                  </Text>
+                )}
+                <JobRow
+                  job={job}
+                  isSelected={actualIndex === selectedIndex}
+                  isTailored={tailoredIds.has(job.listingId)}
+                  pulse={
+                    tailoringIds.has(job.listingId)
+                      ? pulseColor(pulseTick)
+                      : null
+                  }
+                />
+              </React.Fragment>
             );
           })
         )}
@@ -548,15 +652,27 @@ interface JobRowProps {
   job: StoredJob;
   isSelected: boolean;
   isTailored: boolean;
+  pulse: string | null;
 }
 
-function JobRow({ job, isSelected, isTailored }: JobRowProps) {
+function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
   return (
     <Box marginBottom={1}>
-      <Box flexDirection="column" width={1}>
-        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
-        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
-      </Box>
+      {/* Two thin status slots. Applied (blue) owns the left slot; tailored
+          (green) takes the left slot when not applied, else the right. */}
+      {[0, 1].map((slot) => {
+        const slots = [
+          job.state === "applied" ? NEON_BLUE : null,
+          pulse ?? (isTailored ? NEON_GREEN : null),
+        ].filter((c): c is string => c !== null);
+        const color = slots[slot];
+        return (
+          <Box key={slot} flexDirection="column" width={1}>
+            <Text color={color}>{color ? "▎" : " "}</Text>
+            <Text color={color}>{color ? "▎" : " "}</Text>
+          </Box>
+        );
+      })}
       <Box
         paddingX={1}
         flexDirection="column"
