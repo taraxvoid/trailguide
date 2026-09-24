@@ -18,7 +18,6 @@ import React, {
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
-import { linkifyPdfPath, openTarget } from "./open.ts";
 import {
   allJobs,
   getTailorRun,
@@ -28,6 +27,7 @@ import {
   startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
+import { linkifyPdfPath, openTarget } from "./open.ts";
 
 interface AppProps {
   db: Database;
