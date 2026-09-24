@@ -23,7 +23,7 @@ import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
-import { tailorResume } from "./tailor/index.ts";
+import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
@@ -226,11 +226,13 @@ export interface TailorCliOptions {
   outputDir?: string;
   ollamaHost?: string;
   ollamaModel?: string;
+  fresh?: boolean;
 }
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
   const db = openDb(options.db);
-  const result = await tailorResume(db, options.listingId, {
+  const result = await tailorOrRegenerate(db, options.listingId, {
+    fresh: options.fresh,
     resumePath: options.resume,
     outputDir: options.outputDir,
     ollamaHost: options.ollamaHost,
@@ -246,7 +248,11 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
     return;
   }
 
-  console.log(`Wrote ${result.markdownPath}`);
+  if (result.action === "regenerated") {
+    console.log(`Regenerated from ${result.markdownPath}`);
+  } else {
+    console.log(`Wrote ${result.markdownPath}`);
+  }
   if (result.pdfPath) console.log(`Wrote ${result.pdfPath}`);
 }
 
@@ -311,7 +317,7 @@ export function createProgram(
   program
     .command("tailor")
     .description(
-      "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF",
+      "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
     .option("--db <path>", "path to sqlite db", "igor.db")
@@ -332,6 +338,11 @@ export function createProgram(
       "--ollama-model <model>",
       "Ollama model (default: $OLLAMA_MODEL or qwen3:8b)",
     )
+    .option(
+      "--fresh",
+      "re-tailor from the resume master even if a tailored .md already exists (overwrites it)",
+      false,
+    )
     .action(
       async (
         listingIdArg: string,
@@ -341,6 +352,7 @@ export function createProgram(
           outputDir?: string;
           ollamaHost?: string;
           ollamaModel?: string;
+          fresh?: boolean;
         },
       ) => {
         await tailorAction({ ...options, listingId: listingIdArg });

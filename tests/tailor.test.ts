@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
-import { openDb, upsertJobs } from "../src/db.ts";
+import { getTailoredResume, openDb, upsertJobs } from "../src/db.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
-import { tailorResume } from "../src/tailor/index.ts";
+import {
+  regenerateResume,
+  tailorOrRegenerate,
+  tailorResume,
+} from "../src/tailor/index.ts";
 
 let counter = 0;
 function freshDb() {
@@ -166,5 +170,118 @@ describe("tailorResume", () => {
       result.warnings.some((w) => w.includes('no "Highlights" section')),
     ).toBe(true);
     rmSync(plainResumeDir, { recursive: true, force: true });
+  });
+});
+
+describe("tailorOrRegenerate", () => {
+  // Unreachable Ollama keeps these fast and offline: tailoring falls back to
+  // an unmodified render, which is all the tracking logic needs.
+  const offline = { resumePath, outputDir, ollamaHost: "http://127.0.0.1:1" };
+
+  it("tailors a new .md the first time and records it against the listing", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const result = await tailorOrRegenerate(db, "jsearch:1", offline);
+    expect(result.ok).toBe(true);
+    expect(result.action).toBe("tailored");
+    expect(getTailoredResume(db, "jsearch:1")?.markdownPath).toBe(
+      result.markdownPath,
+    );
+  });
+
+  it("regenerates from the hand-edited .md on later calls instead of re-tailoring", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const first = await tailorOrRegenerate(db, "jsearch:1", offline);
+    const markdownPath = first.markdownPath ?? "";
+    const edited = (await Bun.file(markdownPath).text()).replace(
+      "Owned widget infrastructure end to end",
+      "Hand-edited bullet about widgets",
+    );
+    await Bun.write(markdownPath, edited);
+
+    const second = await tailorOrRegenerate(db, "jsearch:1", offline);
+    expect(second.ok).toBe(true);
+    expect(second.action).toBe("regenerated");
+    expect(second.markdownPath).toBe(markdownPath);
+    // The .md is left alone, and the render is built from the edit.
+    expect(await Bun.file(markdownPath).text()).toBe(edited);
+    const typ = await Bun.file(markdownPath.replace(/\.md$/, ".typ")).text();
+    expect(typ).toContain("Hand-edited bullet about widgets");
+    expect(typ).not.toContain("Owned widget infrastructure end to end");
+  });
+
+  it("keeps hand-added text the resume structure doesn't model", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const first = await tailorOrRegenerate(db, "jsearch:1", offline);
+    const markdownPath = first.markdownPath ?? "";
+    const original = await Bun.file(markdownPath).text();
+    // Unedited: no fallback warning.
+    const clean = await regenerateResume(db, "jsearch:1");
+    expect(
+      clean.warnings.filter((w) => !w.startsWith("PDF render failed")),
+    ).toEqual([]);
+
+    await Bun.write(
+      markdownPath,
+      original.replace(
+        /(#+ \**Highlights\**\n)/,
+        "$1\nA hand-written intro paragraph.\n",
+      ),
+    );
+    const edited = await regenerateResume(db, "jsearch:1");
+    expect(edited.warnings.some((w) => w.includes("rendered verbatim"))).toBe(
+      true,
+    );
+    const typ = await Bun.file(markdownPath.replace(/\.md$/, ".typ")).text();
+    expect(typ).toContain("A hand-written intro paragraph.");
+  });
+
+  it("re-tailors when the tracked .md has been deleted", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const first = await tailorOrRegenerate(db, "jsearch:1", offline);
+    rmSync(first.markdownPath ?? "");
+    const second = await tailorOrRegenerate(db, "jsearch:1", offline);
+    expect(second.action).toBe("tailored");
+    expect(await Bun.file(second.markdownPath ?? "").exists()).toBe(true);
+  });
+
+  it("re-tailors over an existing .md when asked for a fresh one", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const first = await tailorOrRegenerate(db, "jsearch:1", offline);
+    await Bun.write(first.markdownPath ?? "", "# scribbles\n");
+    const second = await tailorOrRegenerate(db, "jsearch:1", {
+      ...offline,
+      fresh: true,
+    });
+    expect(second.action).toBe("tailored");
+    expect(await Bun.file(second.markdownPath ?? "").text()).toContain(
+      "Owned widget infrastructure end to end",
+    );
+  });
+
+  it("never lets two listings with the same company and title share a .md", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ sourceId: "1" }), mockJob({ sourceId: "2" })]);
+    const a = await tailorOrRegenerate(db, "jsearch:1", offline);
+    const b = await tailorOrRegenerate(db, "jsearch:2", offline);
+    expect(a.markdownPath).not.toBe(b.markdownPath);
+    // And re-tailoring the first keeps its original name.
+    const again = await tailorOrRegenerate(db, "jsearch:1", {
+      ...offline,
+      fresh: true,
+    });
+    expect(again.markdownPath).toBe(a.markdownPath);
+  });
+
+  it("regenerateResume fails clearly when nothing has been tailored yet", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const result = await regenerateResume(db, "jsearch:1");
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/tailor it first/);
   });
 });
