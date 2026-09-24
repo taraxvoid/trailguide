@@ -371,7 +371,7 @@ export default function JobBrowser({ db }: AppProps) {
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
         <Text bold color="green">
-          ⚡ igor
+          ⚡ Igor at your sshhservishss ⚡ 
         </Text>
         <Text>
           {VIEW_TABS.map((tab, i) => (
