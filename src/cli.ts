@@ -1,6 +1,8 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
+import { dirname } from "node:path";
 import { Command, Option } from "commander";
+import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   allJobs,
   clearJobs,
@@ -370,6 +372,10 @@ async function main() {
 }
 
 if (import.meta.main) {
+  const delegate = delegateTarget(process.cwd(), dirname(import.meta.dir));
+  if (delegate) {
+    process.exit(await runDelegate(delegate, Bun.argv.slice(2)));
+  }
   main().catch((err) => {
     console.error(err);
     process.exit(1);
