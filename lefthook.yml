@@ -9,7 +9,6 @@ pre-commit:
   parallel: true
   commands:
     biome-check:
-      glob: "*.{ts,js,json}"
-      run: bunx @biomejs/biome check {staged_files}
+      run: bunx @biomejs/biome check --no-errors-on-unmatched {staged_files}
     gitleaks:
       run: gitleaks protect --staged --redact -v --no-banner
