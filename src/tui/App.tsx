@@ -18,9 +18,11 @@ import React, {
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
+import { linkifyPdfPath, openTarget } from "./open.ts";
 import {
   allJobs,
   getTailorRun,
+  getTailoredResume,
   runningTailorIds,
   setJobState,
   startTailorRun,
@@ -66,7 +68,7 @@ const SECTION_HEADER_LINES = 1;
 const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
-  "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
+  "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃o] resume PDF [⌃t] ";
 const FOOTER_AFTER =
   " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
@@ -408,6 +410,19 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
     );
   }, [db, dbPath, visibleJobs, selectedIndex, tailoringIds]);
 
+  const handleOpenResume = useCallback(async () => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    const record = getTailoredResume(db, job.listingId);
+    const pdfPath = record?.markdownPath.replace(/\.md$/, ".pdf");
+    if (!pdfPath || !(await Bun.file(pdfPath).exists())) {
+      showStatus("No generated resume for this job (ctrl+T to tailor one)");
+      return;
+    }
+    openTarget(pdfPath);
+    showStatus(`Opened ${pdfPath}`);
+  }, [db, visibleJobs, selectedIndex, showStatus]);
+
   const handleInput = useCallback(
     (input: string, key: Key) => {
       if (key.escape || input === "q") {
@@ -449,12 +464,11 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
         return;
       }
       if (input === "o" && selectedJob) {
-        const platform = process.platform;
-        const cmd =
-          platform === "win32"
-            ? ["cmd", "/c", "start", "", selectedJob.url]
-            : ["open", selectedJob.url];
-        Bun.spawn({ cmd });
+        openTarget(selectedJob.url);
+        return;
+      }
+      if (key.ctrl && input === "o" && selectedJob) {
+        handleOpenResume();
         return;
       }
       if (key.ctrl && input === "t" && selectedJob) {
@@ -481,6 +495,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       handleRefresh,
       handleStateChange,
       handleTailor,
+      handleOpenResume,
     ],
   );
 
@@ -589,7 +604,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
 
       {statusMessage && (
         <Box marginTop={1}>
-          <Text dimColor>{statusMessage}</Text>
+          <Text dimColor>{linkifyPdfPath(statusMessage)}</Text>
         </Box>
       )}
 
