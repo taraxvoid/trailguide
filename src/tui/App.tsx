@@ -68,9 +68,9 @@ const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
   "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
-const FOOTER_MID = " resume [e] archive [a] ";
+const FOOTER_MID = " resume [e] archive [a] mark ";
 const FOOTER_AFTER = " [⌃e] archived view [⌃r] refresh [q] quit";
-const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_MID}mark applied${FOOTER_AFTER}`;
+const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_MID}applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -152,17 +152,33 @@ function previewLines(
   return shown;
 }
 
-function formatState(state: ListingState): string {
-  switch (state) {
-    case "active":
-      return "";
-    case "applied":
-      return "[applied]";
-    case "archived":
-      return "[archived]";
-    case "inactive":
-      return "[inactive]";
-  }
+interface StatusTag {
+  label: string;
+  color: string | undefined;
+}
+
+function statusTags(state: ListingState, tailored: boolean): StatusTag[] {
+  const tags: StatusTag[] = [];
+  if (state === "applied") tags.push({ label: "[applied]", color: NEON_BLUE });
+  if (tailored) tags.push({ label: "[tailored]", color: NEON_GREEN });
+  if (state === "archived")
+    tags.push({ label: "[archived]", color: MUTED_YELLOW });
+  if (state === "inactive")
+    tags.push({ label: "[inactive]", color: undefined });
+  return tags;
+}
+
+function StatusTags({ tags }: { tags: StatusTag[] }) {
+  return (
+    <>
+      {tags.map((t) => (
+        <Text key={t.label} color={t.color} dimColor={!t.color}>
+          {" "}
+          {t.label}
+        </Text>
+      ))}
+    </>
+  );
 }
 
 export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
@@ -232,8 +248,11 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       );
   const descriptionLineCount = descriptionShownLines.length;
 
+  const selectedTags = selectedJob
+    ? statusTags(selectedJob.state, selectedIsTailored === true)
+    : [];
   const titleLine = selectedJob
-    ? `${selectedJob.title} ${formatState(selectedJob.state)}`.trim()
+    ? [selectedJob.title, ...selectedTags.map((t) => t.label)].join(" ")
     : "";
   const companyLine = selectedJob
     ? `${selectedJob.company}${
@@ -604,7 +623,8 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
             flexDirection="column"
           >
             <Text bold color="green">
-              {selectedJob.title} {formatState(selectedJob.state)}
+              {selectedJob.title}
+              <StatusTags tags={selectedTags} />
             </Text>
             <Text>
               {selectedJob.company}
@@ -648,7 +668,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
             bold={selectedJob?.state === "applied"}
             color={selectedJob?.state === "applied" ? NEON_BLUE : undefined}
           >
-            mark applied
+            applied
           </Text>
           {FOOTER_AFTER}
         </Text>
@@ -699,9 +719,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
             {job.title}
           </Text>
           <Text dimColor> @ {job.company}</Text>
-          {formatState(job.state) && (
-            <Text dimColor> {formatState(job.state)}</Text>
-          )}
+          <StatusTags tags={statusTags(job.state, isTailored)} />
         </Box>
         <Box marginLeft={isSelected ? 3 : 0}>
           <Text dimColor>
