@@ -9,7 +9,18 @@ pre-commit:
   parallel: true
   commands:
     biome-check:
-      glob: "*.{ts,js,json}"
+      glob: "*.{ts,tsx,js,json}"
       run: bunx @biomejs/biome check {staged_files}
+    typecheck:
+      glob: "*.{ts,tsx}"
+      run: bun run typecheck
     gitleaks:
       run: gitleaks protect --staged --redact -v --no-banner
+    licenses:
+      glob: "{package.json,bun.lock,scripts/check-licenses.ts}"
+      run: bun run check:licenses
+
+pre-push:
+  commands:
+    test:
+      run: bun run test
