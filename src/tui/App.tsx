@@ -44,8 +44,8 @@ const SECTION_HEADER_LINES = 1;
 const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
-  "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] ";
-const FOOTER_AFTER = " resume [e] archive [a] applied [⌃r] refresh [q] quit";
+  "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
+const FOOTER_AFTER = " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
@@ -360,23 +360,18 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         setSelectedIndex((prev) => Math.min(visibleJobs.length - 1, prev + 1));
         return;
       }
-      if (key.leftArrow || input === "h") {
-        setViewTab(
-          (prev) =>
-            VIEW_TABS[
-              (VIEW_TABS.indexOf(prev) - 1 + VIEW_TABS.length) %
-                VIEW_TABS.length
-            ] as ViewTab,
+      if (key.pageUp || key.leftArrow || input === "h") {
+        setSelectedIndex((prev) => Math.max(0, prev - Math.max(1, visibleCount)));
+        return;
+      }
+      if (key.pageDown || key.rightArrow || input === "l") {
+        setSelectedIndex((prev) =>
+          Math.min(visibleJobs.length - 1, prev + Math.max(1, visibleCount)),
         );
         return;
       }
-      if (key.rightArrow || input === "l") {
-        setViewTab(
-          (prev) =>
-            VIEW_TABS[
-              (VIEW_TABS.indexOf(prev) + 1) % VIEW_TABS.length
-            ] as ViewTab,
-        );
+      if (key.ctrl && input === "e") {
+        setViewTab((prev) => (prev === "active" ? "archived" : "active"));
         return;
       }
       if (key.return) {
@@ -461,7 +456,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
           )}
         </Box>
         <Text>
-          {VIEW_TABS.map((tab, i) => (
+          {VIEW_TABS.filter((tab) => tab === viewTab).map((tab, i) => (
             <React.Fragment key={tab}>
               {i > 0 && <Text dimColor> </Text>}
               <Text
