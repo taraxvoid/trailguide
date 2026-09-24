@@ -49,6 +49,7 @@ const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const NEON_GREEN = "#39ff14";
 const NEON_BLUE = "#4dd2ff";
+const MUTED_YELLOW = "#a89a4a";
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
@@ -67,9 +68,9 @@ const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
   "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
-const FOOTER_AFTER =
-  " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
-const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
+const FOOTER_MID = " resume [e] archive [a] ";
+const FOOTER_AFTER = " [⌃e] archived view [⌃r] refresh [q] quit";
+const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_MID}mark applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -641,6 +642,14 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
           >
             regen
           </Text>
+          {FOOTER_MID}
+          <Text
+            dimColor={false}
+            bold={selectedJob?.state === "applied"}
+            color={selectedJob?.state === "applied" ? NEON_BLUE : undefined}
+          >
+            mark applied
+          </Text>
           {FOOTER_AFTER}
         </Text>
       </Box>
@@ -658,12 +667,13 @@ interface JobRowProps {
 function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
   return (
     <Box marginBottom={1}>
-      {/* Two thin status slots. Applied (blue) owns the left slot; tailored
-          (green) takes the left slot when not applied, else the right. */}
-      {[0, 1].map((slot) => {
+      {/* Thin status slots, packed left in order: applied (blue), tailored
+          (green), archived (muted yellow). */}
+      {[0, 1, 2].map((slot) => {
         const slots = [
           job.state === "applied" ? NEON_BLUE : null,
           pulse ?? (isTailored ? NEON_GREEN : null),
+          job.state === "archived" ? MUTED_YELLOW : null,
         ].filter((c): c is string => c !== null);
         const color = slots[slot];
         return (
