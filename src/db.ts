@@ -217,7 +217,8 @@ export function setJobApplied(
 /**
  * Jobs currently in `state` whose last state change falls in [from, to),
  * newest change first. Rows from before state_changed_at existed fall back
- * to last_checked_at.
+ * to last_checked_at. For "applied" this uses applied_at instead, so jobs
+ * archived after applying are still included, dated by when they applied.
  */
 export function jobsInStateBetween(
   db: Database,
@@ -225,22 +226,21 @@ export function jobsInStateBetween(
   from: Date | null,
   to: Date | null,
 ): Array<StoredJob & { stateChangedAt: string }> {
-  const changed = new Map(
-    (
-      db
-        .prepare(
-          "SELECT listing_id, COALESCE(state_changed_at, last_checked_at) AS changed FROM jobs WHERE state = $state",
-        )
-        .all({ $state: state }) as Array<{
-        listing_id: string;
-        changed: string;
-      }>
-    ).map((r) => [r.listing_id, r.changed]),
-  );
-  return jobsByState(db, state)
-    .map((job) => ({
-      ...job,
-      stateChangedAt: changed.get(job.listingId) ?? job.lastCheckedAt,
+  const byApplied = state === "applied";
+  const rows = (
+    byApplied
+      ? db.prepare("SELECT * FROM jobs WHERE applied_at IS NOT NULL").all()
+      : db
+          .prepare("SELECT * FROM jobs WHERE state = $state")
+          .all({ $state: state })
+  ) as Array<Record<string, string>>;
+  return rows
+    .map((row) => ({
+      ...rowToStoredJob(row),
+      stateChangedAt:
+        (byApplied ? row.applied_at : row.state_changed_at) ??
+        row.last_checked_at ??
+        "",
     }))
     .filter((job) => {
       const t = new Date(job.stateChangedAt).getTime();
