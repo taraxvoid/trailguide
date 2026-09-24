@@ -38,21 +38,23 @@ const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const NEON_GREEN = "#39ff14";
+const NEON_BLUE = "#4dd2ff";
+const SECTION_HEADER_LINES = 1;
+// Worst case in the active view: an "Applied" header and an "Active" header.
+const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
   "[↑↓/k/j] navigate [←→/h/l] switch view [↵] expand/collapse [o] open [⌃t] ";
 const FOOTER_AFTER = " resume [e] archive [a] applied [⌃r] refresh [q] quit";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
 
-const VIEW_TABS = ["active", "applied", "archived"] as const;
+const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
 
 function tabLabel(tab: ViewTab): string {
   switch (tab) {
     case "active":
       return "Active";
-    case "applied":
-      return "Applied";
     case "archived":
       return "Archived";
   }
@@ -155,10 +157,15 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     tailoredListingIds(db),
   );
 
-  const visibleJobs = useMemo(
-    () => jobs.filter((j) => j.state === viewTab),
-    [jobs, viewTab],
-  );
+  // The active view pins applied jobs above the still-active ones.
+  const visibleJobs = useMemo(() => {
+    if (viewTab === "archived")
+      return jobs.filter((j) => j.state === "archived");
+    return [
+      ...jobs.filter((j) => j.state === "applied"),
+      ...jobs.filter((j) => j.state === "active"),
+    ];
+  }, [jobs, viewTab]);
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
@@ -224,7 +231,8 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     SEPARATOR_LINES +
     FOOTER_FIXED_LINES +
     footerLines +
-    bottomSectionLines;
+    bottomSectionLines +
+    (viewTab === "active" ? MAX_SECTION_HEADERS * SECTION_HEADER_LINES : 0);
 
   // No floor of 1 here: when the chrome (header/detail/footer) alone
   // already fills the terminal, forcing a row anyway would overflow the
@@ -290,9 +298,12 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
       if (!job) return;
-      setJobState(db, job.listingId, state, new Date().toISOString());
+      // Pressing [a] on an already-applied job undoes it.
+      const next =
+        state === "applied" && job.state === "applied" ? "active" : state;
+      setJobState(db, job.listingId, next, new Date().toISOString());
       setJobs(allJobs(db));
-      showStatus(`${state}: ${job.title} @ ${job.company}`);
+      showStatus(`${next}: ${job.title} @ ${job.company}`);
     },
     [db, visibleJobs, selectedIndex, showStatus],
   );
@@ -416,12 +427,20 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     return visibleJobs.slice(scrollOffset, scrollOffset + visibleCount);
   }, [visibleJobs, scrollOffset, visibleCount]);
 
+  const appliedCount = useMemo(
+    () => jobs.filter((j) => j.state === "applied").length,
+    [jobs],
+  );
+
   const tabCounts = useMemo(
     () =>
       Object.fromEntries(
         VIEW_TABS.map((tab) => [
           tab,
-          jobs.filter((j) => j.state === tab).length,
+          jobs.filter(
+            (j) =>
+              j.state === tab || (tab === "active" && j.state === "applied"),
+          ).length,
         ]),
       ) as Record<ViewTab, number>,
     [jobs],
@@ -471,13 +490,30 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         ) : (
           visibleSlice.map((job, i) => {
             const actualIndex = scrollOffset + i;
+            const section = job.state === "applied" ? "applied" : "active";
+            const prev = visibleSlice[i - 1];
+            const showHeader =
+              viewTab === "active" &&
+              (i === 0 ||
+                (prev?.state === "applied") !== (section === "applied"));
             return (
-              <JobRow
-                key={job.listingId}
-                job={job}
-                isSelected={actualIndex === selectedIndex}
-                isTailored={tailoredIds.has(job.listingId)}
-              />
+              <React.Fragment key={job.listingId}>
+                {showHeader && (
+                  <Text
+                    bold
+                    color={section === "applied" ? NEON_BLUE : "green"}
+                  >
+                    {section === "applied"
+                      ? `Applied (${appliedCount})`
+                      : `Active (${visibleJobs.length - appliedCount})`}
+                  </Text>
+                )}
+                <JobRow
+                  job={job}
+                  isSelected={actualIndex === selectedIndex}
+                  isTailored={tailoredIds.has(job.listingId)}
+                />
+              </React.Fragment>
             );
           })
         )}
@@ -553,10 +589,21 @@ interface JobRowProps {
 function JobRow({ job, isSelected, isTailored }: JobRowProps) {
   return (
     <Box marginBottom={1}>
-      <Box flexDirection="column" width={1}>
-        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
-        <Text color={NEON_GREEN}>{isTailored ? "▌" : " "}</Text>
-      </Box>
+      {/* Two thin status slots. Applied (blue) owns the left slot; tailored
+          (green) takes the left slot when not applied, else the right. */}
+      {[0, 1].map((slot) => {
+        const slots = [
+          job.state === "applied" ? NEON_BLUE : null,
+          isTailored ? NEON_GREEN : null,
+        ].filter((c): c is string => c !== null);
+        const color = slots[slot];
+        return (
+          <Box key={slot} flexDirection="column" width={1}>
+            <Text color={color}>{color ? "▎" : " "}</Text>
+            <Text color={color}>{color ? "▎" : " "}</Text>
+          </Box>
+        );
+      })}
       <Box
         paddingX={1}
         flexDirection="column"
