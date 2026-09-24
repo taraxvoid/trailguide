@@ -16,6 +16,8 @@ import { tailorOrRegenerate } from "../tailor/index.ts";
 
 interface AppProps {
   db: Database;
+  /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
+  version?: string | null;
 }
 
 // Chrome heights below are line counts for the JSX blocks they mirror -
@@ -128,7 +130,7 @@ function formatState(state: ListingState): string {
   }
 }
 
-export default function JobBrowser({ db }: AppProps) {
+export default function JobBrowser({ db, version = null }: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
@@ -411,9 +413,17 @@ export default function JobBrowser({ db }: AppProps) {
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
-        <Text bold color="green">
-          ⚡ igor
-        </Text>
+        <Box flexShrink={1} marginRight={2}>
+          <Text bold color="green">
+            ⚡ igor
+          </Text>
+          {version && (
+            <Text dimColor wrap="truncate-end">
+              {"  "}
+              {version}
+            </Text>
+          )}
+        </Box>
         <Text>
           {VIEW_TABS.map((tab, i) => (
             <React.Fragment key={tab}>

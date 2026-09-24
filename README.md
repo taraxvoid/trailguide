@@ -75,6 +75,11 @@ Browse stored jobs interactively:
 igor tui [--db <path>]
 ```
 
+The header shows the branch and last commit of the checkout that's running
+(`*` = uncommitted changes). A global `igor` from `bun link` always runs the
+linked checkout, whatever directory you start it in - to try a branch or
+worktree, run `bun run tui` from inside it instead.
+
 - ↑↓ / k j — navigate job list
 - ←→ / h l — switch between Active / Applied / Archived tabs
 - ↵ — expand/collapse the selected job's description
