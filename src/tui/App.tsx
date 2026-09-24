@@ -45,7 +45,8 @@ const MAX_SECTION_HEADERS = 2;
 
 const FOOTER_BEFORE =
   "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃t] ";
-const FOOTER_AFTER = " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
+const FOOTER_AFTER =
+  " resume [e] archive [a] applied [⌃e] archived view [⌃r] refresh [q] quit";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
@@ -361,7 +362,9 @@ export default function JobBrowser({ db, version = null }: AppProps) {
         return;
       }
       if (key.pageUp || key.leftArrow || input === "h") {
-        setSelectedIndex((prev) => Math.max(0, prev - Math.max(1, visibleCount)));
+        setSelectedIndex((prev) =>
+          Math.max(0, prev - Math.max(1, visibleCount)),
+        );
         return;
       }
       if (key.pageDown || key.rightArrow || input === "l") {
@@ -405,6 +408,7 @@ export default function JobBrowser({ db, version = null }: AppProps) {
     [
       exit,
       visibleJobs.length,
+      visibleCount,
       selectedJob,
       selectedJob?.url,
       selectedJob?.description,
