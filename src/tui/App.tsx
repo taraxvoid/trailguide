@@ -514,7 +514,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
         <Box flexShrink={1} marginRight={2}>
           <Text bold color="green">
-            ⚡ Igor at your sshhservishss ⚡ 
+            ⚡ Igor at your sshhservishss ⚡
           </Text>
           {version && (
             <Text dimColor wrap="truncate-end">
