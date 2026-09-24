@@ -37,6 +37,12 @@ export function openDb(path = "igor.db"): Database {
       state TEXT NOT NULL DEFAULT 'active'
     )
   `);
+  const cols = db.query("PRAGMA table_info(jobs)").all() as Array<{
+    name: string;
+  }>;
+  if (!cols.some((c) => c.name === "state_changed_at")) {
+    db.run("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
+  }
   return db;
 }
 
@@ -52,7 +58,7 @@ export function upsertJobs(
   const insert = db.prepare(`
     INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state)
     VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state)
-    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state)
+    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state), state_changed_at = CASE WHEN $explicitState IS NOT NULL AND $explicitState != state THEN $lastCheckedAt ELSE state_changed_at END
   `);
   const exists = db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?");
 
@@ -150,7 +156,7 @@ export function setJobState(
 ): boolean {
   const result = db
     .prepare(
-      "UPDATE jobs SET state = $state, last_checked_at = $lastCheckedAt WHERE listing_id = $listingId",
+      "UPDATE jobs SET state_changed_at = CASE WHEN state != $state THEN $lastCheckedAt ELSE state_changed_at END, state = $state, last_checked_at = $lastCheckedAt WHERE listing_id = $listingId",
     )
     .run({
       $state: state,
@@ -158,6 +164,41 @@ export function setJobState(
       $listingId: listingId,
     });
   return result.changes > 0;
+}
+
+/**
+ * Jobs currently in `state` whose last state change falls in [from, to),
+ * newest change first. Rows from before state_changed_at existed fall back
+ * to last_checked_at.
+ */
+export function jobsInStateBetween(
+  db: Database,
+  state: ListingState,
+  from: Date | null,
+  to: Date | null,
+): Array<StoredJob & { stateChangedAt: string }> {
+  const changed = new Map(
+    (
+      db
+        .prepare(
+          "SELECT listing_id, COALESCE(state_changed_at, last_checked_at) AS changed FROM jobs WHERE state = $state",
+        )
+        .all({ $state: state }) as Array<{
+        listing_id: string;
+        changed: string;
+      }>
+    ).map((r) => [r.listing_id, r.changed]),
+  );
+  return jobsByState(db, state)
+    .map((job) => ({
+      ...job,
+      stateChangedAt: changed.get(job.listingId) ?? job.lastCheckedAt,
+    }))
+    .filter((job) => {
+      const t = new Date(job.stateChangedAt).getTime();
+      return (!from || t >= from.getTime()) && (!to || t < to.getTime());
+    })
+    .sort((a, b) => b.stateChangedAt.localeCompare(a.stateChangedAt));
 }
 
 export function clearJobs(db: Database): void {
