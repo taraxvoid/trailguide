@@ -207,7 +207,14 @@ export async function runInit(
     keywords: roles,
   });
 
-  const dbPath = resolveDbPath({ db: options.db, cwd, env });
+  // Only the global config just written: a local ./igor.toml (a sandbox, say)
+  // must not redirect or break init's own database.
+  const dbPath = resolveDbPath({
+    db: options.db,
+    config: configPath,
+    cwd,
+    env,
+  });
   const existed = existsSync(dbPath);
   // Creates tables only if missing; existing data is untouched.
   openDb(dbPath).close();

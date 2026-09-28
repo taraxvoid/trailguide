@@ -220,6 +220,13 @@ describe("runInit never destroys anything", () => {
     expect(readConfig().locations?.[0]?.city).toBe("Omaha");
   });
 
+  it("ignores a local igor.toml when choosing the database", async () => {
+    writeFileSync(join(root, "igor.toml"), '[db]\npath = "sandbox.db"\n');
+    await runInit(flags, scripted([]));
+    expect(existsSync(dbPath())).toBe(true);
+    expect(existsSync(join(root, "sandbox.db"))).toBe(false);
+  });
+
   it("keeps an existing database and its jobs", async () => {
     const db = openDb(dbPath());
     upsertJobs(db, [
