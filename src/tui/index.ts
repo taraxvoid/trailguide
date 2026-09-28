@@ -5,7 +5,10 @@ import { formatGitVersion, gitVersion } from "../version.ts";
 import JobBrowser from "./App.tsx";
 
 export interface TuiOptions {
+  /** Absolute db path (from resolveDbPath). */
   db: string;
+  /** Explicit config file, forwarded to detached `igor search` children. */
+  config?: string;
 }
 
 export async function runTui(options: TuiOptions): Promise<void> {
@@ -13,8 +16,13 @@ export async function runTui(options: TuiOptions): Promise<void> {
   const git = gitVersion();
   const version = git ? formatGitVersion(git) : null;
 
-  const { unmount, waitUntilExit } = render(
-    React.createElement(JobBrowser, { db, dbPath: options.db, version }),
+  const { waitUntilExit } = render(
+    React.createElement(JobBrowser, {
+      db,
+      dbPath: options.db,
+      configPath: options.config,
+      version,
+    }),
     { exitOnCtrlC: true },
   );
 

@@ -479,8 +479,9 @@ export function startTailorRun(
   listingId: string,
   pid: number,
   now?: string,
+  options?: { forChild?: boolean },
 ): boolean {
-  return startRun(db, "tailor", listingId, pid, now);
+  return startRun(db, "tailor", listingId, pid, now, options);
 }
 
 export function finishTailorRun(

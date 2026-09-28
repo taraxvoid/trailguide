@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { Command, Option } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
@@ -447,8 +447,11 @@ export function createProgram(
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
     .action(async (options: { db?: string; config?: string }) => {
+      // The TUI resolves paths only; the spawned search reads the settings.
+      const config = options.config ?? (process.env.IGOR_CONFIG || undefined);
       await runTui({
-        db: resolveDbPath({ db: options.db, config: options.config }),
+        db: resolveDbPath({ db: options.db, config }),
+        config: config ? resolve(config) : undefined,
       });
     });
 

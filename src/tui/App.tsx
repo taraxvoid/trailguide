@@ -19,9 +19,12 @@ import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
+  SEARCH_RUN_KEY,
   allJobs,
+  getRun,
   getTailorRun,
   getTailoredResume,
+  runningRuns,
   runningTailorIds,
   setJobApplied,
   setJobState,
@@ -29,11 +32,14 @@ import {
   tailoredListingIds,
 } from "../db.ts";
 import { linkifyPdfPath, openTarget } from "./open.ts";
+import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 
 interface AppProps {
   db: Database;
-  /** Path to the sqlite file, passed to the detached `igor tailor` children. */
+  /** Absolute path to the sqlite file, passed to the detached igor children. */
   dbPath: string;
+  /** Explicit config file (--config or IGOR_CONFIG), forwarded to `igor search`. */
+  configPath?: string;
   /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
   version?: string | null;
 }
@@ -77,7 +83,7 @@ const FOOTER_BEFORE =
 const FOOTER_TAILOR_AFTER = " [⌃t] | open tailored resume [⌃o] | mark ";
 const FOOTER_ARCHIVED_AFTER = " [e] mark ";
 const FOOTER_AFTER =
-  " [a] | toggle view [⌃e] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
+  " [a] | toggle view [⌃e] | search [⌃s] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_TAILOR_AFTER}archived${FOOTER_ARCHIVED_AFTER}applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
@@ -190,7 +196,12 @@ function StatusTags({ tags }: { tags: StatusTag[] }) {
   );
 }
 
-export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
+export default function JobBrowser({
+  db,
+  dbPath,
+  configPath,
+  version = null,
+}: AppProps) {
   const { exit } = useApp();
   const { isRawModeSupported } = useStdin();
   const { rows, columns } = useWindowSize();
@@ -202,13 +213,19 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Listings with a tailor/regen in flight. Each is a detached `igor tailor`
-  // process (so it survives quitting the TUI); the tailor_runs table is the
+  // process (so it survives quitting the TUI); the runs table is the
   // source of truth and is polled below.
   const [tailoringIds, setTailoringIds] = useState<Set<string>>(() =>
     runningTailorIds(db),
   );
   const [pulseTick, setPulseTick] = useState(0);
   const prevRunning = useRef<Set<string>>(tailoringIds);
+  // A detached `igor search`; the runs table is the source of truth, so the
+  // indicator survives restarting the TUI.
+  const [isSearching, setIsSearching] = useState(
+    () => runningRuns(db, "search").length > 0,
+  );
+  const prevSearching = useRef(isSearching);
   const [tailoredIds, setTailoredIds] = useState<Set<string>>(() =>
     tailoredListingIds(db),
   );
@@ -407,15 +424,24 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
           );
         }
       }
+      const searching = runningRuns(db, "search").length > 0;
+      if (prevSearching.current && !searching) {
+        setJobs(allJobs(db));
+        const run = getRun(db, "search", SEARCH_RUN_KEY);
+        // Stays until the next status, so a failure can be read.
+        if (run) setStatusMessage(describeSearchRun(run, dbPath));
+      }
+      prevSearching.current = searching;
+      setIsSearching(searching);
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [db]);
+  }, [db, dbPath]);
 
   useEffect(() => {
-    if (tailoringIds.size === 0) return;
+    if (tailoringIds.size === 0 && !isSearching) return;
     const timer = setInterval(() => setPulseTick((t) => t + 1), PULSE_TICK_MS);
     return () => clearInterval(timer);
-  }, [tailoringIds.size]);
+  }, [tailoringIds.size, isSearching]);
 
   const handleTailor = useCallback(() => {
     const job = visibleJobs[selectedIndex];
@@ -438,7 +464,8 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
     proc.unref();
     // Record the child's pid now so the bar pulses immediately, before the
     // child has finished starting up.
-    startTailorRun(db, job.listingId, proc.pid);
+    // forChild: a fast child may already have finished its own row.
+    startTailorRun(db, job.listingId, proc.pid, undefined, { forChild: true });
     const running = runningTailorIds(db);
     prevRunning.current = running;
     setTailoringIds(running);
@@ -446,6 +473,17 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       `Tailoring ${job.title} @ ${job.company} in the background (survives quitting)…`,
     );
   }, [db, dbPath, visibleJobs, selectedIndex, tailoringIds]);
+
+  const handleSearch = useCallback(() => {
+    const result = startBackgroundSearch({ db, dbPath, configPath });
+    if (!result.started) {
+      showStatus(result.message);
+      return;
+    }
+    prevSearching.current = true;
+    setIsSearching(true);
+    setStatusMessage(result.message);
+  }, [db, dbPath, configPath, showStatus]);
 
   const handleOpenResume = useCallback(async () => {
     const job = visibleJobs[selectedIndex];
@@ -468,6 +506,10 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       }
       if (key.ctrl && input === "r") {
         if (!isRefreshing) handleRefresh();
+        return;
+      }
+      if (key.ctrl && input === "s") {
+        handleSearch();
         return;
       }
       if (key.upArrow || input === "k") {
@@ -532,6 +574,7 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       handleRefresh,
       handleStateChange,
       handleTailor,
+      handleSearch,
       handleOpenResume,
     ],
   );
@@ -574,6 +617,11 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
               {version}
             </Text>
           )}
+          {isSearching && (
+            <Text color={pulseColor(pulseTick)} wrap="truncate-end">
+              {"  Searching..."}
+            </Text>
+          )}
         </Box>
         <Text>
           {VIEW_TABS.filter((tab) => tab === viewTab).map((tab, i) => (
@@ -599,8 +647,9 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
         {visibleJobs.length === 0 ? (
           <Box flexDirection="column" alignItems="center" marginTop={2}>
             <Text dimColor>No jobs found.</Text>
-            <Text dimColor>Run a search first:</Text>
-            <Text dimColor> igor search --role "software engineer"</Text>
+            <Text dimColor>
+              Press ctrl+S to search (run igor init first if you have no config)
+            </Text>
           </Box>
         ) : (
           visibleSlice.map((job, i) => {

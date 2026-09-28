@@ -56,6 +56,23 @@ describe("tailor runs", () => {
     expect(startTailorRun(db, "a:1", process.pid)).toBe(true);
   });
 
+  it("with forChild, keeps a same-pid finished outcome instead of resurrecting it", () => {
+    const db = freshDb();
+    startTailorRun(db, "a:1", process.pid);
+    finishTailorRun(db, "a:1", true, "Wrote x.pdf");
+    expect(
+      startTailorRun(db, "a:1", process.pid, undefined, { forChild: true }),
+    ).toBe(true);
+    expect(getTailorRun(db, "a:1")).toMatchObject({
+      ok: true,
+      message: "Wrote x.pdf",
+    });
+    expect(runningTailorIds(db).size).toBe(0);
+    // The default claim still resets the row.
+    expect(startTailorRun(db, "a:1", process.pid)).toBe(true);
+    expect(runningTailorIds(db).has("a:1")).toBe(true);
+  });
+
   it("closes out runs whose process died as failed", async () => {
     const db = freshDb();
     const pid = await deadPid();
