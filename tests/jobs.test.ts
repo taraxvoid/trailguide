@@ -73,4 +73,24 @@ describe("jobsInStateBetween", () => {
     const got = jobsInStateBetween(db, "applied", from, to);
     expect(got.map((j) => j.listingId)).toEqual(["jsearch:1"]);
   });
+
+  it("keeps applied jobs that were archived afterwards", () => {
+    const db = openDb(":memory:");
+    upsertJobs(db, [job("1")]);
+    setJobState(
+      db,
+      "jsearch:1",
+      "applied",
+      new Date(2026, 8, 15).toISOString(),
+    );
+    setJobState(
+      db,
+      "jsearch:1",
+      "archived",
+      new Date(2026, 8, 23).toISOString(),
+    );
+    const { from, to } = parseRange("last week", now);
+    const got = jobsInStateBetween(db, "applied", from, to);
+    expect(got.map((j) => j.listingId)).toEqual(["jsearch:1"]);
+  });
 });

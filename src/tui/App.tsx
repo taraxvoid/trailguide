@@ -23,6 +23,7 @@ import {
   getTailorRun,
   getTailoredResume,
   runningTailorIds,
+  setJobApplied,
   setJobState,
   startTailorRun,
   tailoredListingIds,
@@ -51,6 +52,7 @@ const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
 const NEON_GREEN = "#39ff14";
 const NEON_BLUE = "#4dd2ff";
+const MUTED_YELLOW = "#a89a4a";
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
@@ -153,17 +155,34 @@ function previewLines(
   return shown;
 }
 
-function formatState(state: ListingState): string {
-  switch (state) {
-    case "active":
-      return "";
-    case "applied":
-      return "[applied]";
-    case "archived":
-      return "[archived]";
-    case "inactive":
-      return "[inactive]";
-  }
+interface StatusTag {
+  label: string;
+  color: string | undefined;
+}
+
+function statusTags(job: StoredJob, tailored: boolean): StatusTag[] {
+  const { state } = job;
+  const tags: StatusTag[] = [];
+  if (job.appliedAt) tags.push({ label: "[applied]", color: NEON_BLUE });
+  if (tailored) tags.push({ label: "[tailored]", color: NEON_GREEN });
+  if (state === "archived")
+    tags.push({ label: "[archived]", color: MUTED_YELLOW });
+  if (state === "inactive")
+    tags.push({ label: "[inactive]", color: undefined });
+  return tags;
+}
+
+function StatusTags({ tags }: { tags: StatusTag[] }) {
+  return (
+    <>
+      {tags.map((t) => (
+        <Text key={t.label} color={t.color} dimColor={!t.color}>
+          {" "}
+          {t.label}
+        </Text>
+      ))}
+    </>
+  );
 }
 
 export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
@@ -233,8 +252,11 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
       );
   const descriptionLineCount = descriptionShownLines.length;
 
+  const selectedTags = selectedJob
+    ? statusTags(selectedJob, selectedIsTailored === true)
+    : [];
   const titleLine = selectedJob
-    ? `${selectedJob.title} ${formatState(selectedJob.state)}`.trim()
+    ? [selectedJob.title, ...selectedTags.map((t) => t.label)].join(" ")
     : "";
   const companyLine = selectedJob
     ? `${selectedJob.company}${
@@ -337,6 +359,16 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
       if (!job) return;
+      // On an archived job [a] toggles the applied mark without unarchiving.
+      if (state === "applied" && job.state === "archived") {
+        const now = new Date().toISOString();
+        setJobApplied(db, job.listingId, !job.appliedAt, now);
+        setJobs(allJobs(db));
+        showStatus(
+          `${job.appliedAt ? "unmarked applied" : "applied"}: ${job.title} @ ${job.company}`,
+        );
+        return;
+      }
       // Pressing [a] on an already-applied job undoes it.
       const next =
         state === "applied" && job.state === "applied" ? "active" : state;
@@ -618,7 +650,8 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
             flexDirection="column"
           >
             <Text bold color="green">
-              {selectedJob.title} {formatState(selectedJob.state)}
+              {selectedJob.title}
+              <StatusTags tags={selectedTags} />
             </Text>
             <Text>
               {selectedJob.company}
@@ -659,10 +692,10 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
           {FOOTER_MID}
           <Text
             dimColor={false}
-            bold={selectedJob?.state === "applied"}
-            color={selectedJob?.state === "applied" ? NEON_BLUE : undefined}
+            bold={!!selectedJob?.appliedAt}
+            color={selectedJob?.appliedAt ? NEON_BLUE : undefined}
           >
-            mark applied
+            applied
           </Text>
           {FOOTER_AFTER}
         </Text>
@@ -681,12 +714,13 @@ interface JobRowProps {
 function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
   return (
     <Box marginBottom={1}>
-      {/* Two thin status slots. Applied (blue) owns the left slot; tailored
-          (green) takes the left slot when not applied, else the right. */}
-      {[0, 1].map((slot) => {
+      {/* Thin status slots, packed left in order: applied (blue), tailored
+          (green), archived (muted yellow). */}
+      {[0, 1, 2].map((slot) => {
         const slots = [
-          job.state === "applied" ? NEON_BLUE : null,
+          job.appliedAt ? NEON_BLUE : null,
           pulse ?? (isTailored ? NEON_GREEN : null),
+          job.state === "archived" ? MUTED_YELLOW : null,
         ].filter((c): c is string => c !== null);
         const color = slots[slot];
         return (
@@ -712,9 +746,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
             {job.title}
           </Text>
           <Text dimColor> @ {job.company}</Text>
-          {formatState(job.state) && (
-            <Text dimColor> {formatState(job.state)}</Text>
-          )}
+          <StatusTags tags={statusTags(job, isTailored)} />
         </Box>
         <Box marginLeft={isSelected ? 3 : 0}>
           <Text dimColor>
