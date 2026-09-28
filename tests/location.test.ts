@@ -289,3 +289,16 @@ describe("city normalization for aliases", () => {
     expect(matchesLocation("Anywhere", "")).toBe(false);
   });
 });
+
+describe("state-stripped key is not a match term", () => {
+  it("does not match a same-named city in another state", () => {
+    expect(matchesLocation("Portland, ME", "Portland, OR")).toBe(false);
+    expect(matchesLocation("Springfield, MA", "Springfield, IL")).toBe(false);
+    expect(matchesLocation("Portland, OR", "Portland, OR")).toBe(true);
+  });
+
+  it("expands USA and U.S. cities against United States text", () => {
+    expect(matchesLocation("United States", "USA")).toBe(true);
+    expect(matchesLocation("United States", "U.S.")).toBe(true);
+  });
+});

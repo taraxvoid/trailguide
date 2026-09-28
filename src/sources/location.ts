@@ -62,7 +62,7 @@ function aliasesFor(place: string): string[] {
   if (text === "") return [];
   const derived = aliasKey(text);
   const key = KEY_SYNONYMS[derived] ?? derived;
-  return [...new Set([text, ...(LOCATION_ALIASES[key] ?? [key])])];
+  return [...new Set([text, ...(LOCATION_ALIASES[key] ?? [])])];
 }
 
 export function matchesLocation(
