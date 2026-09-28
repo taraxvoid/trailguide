@@ -111,6 +111,11 @@ export async function runSearch(
   options: SearchOptions,
   deps: SearchDeps = {},
 ): Promise<SearchResult | null> {
+  // Validated before the run claim so a typo cannot overwrite the previous
+  // search row with a failed run.
+  if (options.remote && options.onsite) {
+    throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
   const cwd = deps.cwd ?? process.cwd();
   const env = deps.env ?? process.env;
   // With --db (the TUI always passes it) this reads no config, so a config

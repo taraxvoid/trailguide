@@ -7,6 +7,7 @@ import { ConfigError } from "../src/config.ts";
 import {
   SEARCH_RUN_KEY,
   allJobs,
+  finishRun,
   getRun,
   openDb,
   startRun,
@@ -229,6 +230,23 @@ describe("runSearch config errors", () => {
     ).rejects.toThrow(ConfigError);
     expect(source.calls).toHaveLength(0);
     expect(searchRun()?.ok).toBe(false);
+  });
+
+  it("rejects --remote with --onsite before claiming, leaving the previous run untouched", async () => {
+    const db = openDb(dbPath());
+    startRun(db, "search", SEARCH_RUN_KEY, process.pid);
+    finishRun(db, "search", SEARCH_RUN_KEY, true, "3 found, 1 new");
+    const before = getRun(db, "search", SEARCH_RUN_KEY);
+    db.close();
+    const source = fake([job({})]);
+    await expect(
+      runSearch(
+        flags({ role: ["swe"], remote: true, onsite: true }),
+        deps([source.source]),
+      ),
+    ).rejects.toThrow("--remote and --onsite are mutually exclusive");
+    expect(source.calls).toHaveLength(0);
+    expect(searchRun()).toEqual(before);
   });
 
   it("hints at igor init when there is no config and no --role", async () => {
