@@ -21,7 +21,7 @@ cp .env.example .env
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
 - `OLLAMA_HOST` / `OLLAMA_MODEL` — only needed if you want to override the defaults for `igor tailor` (see below)
-- `IGOR_DB` / `IGOR_CONFIG` — optional overrides for the db path and config file (see Configuration below)
+- `IGOR_DB` / `IGOR_CONFIG`: optional overrides for the db path and config file (see Configuration below)
 
 Other sources don't require creds
 
@@ -140,7 +140,7 @@ everywhere else. Set `IGOR_NO_DELEGATE=1` to always run the linked one.
 - ←→ / h l — switch between Active / Applied / Archived tabs
 - ↵ — expand/collapse the selected job's description
 - o — open the listing URL in your browser
-- ⌃s — search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `igor-search.log` next to the db
+- ⌃s: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `igor-search.log` next to the db
 - ⌃t — tailor your resume to the selected job, or regenerate its PDF if it already has one (see below)
 - e — archive
 - a — mark applied
