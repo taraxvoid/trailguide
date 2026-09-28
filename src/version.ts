@@ -13,10 +13,25 @@ export interface GitVersion {
   dirty: boolean;
 }
 
+/**
+ * The environment without repo-selecting GIT_* variables. Git hooks export
+ * GIT_DIR/GIT_INDEX_FILE, which override `-C` and would make us read the
+ * hook's repo instead of the one containing `cwd`.
+ */
+export function cleanGitEnv(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (e): e is [string, string] =>
+        e[1] !== undefined && !e[0].startsWith("GIT_"),
+    ),
+  );
+}
+
 function git(cwd: string, args: string[]): string | null {
   try {
     const proc = Bun.spawnSync({
       cmd: ["git", "-C", cwd, ...args],
+      env: cleanGitEnv(),
       stdout: "pipe",
       stderr: "ignore",
     });
