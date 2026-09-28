@@ -69,11 +69,16 @@ const SECTION_HEADER_LINES = 1;
 // Worst case in the active view: an "Applied" header and an "Active" header.
 const MAX_SECTION_HEADERS = 2;
 
+// The footer is rendered in pieces so the tailor/regen/archived/applied verbs
+// can be colored; FOOTER_TEXT stitches the same pieces back together for the
+// wrap-height measurement, so the two can't drift apart.
 const FOOTER_BEFORE =
-  "[↑↓/k/j] navigate [←→/pgup/pgdn] page [↵] expand/collapse [o] open [⌃o] resume PDF [⌃t] ";
-const FOOTER_MID = " resume [e] archive [a] ";
-const FOOTER_AFTER = " [⌃e] archived view [⌃r] refresh [q] quit";
-const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_MID}mark applied${FOOTER_AFTER}`;
+  "Nav: [↑↓/k/j] / [←→/pgup/pgdn] | Actions: expand [↵] | open link [o] | ";
+const FOOTER_TAILOR_AFTER = " [⌃t] | open tailored resume [⌃o] | mark ";
+const FOOTER_ARCHIVED_AFTER = " [e] mark ";
+const FOOTER_AFTER =
+  " [a] | toggle view [⌃e] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
+const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_TAILOR_AFTER}archived${FOOTER_ARCHIVED_AFTER}applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -689,7 +694,15 @@ export default function JobBrowser({ db, dbPath, version = null }: AppProps) {
           >
             regen
           </Text>
-          {FOOTER_MID}
+          {FOOTER_TAILOR_AFTER}
+          <Text
+            dimColor={false}
+            bold={selectedJob?.state === "archived"}
+            color={selectedJob?.state === "archived" ? MUTED_YELLOW : undefined}
+          >
+            archived
+          </Text>
+          {FOOTER_ARCHIVED_AFTER}
           <Text
             dimColor={false}
             bold={!!selectedJob?.appliedAt}
