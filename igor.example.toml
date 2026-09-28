@@ -8,8 +8,8 @@ govmil = false             # true to include jobs that mention a clearance
 
 # Uncomment for a self-contained sandbox next to this file (relative paths
 # resolve against this file's directory). Default: ~/.local/share/igor/igor.db
-[db]
-path = "igor.db"
+# [db]
+# path = "igor.db"
 
 # Every keyword is searched in every location. At least one of each is required.
 # Use specific cities for in-person work; broad regions only match listings
