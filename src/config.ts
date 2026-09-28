@@ -280,3 +280,94 @@ export function describeConfig(ctx: ConfigContext = {}): string {
     formatConfig(config).trimEnd(),
   ].join("\n");
 }
+
+/** One location a search runs in. `city: null` means no location given. */
+export interface SearchTarget {
+  city: string | null;
+  flexibility: Flexibility;
+  region: string[];
+}
+
+/** Every keyword is searched in every target. */
+export interface SearchPlan {
+  keywords: string[];
+  targets: SearchTarget[];
+  govmil: boolean;
+}
+
+/** The `igor search` flags that shape a search. */
+export interface SearchFlags {
+  role?: string[];
+  location?: string[];
+  remote?: boolean;
+  onsite?: boolean;
+  clearance?: boolean;
+}
+
+/**
+ * With --role, the flags describe the whole search and the config is not
+ * read. Otherwise the config supplies keywords and locations, and
+ * --location, --remote/--onsite and --clearance override pieces of it.
+ */
+export function toSearchOptions(
+  flags: SearchFlags,
+  load: () => LoadedConfig,
+): SearchPlan {
+  if (flags.remote && flags.onsite) {
+    throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
+  const flagFlexibility: Flexibility | null = flags.remote
+    ? "remote"
+    : flags.onsite
+      ? "in-person"
+      : null;
+  const flagTargets = flags.location?.map(
+    (city): SearchTarget => ({
+      city,
+      flexibility: flagFlexibility ?? "any",
+      region: [],
+    }),
+  );
+
+  if (flags.role && flags.role.length > 0) {
+    return {
+      keywords: flags.role,
+      targets: flagTargets ?? [
+        { city: null, flexibility: flagFlexibility ?? "any", region: [] },
+      ],
+      govmil: flags.clearance ?? false,
+    };
+  }
+
+  const { config, files } = load();
+  if (files.length === 0) {
+    throw new ConfigError(
+      'no config file found. Run "igor init" to create one, or pass --role.',
+    );
+  }
+  const where = files.join(", ");
+  if (!config.keywords || config.keywords.length === 0) {
+    throw new ConfigError(
+      `no [[keywords]] configured (${where}). Add at least one [[keywords]] role, or pass --role.`,
+    );
+  }
+  const targets =
+    flagTargets ??
+    config.locations?.map(
+      (entry): SearchTarget => ({
+        city: entry.city,
+        flexibility: flagFlexibility ?? entry.flexibility,
+        region: entry.region,
+      }),
+    );
+  if (!targets || targets.length === 0) {
+    throw new ConfigError(
+      `no [[location]] configured (${where}). At least one location is required so a search is never unbounded.`,
+    );
+  }
+  return {
+    keywords: config.keywords,
+    targets,
+    govmil: (flags.clearance ?? false) || (config.govmil ?? false),
+  };
+}
