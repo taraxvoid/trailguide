@@ -16,6 +16,8 @@ export interface NormalizedJob {
   title: string;
   company: string;
   location: string;
+  /** Other places the posting lists (e.g. ashby secondary locations). Matching only; not stored. */
+  otherLocations?: string[];
   remoteType: RemoteType;
   url: string;
   postedAt: string | null;
