@@ -9,9 +9,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { PassThrough } from "node:stream";
 import { ConfigError, parseConfig } from "../src/config.ts";
 import { allJobs, openDb, upsertJobs } from "../src/db.ts";
-import { type InitIO, parseWork, runInit } from "../src/init.ts";
+import { type InitIO, parseWork, runInit, terminalIO } from "../src/init.ts";
 
 let root: string;
 let env: Record<string, string>;
@@ -240,5 +241,27 @@ describe("runInit never destroys anything", () => {
     expect(allJobs(again)).toHaveLength(1);
     again.close();
     expect(logs.join("\n")).toContain("Using existing database");
+  });
+});
+
+describe("terminalIO", () => {
+  it("rejects a pending question when input ends before init finishes", async () => {
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const io = terminalIO(input, output);
+    const pending = io.ask("> ");
+    input.end();
+    await expect(pending).rejects.toThrow("input ended before init finished");
+    await expect(io.ask("> ")).rejects.toThrow(ConfigError);
+    io.close();
+  });
+
+  it("returns typed answers", async () => {
+    const input = new PassThrough();
+    const io = terminalIO(input, new PassThrough());
+    const pending = io.ask("> ");
+    input.write("hello\n");
+    expect(await pending).toBe("hello");
+    io.close();
   });
 });

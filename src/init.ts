@@ -220,16 +220,35 @@ export async function runInit(
   return true;
 }
 
-export function terminalIO(): InitIO & { close(): void } {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
+export function terminalIO(
+  input: NodeJS.ReadableStream = process.stdin,
+  output: NodeJS.WritableStream = process.stdout,
+): InitIO & { close(): void } {
+  const rl = createInterface({ input, output });
+  let ended = false;
+  let rejectPending: ((err: Error) => void) | null = null;
+  const endedError = () => new ConfigError("input ended before init finished");
+  // EOF while a question is pending never resolves it, so settle it here.
+  rl.on("close", () => {
+    ended = true;
+    rejectPending?.(endedError());
+  });
   return {
-    // A closed stdin (piped, CI) reads as an empty answer.
-    ask: async (question) => {
-      try {
-        return await rl.question(question);
-      } catch {
-        return "";
-      }
+    ask: (question) => {
+      if (ended) return Promise.reject(endedError());
+      return new Promise<string>((resolve, reject) => {
+        rejectPending = reject;
+        rl.question(question).then(
+          (answer) => {
+            rejectPending = null;
+            resolve(answer);
+          },
+          (err) => {
+            rejectPending = null;
+            reject(ended ? endedError() : err);
+          },
+        );
+      });
     },
     log: (message) => console.log(message),
     close: () => rl.close(),
