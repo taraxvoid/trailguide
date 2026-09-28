@@ -465,7 +465,20 @@ export function runningRuns(db: Database, kind: RunKind): Run[] {
   for (const row of rows) {
     const run = toRun(row);
     if (pidAlive(run.pid)) live.push(run);
-    else finishRun(db, kind, run.key, false, exitedUnexpectedly(kind));
+    else {
+      // Guarded on the observed pid: if another process re-claimed the row
+      // since the SELECT, its fresh run must not be closed out.
+      db.prepare(
+        `UPDATE runs SET finished_at = $now, ok = 0, message = $message
+         WHERE kind = $kind AND key = $key AND finished_at IS NULL AND pid = $pid`,
+      ).run({
+        $kind: kind,
+        $key: run.key,
+        $pid: run.pid,
+        $now: new Date().toISOString(),
+        $message: exitedUnexpectedly(kind),
+      });
+    }
   }
   return live;
 }

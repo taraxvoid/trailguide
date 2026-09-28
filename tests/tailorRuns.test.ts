@@ -149,6 +149,39 @@ describe("runs", () => {
     b.close();
   });
 
+  it("does not close out a run that another process re-claimed after the read", async () => {
+    const path = `/tmp/igor-runs-reclaim-${Date.now()}-${++counter}.db`;
+    rmSync(path, { force: true });
+    const a = openDb(path);
+    const b = openDb(path);
+    startRun(a, "search", SEARCH_RUN_KEY, await deadPid());
+    const realKill = process.kill.bind(process);
+    let reclaimed = false;
+    const spy = spyOn(process, "kill").mockImplementation(((
+      pid: number,
+      signal?: string | number,
+    ) => {
+      if (!reclaimed) {
+        reclaimed = true;
+        startRun(b, "search", SEARCH_RUN_KEY, process.pid);
+      }
+      return realKill(pid, signal);
+    }) as typeof process.kill);
+    try {
+      runningRuns(a, "search");
+    } finally {
+      spy.mockRestore();
+    }
+    expect(reclaimed).toBe(true);
+    expect(getRun(a, "search", SEARCH_RUN_KEY)).toMatchObject({
+      pid: process.pid,
+      finishedAt: null,
+      ok: null,
+    });
+    a.close();
+    b.close();
+  });
+
   it("closes out a dead run as failed, naming its kind", async () => {
     const db = freshDb();
     startRun(db, "search", SEARCH_RUN_KEY, await deadPid());
