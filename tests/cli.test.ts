@@ -158,11 +158,11 @@ describe("search command parsing", () => {
     return { program, calls };
   }
 
-  it("requires --role", async () => {
-    const { program } = programWithSpy();
-    await expect(
-      program.parseAsync(["node", "igor", "search"]),
-    ).rejects.toThrow(/--role/);
+  it("does not require --role (the config supplies keywords)", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync(["node", "igor", "search"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.role).toBeUndefined();
   });
 
   it("accepts --remote as a boolean flag", async () => {

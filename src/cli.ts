@@ -3,7 +3,13 @@ import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
 import { Command, Option } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
-import { ConfigError, describeConfig, resolveDbPath } from "./config.ts";
+import {
+  ConfigError,
+  describeConfig,
+  loadConfig,
+  resolveDbPath,
+  toSearchOptions,
+} from "./config.ts";
 import {
   parseBoundary,
   parseRange,
@@ -11,21 +17,31 @@ import {
   weekRange,
 } from "./dateRange.ts";
 import {
+  SEARCH_RUN_KEY,
+  type StoredJob,
   allJobs,
   clearJobs,
+  finishRun,
   finishTailorRun,
   jobsByState,
   jobsInStateBetween,
   listingId,
   openDb,
   setJobState,
+  startRun,
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
 import type { ListingState } from "./db.ts";
-import { dedupe } from "./dedupe.ts";
 import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
-import { isInternship, requiresClearance } from "./search.ts";
+import type { Env } from "./paths.ts";
+import {
+  type SearchResult,
+  collectJobs,
+  formatRunMessage,
+  isInternship,
+  requiresClearance,
+} from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
@@ -38,7 +54,6 @@ import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
-import { stripTrackingParams } from "./url.ts";
 
 // Re-exported so existing importers (tests/cli.test.ts) keep working.
 export { isInternship, requiresClearance };
@@ -70,7 +85,8 @@ export interface SearchOptions {
   location?: string[];
   remote?: boolean;
   onsite?: boolean;
-  role: string[];
+  /** When given, the flags are the whole search and the config is not read. */
+  role?: string[];
   json: boolean;
   csv: boolean;
   db?: string;
@@ -78,53 +94,90 @@ export interface SearchOptions {
   clearance: boolean;
 }
 
-export async function runSearch(options: SearchOptions): Promise<void> {
-  const sources = buildSources();
-  const results = await Promise.all(
-    sources.map((source) =>
-      source
-        .search({
-          role: options.role,
-          location: options.location,
-          remote: options.remote,
-          onsite: options.onsite,
-        })
-        .catch((err) => {
-          console.error(
-            `[${source.name}] search failed: ${err instanceof Error ? err.message : err}`,
-          );
-          return [];
-        }),
-    ),
-  );
+export interface SearchDeps {
+  sources?: Source[];
+  isUrlDead?: (url: string) => Promise<boolean>;
+  cwd?: string;
+  env?: Env;
+}
 
-  const jobs = dedupe(results.flat())
-    .filter((job) => !isInternship(job))
-    .filter((job) => options.clearance || !requiresClearance(job))
-    .filter((job) => {
-      if (options.remote && job.remoteType !== "remote") return false;
-      if (options.onsite && job.remoteType === "remote") return false;
-      return true;
-    })
-    .map((job) => ({ ...job, url: stripTrackingParams(job.url) }));
-  const states = new Map<string, ListingState>();
-  await Promise.all(
-    jobs.map(async (job) => {
-      if (await isUrlDead(job.url)) {
-        states.set(listingId(job), "inactive");
-      }
-    }),
-  );
-  const dbPath = resolveDbPath({ db: options.db, config: options.config });
+/**
+ * Runs a search and records it as the db's single `search` run, so a manual
+ * run shows in the TUI and a second concurrent one is refused. Returns null
+ * when refused.
+ */
+export async function runSearch(
+  options: SearchOptions,
+  deps: SearchDeps = {},
+): Promise<SearchResult | null> {
+  const cwd = deps.cwd ?? process.cwd();
+  const env = deps.env ?? process.env;
+  // With --db (the TUI always passes it) this reads no config, so a config
+  // error below is recorded on the run instead of escaping before the claim.
+  const dbPath = resolveDbPath({
+    db: options.db,
+    config: options.config,
+    cwd,
+    env,
+  });
   const db = openDb(dbPath);
-  const newJobs = upsertJobs(db, jobs, states);
+  if (!startRun(db, "search", SEARCH_RUN_KEY, process.pid)) {
+    db.close();
+    console.error("error: search already running");
+    process.exitCode = 1;
+    return null;
+  }
+
+  let jobs: NormalizedJob[] = [];
+  let newJobs: StoredJob[] = [];
+  let stored: StoredJob[] = [];
+  let result: SearchResult;
+  try {
+    const plan = toSearchOptions(options, () =>
+      loadConfig({ config: options.config, cwd, env }),
+    );
+    const collected = await collectJobs(plan, deps.sources ?? buildSources());
+    jobs = collected.jobs;
+    const deadCheck = deps.isUrlDead ?? isUrlDead;
+    const states = new Map<string, ListingState>();
+    await Promise.all(
+      jobs.map(async (job) => {
+        if (await deadCheck(job.url)) states.set(listingId(job), "inactive");
+      }),
+    );
+    newJobs = upsertJobs(db, jobs, states);
+    if (options.json || options.csv) stored = allJobs(db);
+    result = {
+      found: jobs.length,
+      new: newJobs.length,
+      failures: collected.failures,
+    };
+    finishRun(
+      db,
+      "search",
+      SEARCH_RUN_KEY,
+      !collected.allFailed,
+      formatRunMessage(result),
+    );
+    if (collected.allFailed) process.exitCode = 1;
+  } catch (err) {
+    finishRun(
+      db,
+      "search",
+      SEARCH_RUN_KEY,
+      false,
+      err instanceof Error ? err.message : String(err),
+    );
+    throw err;
+  } finally {
+    db.close();
+  }
 
   if (options.json) {
-    console.log(JSON.stringify(allJobs(db), null, 2));
+    console.log(JSON.stringify(stored, null, 2));
   } else if (options.csv) {
-    const rows = allJobs(db);
     console.log("title,company,location,remoteType,url");
-    for (const job of rows) {
+    for (const job of stored) {
       console.log(
         [job.title, job.company, job.location, job.remoteType, job.url]
           .map((v) => `"${v.replace(/"/g, '""')}"`)
@@ -143,6 +196,7 @@ export async function runSearch(options: SearchOptions): Promise<void> {
       `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${dbPath}`,
     );
   }
+  return result;
 }
 
 export async function runClear(options: { db?: string }): Promise<void> {
@@ -345,7 +399,7 @@ const CONFIG_HELP =
   "config file to use instead of the global config plus ./igor.toml";
 
 export function createProgram(
-  searchAction: (options: SearchOptions) => Promise<void> = runSearch,
+  searchAction: (options: SearchOptions) => Promise<unknown> = runSearch,
   clearAction: (options: { db?: string }) => Promise<void> = runClear,
   refreshAction: (options: { db?: string }) => Promise<void> = runRefresh,
   tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
@@ -359,10 +413,12 @@ export function createProgram(
 
   program
     .command("search")
-    .description("Search job sources and store results")
-    .requiredOption(
+    .description(
+      "Search job sources (from the config, or --role) and store results",
+    )
+    .option(
       "--role <query...>",
-      "role/title to search for (accepts multiple values)",
+      "role/title to search for (accepts multiple values); omit to use the config's [[keywords]]",
     )
     .option(
       "--location <city...>",
