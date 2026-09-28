@@ -1,4 +1,6 @@
 import { Database } from "bun:sqlite";
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type { NormalizedJob } from "./sources/types.ts";
 
 export type ListingState = "active" | "archived" | "inactive" | "applied";
@@ -19,7 +21,9 @@ export function listingId(
   return `${job.source}:${job.sourceId}`;
 }
 
-export function openDb(path = "igor.db"): Database {
+export function openDb(path: string): Database {
+  // The global default lives under a data dir that may not exist yet.
+  if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
   // The TUI and detached `igor tailor` processes write the same file.
   db.run("PRAGMA busy_timeout = 5000");

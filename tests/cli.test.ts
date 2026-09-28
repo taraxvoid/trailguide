@@ -110,7 +110,7 @@ describe("buildSources", () => {
 
 describe("clear command parsing", () => {
   function programWithSpy() {
-    const calls: { db: string }[] = [];
+    const calls: { db?: string }[] = [];
     const program = createProgram(
       async () => {},
       async (options) => {
@@ -131,7 +131,7 @@ describe("clear command parsing", () => {
     await program.parseAsync(["node", "igor", "clear"]);
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ db: "igor.db" });
+    expect(calls[0]?.db).toBeUndefined();
   });
 
   it("parses clear with --db", async () => {
@@ -205,11 +205,25 @@ describe("search command parsing", () => {
       json: false,
       csv: false,
       clearance: false,
-      db: "igor.db",
     });
+    expect(calls[0]?.db).toBeUndefined();
     expect(calls[0]?.remote).toBe(false);
     expect(calls[0]?.onsite).toBe(false);
     expect(calls[0]?.location).toBeUndefined();
+  });
+
+  it("accepts --config", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "igor",
+      "search",
+      "--role",
+      "engineer",
+      "--config",
+      "x.toml",
+    ]);
+    expect(calls[0]?.config).toBe("x.toml");
   });
 
   it("parses all options when provided", async () => {
@@ -260,5 +274,25 @@ describe("search command parsing", () => {
       role: ["engineer", "manager"],
       location: ["Omaha", "San Francisco"],
     });
+  });
+});
+
+describe("db and config options", () => {
+  it("no command defaults --db, so the shared resolver decides", () => {
+    for (const cmd of createProgram().commands) {
+      const db = cmd.options.find((o) => o.long === "--db");
+      if (db) expect(db.defaultValue).toBeUndefined();
+    }
+  });
+
+  it("registers igor config and --config on search and tui", () => {
+    const program = createProgram();
+    const longs = (name: string) =>
+      program.commands
+        .find((c) => c.name() === name)
+        ?.options.map((o) => o.long) ?? [];
+    expect(longs("config")).toContain("--config");
+    expect(longs("search")).toContain("--config");
+    expect(longs("tui")).toContain("--config");
   });
 });

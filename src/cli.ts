@@ -3,6 +3,7 @@ import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
 import { Command, Option } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
+import { ConfigError, describeConfig, resolveDbPath } from "./config.ts";
 import {
   parseBoundary,
   parseRange,
@@ -82,7 +83,8 @@ export interface SearchOptions {
   role: string[];
   json: boolean;
   csv: boolean;
-  db: string;
+  db?: string;
+  config?: string;
   clearance: boolean;
 }
 
@@ -123,7 +125,8 @@ export async function runSearch(options: SearchOptions): Promise<void> {
       }
     }),
   );
-  const db = openDb(options.db);
+  const dbPath = resolveDbPath({ db: options.db, config: options.config });
+  const db = openDb(dbPath);
   const newJobs = upsertJobs(db, jobs, states);
 
   if (options.json) {
@@ -147,16 +150,17 @@ export async function runSearch(options: SearchOptions): Promise<void> {
       );
     }
     console.log(
-      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${options.db}`,
+      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${dbPath}`,
     );
   }
 }
 
-export async function runClear(options: { db: string }): Promise<void> {
-  const db = openDb(options.db);
+export async function runClear(options: { db?: string }): Promise<void> {
+  const dbPath = resolveDbPath({ db: options.db });
+  const db = openDb(dbPath);
   clearJobs(db);
   db.close();
-  console.log(`Cleared all jobs from ${options.db}`);
+  console.log(`Cleared all jobs from ${dbPath}`);
 }
 
 const DEAD_PAGE_PATTERNS = [
@@ -221,8 +225,8 @@ export async function refreshListings(db: Database): Promise<{
   return { checked, skipped, activated, archived };
 }
 
-export async function runRefresh(options: { db: string }): Promise<void> {
-  const db = openDb(options.db);
+export async function runRefresh(options: { db?: string }): Promise<void> {
+  const db = openDb(resolveDbPath({ db: options.db }));
   const result = await refreshListings(db);
   db.close();
   console.log(
@@ -238,7 +242,7 @@ const LISTING_STATES: ListingState[] = [
 ];
 
 export interface JobsCliOptions {
-  db: string;
+  db?: string;
   state: string;
   when?: string;
   since?: string;
@@ -266,7 +270,7 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
     ({ from, to } = weekRange(now, -1));
   }
 
-  const db = openDb(options.db);
+  const db = openDb(resolveDbPath({ db: options.db }));
   const jobs = jobsInStateBetween(db, state, from, to).map((job) => ({
     ...job,
     description: truncateWords(job.description, options.words),
@@ -276,7 +280,7 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
 }
 
 export interface TailorCliOptions {
-  db: string;
+  db?: string;
   listingId: string;
   resume?: string;
   outputDir?: string;
@@ -286,7 +290,7 @@ export interface TailorCliOptions {
 }
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
-  const db = openDb(options.db);
+  const db = openDb(resolveDbPath({ db: options.db }));
   if (!startTailorRun(db, options.listingId, process.pid)) {
     db.close();
     console.error(
@@ -345,10 +349,15 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
   if (result.pdfPath) console.log(`Wrote ${result.pdfPath}`);
 }
 
+const DB_HELP =
+  "path to sqlite db (default: [db] path from the config, else the global db; see `igor config`)";
+const CONFIG_HELP =
+  "config file to use instead of the global config plus ./igor.toml";
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<void> = runSearch,
-  clearAction: (options: { db: string }) => Promise<void> = runClear,
-  refreshAction: (options: { db: string }) => Promise<void> = runRefresh,
+  clearAction: (options: { db?: string }) => Promise<void> = runClear,
+  refreshAction: (options: { db?: string }) => Promise<void> = runRefresh,
   tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
 ): Command {
   const program = new Command();
@@ -373,7 +382,8 @@ export function createProgram(
     .option("--onsite", "only search for onsite/hybrid jobs", false)
     .option("--json", "output all stored jobs as JSON", false)
     .option("--csv", "output all stored jobs as CSV", false)
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
     .option("--clearance", "include jobs requiring clearance", false)
     .action(async (options: SearchOptions) => {
       await searchAction(options);
@@ -382,24 +392,27 @@ export function createProgram(
   program
     .command("tui")
     .description("Browse jobs in an interactive TUI")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
-      await runTui({ db: options.db });
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(async (options: { db?: string; config?: string }) => {
+      await runTui({
+        db: resolveDbPath({ db: options.db, config: options.config }),
+      });
     });
 
   program
     .command("clear")
     .description("Clear all stored jobs from the database")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
+    .option("--db <path>", DB_HELP)
+    .action(async (options: { db?: string }) => {
       await clearAction(options);
     });
 
   program
     .command("refresh")
     .description("Check all active listings to see if they're still live")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
+    .option("--db <path>", DB_HELP)
+    .action(async (options: { db?: string }) => {
       await refreshAction(options);
     });
 
@@ -421,7 +434,7 @@ export function createProgram(
       (v) => Number.parseInt(v, 10),
       200,
     )
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
     .action((stateArg: string, options: Omit<JobsCliOptions, "state">) => {
       try {
         runJobs({ ...options, state: stateArg });
@@ -437,7 +450,7 @@ export function createProgram(
       "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
     .option(
       "--resume <path>",
       "resume master path (default: the one .md file under input/)",
@@ -464,7 +477,7 @@ export function createProgram(
       async (
         listingIdArg: string,
         options: {
-          db: string;
+          db?: string;
           resume?: string;
           outputDir?: string;
           ollamaHost?: string;
@@ -475,6 +488,16 @@ export function createProgram(
         await tailorAction({ ...options, listingId: listingIdArg });
       },
     );
+
+  program
+    .command("config")
+    .description(
+      "Show the config files in use, the database path, and the merged config",
+    )
+    .option("--config <path>", CONFIG_HELP)
+    .action((options: { config?: string }) => {
+      console.log(describeConfig({ config: options.config }));
+    });
 
   return program;
 }
@@ -492,7 +515,8 @@ if (import.meta.main) {
     process.exit(await runDelegate(delegate, Bun.argv.slice(2)));
   }
   main().catch((err) => {
-    console.error(err);
+    // Config problems are user errors: print the message, not a stack.
+    console.error(err instanceof ConfigError ? `error: ${err.message}` : err);
     process.exit(1);
   });
 }

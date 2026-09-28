@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   type ListingState,
   allJobs,
@@ -315,5 +317,15 @@ describe("clearJobs", () => {
     clearJobs(db);
     expect(allJobs(db)).toHaveLength(0);
     db.close();
+  });
+});
+
+describe("openDb paths", () => {
+  it("creates missing parent directories", () => {
+    const dir = mkdtempSync(join(tmpdir(), "igor-open-"));
+    const path = join(dir, "a", "b", "igor.db");
+    openDb(path).close();
+    expect(existsSync(path)).toBe(true);
+    rmSync(dir, { recursive: true });
   });
 });
