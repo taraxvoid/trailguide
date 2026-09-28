@@ -256,3 +256,36 @@ describe("matches", () => {
     ).toBe(true);
   });
 });
+
+describe("city normalization for aliases", () => {
+  it("treats 'Omaha, NE' as the Omaha metro in person", () => {
+    expect(matchesLocation("La Vista, NE", "Omaha, NE")).toBe(true);
+    expect(matchesLocation("Omaha, Nebraska", "Omaha, NE")).toBe(true);
+    expect(matchesLocation("Omaha, NE", "Omaha, NE")).toBe(true);
+  });
+
+  it("makes 'Remote - Nebraska' eligible for 'Omaha, NE' but only remotely", () => {
+    expect(remoteEligible("Remote - Nebraska", "Omaha, NE")).toBe(true);
+    expect(matchesLocation("Remote - Nebraska", "Omaha, NE")).toBe(false);
+    const target: SearchTarget = {
+      city: "Omaha, NE",
+      flexibility: "in-person",
+      region: [],
+    };
+    expect(
+      matches({ location: "Remote - Nebraska", remoteType: "onsite" }, target),
+    ).toBe(false);
+  });
+
+  it("expands US abbreviations", () => {
+    expect(remoteEligible("Remote - U.S.", "USA")).toBe(true);
+    expect(remoteEligible("Remote - North America", "US")).toBe(true);
+    expect(remoteEligible("Remote - U.S.", "U.S.")).toBe(true);
+  });
+
+  it("never matches blank terms", () => {
+    expect(remoteEligible("Remote - Europe", "")).toBe(false);
+    expect(remoteEligible("Remote - Europe", "  ", [" "])).toBe(false);
+    expect(matchesLocation("Anywhere", "")).toBe(false);
+  });
+});

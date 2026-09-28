@@ -37,14 +37,32 @@ function escapeRegExp(text: string): string {
 
 /** True when `term` appears in `text` with no letter or digit on either side. */
 function containsTerm(text: string, term: string): boolean {
+  if (term.trim() === "") return false;
   return new RegExp(`(?<![a-z0-9])${escapeRegExp(term)}(?![a-z0-9])`).test(
     text,
   );
 }
 
-function aliasesFor(place: string): string[] {
+// "Omaha, NE" is one place; the alias key drops the trailing state code.
+function aliasKey(place: string): string {
   const key = place.trim().toLowerCase();
-  return LOCATION_ALIASES[key] ?? [key];
+  const stripped = key.replace(/\s*,\s*[a-z]{2}$/, "");
+  return stripped === "" ? key : stripped;
+}
+
+const KEY_SYNONYMS: Record<string, string> = {
+  us: "united states",
+  usa: "united states",
+  "u.s.": "united states",
+};
+
+/** Match terms for a place: its own text plus aliases of its alias key. */
+function aliasesFor(place: string): string[] {
+  const text = place.trim().toLowerCase();
+  if (text === "") return [];
+  const derived = aliasKey(text);
+  const key = KEY_SYNONYMS[derived] ?? derived;
+  return [...new Set([text, ...(LOCATION_ALIASES[key] ?? [key])])];
 }
 
 export function matchesLocation(
@@ -77,7 +95,7 @@ export function remoteEligible(
   const job = jobLocation.toLowerCase();
   const terms = [
     ...[city, ...region].flatMap(aliasesFor),
-    ...(REMOTE_ONLY_ALIASES[city.trim().toLowerCase()] ?? []),
+    ...(REMOTE_ONLY_ALIASES[aliasKey(city)] ?? []),
   ];
   return terms.some((term) => containsTerm(job, term));
 }
