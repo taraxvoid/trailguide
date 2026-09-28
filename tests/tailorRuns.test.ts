@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
 import { rmSync } from "node:fs";
 import {
   SEARCH_RUN_KEY,
@@ -93,6 +93,43 @@ describe("runs", () => {
     expect(startRun(db, "search", SEARCH_RUN_KEY, 1)).toBe(true); // pid 1 is always alive
     expect(startRun(db, "search", SEARCH_RUN_KEY, process.pid)).toBe(false);
     expect(getRun(db, "search", SEARCH_RUN_KEY)?.pid).toBe(1);
+  });
+
+  it("claims atomically: a racing claim from another connection cannot also win", async () => {
+    const path = `/tmp/igor-runs-race-${Date.now()}-${++counter}.db`;
+    rmSync(path, { force: true });
+    const a = openDb(path);
+    const b = openDb(path);
+    b.run("PRAGMA busy_timeout = 0");
+    startRun(a, "search", SEARCH_RUN_KEY, await deadPid());
+    // Interleave: while `a` is checking whether the stale pid is alive,
+    // `b` makes its own claim for a different pid.
+    let bWon: boolean | null = null;
+    const realKill = process.kill.bind(process);
+    const spy = spyOn(process, "kill").mockImplementation(((
+      pid: number,
+      signal?: string | number,
+    ) => {
+      if (bWon === null) {
+        bWon = false;
+        try {
+          bWon = startRun(b, "search", SEARCH_RUN_KEY, 1);
+        } catch {
+          bWon = false; // SQLITE_BUSY: the claim is held by `a`
+        }
+      }
+      return realKill(pid, signal);
+    }) as typeof process.kill);
+    let aWon: boolean;
+    try {
+      aWon = startRun(a, "search", SEARCH_RUN_KEY, process.pid);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(bWon).not.toBeNull();
+    expect(aWon && bWon).toBe(false);
+    a.close();
+    b.close();
   });
 
   it("closes out a dead run as failed, naming its kind", async () => {

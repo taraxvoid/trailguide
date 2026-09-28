@@ -394,21 +394,26 @@ export function startRun(
   pid: number,
   now = new Date().toISOString(),
 ): boolean {
-  const existing = getRun(db, kind, key);
-  if (
-    existing &&
-    existing.finishedAt === null &&
-    existing.pid !== pid &&
-    pidAlive(existing.pid)
-  ) {
-    return false;
-  }
-  db.prepare(
-    `INSERT INTO runs (kind, key, pid, started_at, finished_at, ok, message)
-     VALUES ($kind, $key, $pid, $now, NULL, NULL, NULL)
-     ON CONFLICT(kind, key) DO UPDATE SET pid = $pid, started_at = $now, finished_at = NULL, ok = NULL, message = NULL`,
-  ).run({ $kind: kind, $key: key, $pid: pid, $now: now });
-  return true;
+  // IMMEDIATE takes the write lock before the read, so two processes cannot
+  // both see the run as free and both claim it.
+  const claim = db.transaction((): boolean => {
+    const existing = getRun(db, kind, key);
+    if (
+      existing &&
+      existing.finishedAt === null &&
+      existing.pid !== pid &&
+      pidAlive(existing.pid)
+    ) {
+      return false;
+    }
+    db.prepare(
+      `INSERT INTO runs (kind, key, pid, started_at, finished_at, ok, message)
+       VALUES ($kind, $key, $pid, $now, NULL, NULL, NULL)
+       ON CONFLICT(kind, key) DO UPDATE SET pid = $pid, started_at = $now, finished_at = NULL, ok = NULL, message = NULL`,
+    ).run({ $kind: kind, $key: key, $pid: pid, $now: now });
+    return true;
+  });
+  return claim.immediate();
 }
 
 export function finishRun(
