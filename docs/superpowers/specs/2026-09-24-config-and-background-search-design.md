@@ -108,7 +108,9 @@ matches(job, { city, flexibility }):
 - `cityMatches` is `matchesLocation` (metro aliases included).
 - `remoteEligible` is true when the listing location is blank or a bare
   global term ("remote", "worldwide", "anywhere", "global", "international"),
-  or when `matchesLocation` matches the city or any of the entry's optional
+  or, for a United States target, when the listing names a US state ("San
+  Francisco, CA", "Austin, Texas"; "Georgia" alone does not count), or when
+  `matchesLocation` matches the city or any of the entry's optional
   `region` terms (a string or list of strings; only used for remote
   eligibility, never for onsite matching), each extended with aliases.
   Alias table: "united states" = usa, u.s., us, north america, americas;
@@ -224,10 +226,12 @@ returned failures.
   rule, and the reverse. With flags only (`--role`), there is one implicit
   combination and behavior is as today.
 - Source calls follow the scoped/unscoped split above. Unscoped sources run
-  once per keyword (no location passed), and their results are evaluated
+  once with every keyword (no location passed), and their results are evaluated
   against every location's predicate. Scoped sources (jsearch, adzuna) run once
   per combination, and are the only ones that cost quota per location. Each
-  source declares `scoped: boolean`.
+  source declares `scoped: boolean`. Adzuna also declares `labelsRemote:
+  false` (it never labels remote jobs), so it is skipped for `remote`
+  locations.
 - A source failing does not fail the run; it is recorded in `failures`. The run
   is `ok = false` only when the run itself throws (bad config, DB error) or
   every source fails.

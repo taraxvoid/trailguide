@@ -54,10 +54,12 @@ function scopedParams(role: string, target: SearchTarget): SearchParams {
 }
 
 /**
- * Runs every keyword in every target. Unscoped sources are called once per
- * keyword without a location and their jobs are checked against every
+ * Runs every keyword in every target. Unscoped sources are called once with
+ * all keywords and no location, and their jobs are checked against every
  * target; scoped sources are called once per (keyword, target) and only
- * the work type is checked. A failing source is recorded, never thrown.
+ * the work type is checked. Scoped sources that never label remote jobs
+ * (adzuna) are skipped for remote targets. A failing source is recorded,
+ * never thrown.
  */
 export async function collectJobs(
   plan: SearchPlan,
@@ -89,29 +91,29 @@ export async function collectJobs(
   const unscoped = sources.filter((s) => !s.scoped);
   const scoped = sources.filter((s) => s.scoped);
 
-  const perKeyword = await Promise.all(
-    plan.keywords.map(async (role) => {
-      const [loose, perTarget] = await Promise.all([
-        Promise.all(unscoped.map((s) => call(s, { role }))),
-        Promise.all(
-          plan.targets.map(async (target) => {
-            const found = await Promise.all(
-              scoped.map((s) => call(s, scopedParams(role, target))),
-            );
-            return found
-              .flat()
-              .filter((job) => matches(job, target, { scoped: true }));
-          }),
-        ),
-      ]);
-      const kept = loose
-        .flat()
-        .filter((job) => plan.targets.some((target) => matches(job, target)));
-      return [...kept, ...perTarget.flat()];
-    }),
-  );
+  const [loose, perTarget] = await Promise.all([
+    Promise.all(unscoped.map((s) => call(s, { role: plan.keywords }))),
+    Promise.all(
+      plan.keywords.flatMap((role) =>
+        plan.targets.map(async (target) => {
+          const usable = scoped.filter(
+            (s) => s.labelsRemote !== false || target.flexibility !== "remote",
+          );
+          const found = await Promise.all(
+            usable.map((s) => call(s, scopedParams(role, target))),
+          );
+          return found
+            .flat()
+            .filter((job) => matches(job, target, { scoped: true }));
+        }),
+      ),
+    ),
+  ]);
+  const kept = loose
+    .flat()
+    .filter((job) => plan.targets.some((target) => matches(job, target)));
 
-  const jobs = dedupe(perKeyword.flat())
+  const jobs = dedupe([...kept, ...perTarget.flat()])
     .filter((job) => !isInternship(job))
     .filter((job) => plan.govmil || !requiresClearance(job))
     .map((job) => ({ ...job, url: stripTrackingParams(job.url) }));

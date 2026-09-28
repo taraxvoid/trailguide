@@ -73,10 +73,20 @@ afterEach(() => errorSpy.mockRestore());
 describe("collectJobs source calls", () => {
   const plan: SearchPlan = { ...OMAHA_AND_US, keywords: ["swe", "devops"] };
 
-  it("calls unscoped sources once per keyword with no location", async () => {
+  it("calls unscoped sources once with every keyword and no location", async () => {
     const loose = fake("greenhouse", false, () => []);
     await collectJobs(plan, [loose.source]);
-    expect(loose.calls).toEqual([{ role: "swe" }, { role: "devops" }]);
+    expect(loose.calls).toEqual([{ role: ["swe", "devops"] }]);
+  });
+
+  it("skips sources that never label remote jobs for remote targets", async () => {
+    const adzuna = fake("adzuna", true, () => []);
+    adzuna.source.labelsRemote = false;
+    await collectJobs(plan, [adzuna.source]);
+    expect(adzuna.calls.map((c) => c.location).sort()).toEqual([
+      "Omaha",
+      "Omaha",
+    ]);
   });
 
   it("calls scoped sources once per keyword and location", async () => {
@@ -117,10 +127,9 @@ describe("collectJobs filtering", () => {
       })),
     );
     const { jobs } = await collectJobs(OMAHA_AND_US, [loose.source]);
-    // a, b, h: in-person Omaha. c, f: remote and eligible for the US.
-    // d: remote Europe. e: wrong city. g: remote, but Omaha is in-person
-    // and "Omaha, NE" is not a US alias.
-    expect(ids(jobs)).toEqual(["a", "b", "c", "f", "h"]);
+    // a, b, h: in-person Omaha. c, f, g: remote and eligible for the US
+    // (g is located in a US state). d: remote Europe. e: wrong city.
+    expect(ids(jobs)).toEqual(["a", "b", "c", "f", "g", "h"]);
     expect(jobs.find((j) => j.sourceId === "f")?.remoteType).toBe("remote");
   });
 

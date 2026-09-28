@@ -28,18 +28,24 @@ export function createRemotiveSource(): Source {
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const roles = toArray(params.role);
-      const url = new URL("https://remotive.com/api/remote-jobs");
-      url.searchParams.set("search", roles[0] ?? "");
-
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw new Error(
-          `Remotive request failed: ${res.status} ${await res.text()}`,
-        );
-      }
-
-      const body = (await res.json()) as RemotiveResponse;
-      return body.jobs
+      const bodies = await Promise.all(
+        (roles.length > 0 ? roles : [""]).map(async (role) => {
+          const url = new URL("https://remotive.com/api/remote-jobs");
+          url.searchParams.set("search", role);
+          const res = await fetch(url);
+          if (!res.ok) {
+            throw new Error(
+              `Remotive request failed: ${res.status} ${await res.text()}`,
+            );
+          }
+          return (await res.json()) as RemotiveResponse;
+        }),
+      );
+      const seen = new Set<number>();
+      const jobs = bodies
+        .flatMap((body) => body.jobs)
+        .filter((job) => !seen.has(job.id) && seen.add(job.id));
+      return jobs
         .filter((job) => matchesRole(job.title, params.role))
         .filter(
           (job) =>

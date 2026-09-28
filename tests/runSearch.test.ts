@@ -142,7 +142,7 @@ describe("runSearch from the config", () => {
     ]);
     const result = await runSearch(flags(), deps([source.source]));
     expect(result).toEqual({ found: 2, new: 2, failures: [] });
-    expect(source.calls).toEqual([{ role: "swe" }]);
+    expect(source.calls).toEqual([{ role: ["swe"] }]);
     const db = openDb(dbPath());
     expect(allJobs(db)).toHaveLength(2);
     db.close();

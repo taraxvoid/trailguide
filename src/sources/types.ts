@@ -36,8 +36,13 @@ export interface Source {
   /**
    * True when the source applies `location` inside its API query (jsearch,
    * adzuna). The runner calls scoped sources once per (keyword, location)
-   * and unscoped ones once per keyword with no location.
+   * and unscoped ones once, with every keyword and no location.
    */
   scoped: boolean;
+  /**
+   * False when the source never labels remote jobs (adzuna), so a remote
+   * target would spend quota on results the work-type check drops.
+   */
+  labelsRemote?: boolean;
   search(params: SearchParams): Promise<NormalizedJob[]>;
 }

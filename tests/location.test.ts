@@ -44,6 +44,10 @@ describe("matchesLocation word boundaries", () => {
     expect(matchesLocation("Remote (US)", "us")).toBe(true);
   });
 
+  it("keeps onsite matching of a US state out of the United States alias", () => {
+    expect(matchesLocation("Austin, TX", "United States")).toBe(false);
+  });
+
   it("expands the United States aliases on word boundaries", () => {
     expect(matchesLocation("Remote - USA", "United States")).toBe(true);
     expect(matchesLocation("U.S. only", "United States")).toBe(true);
@@ -54,6 +58,35 @@ describe("matchesLocation word boundaries", () => {
 
 describe("remoteEligible", () => {
   const us = (location: string) => remoteEligible(location, "United States");
+
+  it("accepts remote listings located in a US state for a US target", () => {
+    for (const loc of [
+      "San Francisco, CA",
+      "Austin, TX 78701",
+      "Remote, NY",
+      "Portland, Oregon",
+      "Seattle, Washington, USA",
+    ]) {
+      expect(us(loc)).toBe(true);
+    }
+  });
+
+  it("does not treat non-US places as US states", () => {
+    for (const loc of [
+      "Tbilisi, Georgia",
+      "Mexico City",
+      "Toronto, Canada",
+      "London, UK",
+      "Remote - Europe",
+      "Sao Paulo, ca",
+    ]) {
+      expect(us(loc)).toBe(false);
+    }
+  });
+
+  it("does not widen a non-US city", () => {
+    expect(remoteEligible("Austin, TX", "Omaha")).toBe(false);
+  });
 
   it("accepts blank and bare global locations", () => {
     for (const loc of [

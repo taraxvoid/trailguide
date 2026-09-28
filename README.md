@@ -99,9 +99,12 @@ built in. Broad places like "United States" with `in-person` or `any` only
 match listings that name that place, so use specific cities for in-person
 work.
 
+A remote listing located in a US state ("San Francisco, CA") counts as
+eligible for "United States".
+
 Only some sources say whether a job is remote, so `remote` is high
-precision but limited recall: adzuna and listings with no remote label are
-missed, and hybrid is not told apart from onsite.
+precision but limited recall: adzuna is skipped for remote locations, listings
+with no remote label are missed, and hybrid is not told apart from onsite.
 
 ## Usage
 

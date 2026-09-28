@@ -31,6 +31,79 @@ const GLOBAL_TERMS = new Set([
   "anywhere in the world",
 ]);
 
+const US_STATES: Record<string, string> = {
+  AL: "alabama",
+  AK: "alaska",
+  AZ: "arizona",
+  AR: "arkansas",
+  CA: "california",
+  CO: "colorado",
+  CT: "connecticut",
+  DE: "delaware",
+  DC: "district of columbia",
+  FL: "florida",
+  GA: "georgia",
+  HI: "hawaii",
+  ID: "idaho",
+  IL: "illinois",
+  IN: "indiana",
+  IA: "iowa",
+  KS: "kansas",
+  KY: "kentucky",
+  LA: "louisiana",
+  ME: "maine",
+  MD: "maryland",
+  MA: "massachusetts",
+  MI: "michigan",
+  MN: "minnesota",
+  MS: "mississippi",
+  MO: "missouri",
+  MT: "montana",
+  NE: "nebraska",
+  NV: "nevada",
+  NH: "new hampshire",
+  NJ: "new jersey",
+  NM: "new mexico",
+  NY: "new york",
+  NC: "north carolina",
+  ND: "north dakota",
+  OH: "ohio",
+  OK: "oklahoma",
+  OR: "oregon",
+  PA: "pennsylvania",
+  RI: "rhode island",
+  SC: "south carolina",
+  SD: "south dakota",
+  TN: "tennessee",
+  TX: "texas",
+  UT: "utah",
+  VT: "vermont",
+  VA: "virginia",
+  WA: "washington",
+  WV: "west virginia",
+  WI: "wisconsin",
+  WY: "wyoming",
+};
+
+const US_STATE_CODE = new RegExp(
+  `(?:^|,\\s*)(?:${Object.keys(US_STATES).join("|")})\\s*(?:,|$|\\d)`,
+);
+
+// "Georgia" is also a country, so it only counts with a state code or "USA".
+const US_STATE_NAMES = Object.values(US_STATES).filter((n) => n !== "georgia");
+
+/**
+ * Whether a listing location names a US state, as a name ("Austin, Texas")
+ * or a code after a comma ("San Francisco, CA"). Used only to let such
+ * remote listings through for country-level targets; there is no city data,
+ * so a bare "San Francisco" is not recognized.
+ */
+export function isUsLocation(jobLocation: string): boolean {
+  if (US_STATE_CODE.test(jobLocation)) return true;
+  const text = jobLocation.toLowerCase();
+  return US_STATE_NAMES.some((name) => containsTerm(text, name));
+}
+
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -85,6 +158,11 @@ function isGlobalLocation(jobLocation: string): boolean {
   return GLOBAL_TERMS.has(text);
 }
 
+function isUnitedStates(place: string): boolean {
+  const key = aliasKey(place);
+  return (KEY_SYNONYMS[key] ?? key) === "united states";
+}
+
 /** Whether a remote listing's location lets someone in `city` take it. */
 export function remoteEligible(
   jobLocation: string,
@@ -92,6 +170,9 @@ export function remoteEligible(
   region: string[] = [],
 ): boolean {
   if (isGlobalLocation(jobLocation)) return true;
+  if ([city, ...region].some(isUnitedStates) && isUsLocation(jobLocation)) {
+    return true;
+  }
   const job = jobLocation.toLowerCase();
   const terms = [
     ...[city, ...region].flatMap(aliasesFor),
