@@ -1,10 +1,16 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
 import {
+  SEARCH_RUN_KEY,
+  finishRun,
   finishTailorRun,
+  getRun,
   getTailorRun,
   openDb,
+  runningRuns,
   runningTailorIds,
+  startRun,
   startTailorRun,
 } from "../src/db.ts";
 
@@ -62,5 +68,107 @@ describe("tailor runs", () => {
     const db = freshDb();
     startTailorRun(db, "a:1", await deadPid());
     expect(startTailorRun(db, "a:1", process.pid)).toBe(true);
+  });
+});
+
+describe("runs", () => {
+  it("keeps kinds independent even with the same key", () => {
+    const db = freshDb();
+    expect(startRun(db, "search", SEARCH_RUN_KEY, process.pid)).toBe(true);
+    expect(startRun(db, "tailor", SEARCH_RUN_KEY, process.pid)).toBe(true);
+    finishRun(db, "search", SEARCH_RUN_KEY, true, "3 found, 1 new");
+    expect(getRun(db, "search", SEARCH_RUN_KEY)).toMatchObject({
+      kind: "search",
+      ok: true,
+      message: "3 found, 1 new",
+    });
+    expect(runningRuns(db, "search")).toEqual([]);
+    expect(runningRuns(db, "tailor").map((r) => r.key)).toEqual([
+      SEARCH_RUN_KEY,
+    ]);
+  });
+
+  it("refuses a concurrent claim from a different live pid", () => {
+    const db = freshDb();
+    expect(startRun(db, "search", SEARCH_RUN_KEY, 1)).toBe(true); // pid 1 is always alive
+    expect(startRun(db, "search", SEARCH_RUN_KEY, process.pid)).toBe(false);
+    expect(getRun(db, "search", SEARCH_RUN_KEY)?.pid).toBe(1);
+  });
+
+  it("closes out a dead run as failed, naming its kind", async () => {
+    const db = freshDb();
+    startRun(db, "search", SEARCH_RUN_KEY, await deadPid());
+    startTailorRun(db, "a:1", await deadPid());
+    expect(runningRuns(db, "search")).toEqual([]);
+    expect(runningTailorIds(db).size).toBe(0);
+    expect(getRun(db, "search", SEARCH_RUN_KEY)).toMatchObject({
+      ok: false,
+      message: "search process exited unexpectedly",
+    });
+    expect(getTailorRun(db, "a:1")).toMatchObject({
+      ok: false,
+      message: "tailor process exited unexpectedly",
+    });
+  });
+});
+
+describe("tailor_runs migration", () => {
+  function legacyDb(): string {
+    const path = `/tmp/igor-legacy-test-${Date.now()}-${++counter}.db`;
+    rmSync(path, { force: true });
+    const legacy = new Database(path);
+    legacy.run(`CREATE TABLE tailor_runs (
+      listing_id TEXT PRIMARY KEY, pid INTEGER NOT NULL, started_at TEXT NOT NULL,
+      finished_at TEXT, ok INTEGER, message TEXT)`);
+    legacy.run(
+      "INSERT INTO tailor_runs VALUES ('live:1', ?, '2026-09-01T00:00:00Z', NULL, NULL, NULL)",
+      [process.pid],
+    );
+    legacy.run(
+      "INSERT INTO tailor_runs VALUES ('done:2', 1, '2026-09-01T00:00:00Z', '2026-09-01T00:01:00Z', 1, 'Wrote x.pdf')",
+    );
+    legacy.close();
+    return path;
+  }
+
+  const hasLegacyTable = (db: Database) =>
+    db.query("SELECT 1 FROM sqlite_master WHERE name = 'tailor_runs'").get() !==
+    null;
+
+  it("moves rows into runs, keeps a live run live, and drops the old table", () => {
+    const db = openDb(legacyDb());
+    expect(runningTailorIds(db).has("live:1")).toBe(true);
+    expect(getTailorRun(db, "done:2")).toMatchObject({
+      ok: true,
+      message: "Wrote x.pdf",
+    });
+    expect(hasLegacyTable(db)).toBe(false);
+    db.close();
+  });
+
+  it("is idempotent when rerun, and never recreates tailor_runs", () => {
+    const path = legacyDb();
+    openDb(path).close();
+    const db = openDb(path);
+    expect(getTailorRun(db, "done:2")).not.toBeNull();
+    expect(hasLegacyTable(db)).toBe(false);
+    db.close();
+    expect(hasLegacyTable(freshDb())).toBe(false);
+  });
+
+  it("keeps an existing runs row over a legacy row with the same key", () => {
+    const path = legacyDb();
+    const first = openDb(path);
+    finishTailorRun(first, "done:2", false, "newer");
+    first.run(
+      "CREATE TABLE tailor_runs (listing_id TEXT PRIMARY KEY, pid INTEGER NOT NULL, started_at TEXT NOT NULL, finished_at TEXT, ok INTEGER, message TEXT)",
+    );
+    first.run(
+      "INSERT INTO tailor_runs VALUES ('done:2', 1, '2026-01-01T00:00:00Z', '2026-01-01T00:01:00Z', 1, 'older')",
+    );
+    first.close();
+    const db = openDb(path);
+    expect(getTailorRun(db, "done:2")?.message).toBe("newer");
+    db.close();
   });
 });

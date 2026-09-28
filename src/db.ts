@@ -21,11 +21,32 @@ export function listingId(
   return `${job.source}:${job.sourceId}`;
 }
 
+/** One-time move of the old tailor_runs table into runs. Idempotent. */
+function migrateTailorRuns(db: Database): void {
+  const hasLegacy = () =>
+    db
+      .query(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'tailor_runs'",
+      )
+      .get() !== null;
+  if (!hasLegacy()) return;
+  // IMMEDIATE plus a re-check, so two processes opening the db at once
+  // don't both migrate.
+  db.transaction(() => {
+    if (!hasLegacy()) return;
+    db.run(`
+      INSERT OR IGNORE INTO runs (kind, key, pid, started_at, finished_at, ok, message)
+      SELECT 'tailor', listing_id, pid, started_at, finished_at, ok, message FROM tailor_runs
+    `);
+    db.run("DROP TABLE tailor_runs");
+  }).immediate();
+}
+
 export function openDb(path: string): Database {
   // The global default lives under a data dir that may not exist yet.
   if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
-  // The TUI and detached `igor tailor` processes write the same file.
+  // The TUI and detached igor processes (tailor, search) write the same file.
   db.run("PRAGMA busy_timeout = 5000");
   db.run(`
     CREATE TABLE IF NOT EXISTS jobs (
@@ -69,18 +90,22 @@ export function openDb(path: string): Database {
       updated_at TEXT NOT NULL
     )
   `);
-  // Background `igor tailor` runs, so the TUI can show progress (and pick
-  // it back up after being restarted). finished_at is NULL while running.
+  // Background igor processes (`igor tailor`, `igor search`), so the TUI can
+  // show progress and pick it back up after being restarted. One row per
+  // (kind, key), the latest run; finished_at is NULL while running.
   db.run(`
-    CREATE TABLE IF NOT EXISTS tailor_runs (
-      listing_id TEXT PRIMARY KEY,
+    CREATE TABLE IF NOT EXISTS runs (
+      kind TEXT NOT NULL,
+      key TEXT NOT NULL,
       pid INTEGER NOT NULL,
       started_at TEXT NOT NULL,
       finished_at TEXT,
       ok INTEGER,
-      message TEXT
+      message TEXT,
+      PRIMARY KEY (kind, key)
     )
   `);
+  migrateTailorRuns(db);
   return db;
 }
 
@@ -313,8 +338,14 @@ export function setTailoredResume(
   `).run({ $listingId: listingId, $markdownPath: markdownPath, $now: now });
 }
 
-export interface TailorRun {
-  listingId: string;
+export type RunKind = "tailor" | "search";
+
+/** The single key used for `kind = "search"` runs (one search per db). */
+export const SEARCH_RUN_KEY = "search";
+
+export interface Run {
+  kind: RunKind;
+  key: string;
   pid: number;
   startedAt: string;
   finishedAt: string | null;
@@ -332,9 +363,10 @@ function pidAlive(pid: number): boolean {
   }
 }
 
-function toRun(row: Record<string, unknown>): TailorRun {
+function toRun(row: Record<string, unknown>): Run {
   return {
-    listingId: row.listing_id as string,
+    kind: row.kind as RunKind,
+    key: row.key as string,
     pid: row.pid as number,
     startedAt: row.started_at as string,
     finishedAt: (row.finished_at as string | null) ?? null,
@@ -343,28 +375,26 @@ function toRun(row: Record<string, unknown>): TailorRun {
   };
 }
 
-export function getTailorRun(
-  db: Database,
-  listingId: string,
-): TailorRun | null {
+export function getRun(db: Database, kind: RunKind, key: string): Run | null {
   const row = db
-    .prepare("SELECT * FROM tailor_runs WHERE listing_id = $listingId")
-    .get({ $listingId: listingId }) as Record<string, unknown> | null;
+    .prepare("SELECT * FROM runs WHERE kind = $kind AND key = $key")
+    .get({ $kind: kind, $key: key }) as Record<string, unknown> | null;
   return row ? toRun(row) : null;
 }
 
 /**
  * Marks a run as started by `pid`. Returns false if a different live process
- * already has one running for this listing (re-claiming with the same pid is
- * fine: the TUI records the child's pid before the child starts).
+ * already has one running for this (kind, key). Re-claiming with the same pid
+ * is fine: the TUI records the child's pid before the child starts.
  */
-export function startTailorRun(
+export function startRun(
   db: Database,
-  listingId: string,
+  kind: RunKind,
+  key: string,
   pid: number,
   now = new Date().toISOString(),
 ): boolean {
-  const existing = getTailorRun(db, listingId);
+  const existing = getRun(db, kind, key);
   if (
     existing &&
     existing.finishedAt === null &&
@@ -374,24 +404,26 @@ export function startTailorRun(
     return false;
   }
   db.prepare(
-    `INSERT INTO tailor_runs (listing_id, pid, started_at, finished_at, ok, message)
-     VALUES ($listingId, $pid, $now, NULL, NULL, NULL)
-     ON CONFLICT(listing_id) DO UPDATE SET pid = $pid, started_at = $now, finished_at = NULL, ok = NULL, message = NULL`,
-  ).run({ $listingId: listingId, $pid: pid, $now: now });
+    `INSERT INTO runs (kind, key, pid, started_at, finished_at, ok, message)
+     VALUES ($kind, $key, $pid, $now, NULL, NULL, NULL)
+     ON CONFLICT(kind, key) DO UPDATE SET pid = $pid, started_at = $now, finished_at = NULL, ok = NULL, message = NULL`,
+  ).run({ $kind: kind, $key: key, $pid: pid, $now: now });
   return true;
 }
 
-export function finishTailorRun(
+export function finishRun(
   db: Database,
-  listingId: string,
+  kind: RunKind,
+  key: string,
   ok: boolean,
   message: string,
   now = new Date().toISOString(),
 ): void {
   db.prepare(
-    "UPDATE tailor_runs SET finished_at = $now, ok = $ok, message = $message WHERE listing_id = $listingId",
+    "UPDATE runs SET finished_at = $now, ok = $ok, message = $message WHERE kind = $kind AND key = $key",
   ).run({
-    $listingId: listingId,
+    $kind: kind,
+    $key: key,
     $now: now,
     $ok: ok ? 1 : 0,
     $message: message,
@@ -399,25 +431,54 @@ export function finishTailorRun(
 }
 
 /**
- * Listings with a tailor run in flight. Runs whose process died without
- * finishing (killed, crashed) are closed out as failed rather than pulsing
- * forever.
+ * Runs of `kind` in flight. Runs whose process died without finishing
+ * (killed, crashed) are closed out as failed here, the only place that
+ * happens, rather than showing as running forever.
  */
-export function runningTailorIds(db: Database): Set<string> {
+export function runningRuns(db: Database, kind: RunKind): Run[] {
   const rows = db
-    .prepare("SELECT * FROM tailor_runs WHERE finished_at IS NULL")
-    .all() as Record<string, unknown>[];
-  const running = new Set<string>();
+    .prepare("SELECT * FROM runs WHERE kind = $kind AND finished_at IS NULL")
+    .all({ $kind: kind }) as Record<string, unknown>[];
+  const live: Run[] = [];
   for (const row of rows) {
     const run = toRun(row);
-    if (pidAlive(run.pid)) running.add(run.listingId);
+    if (pidAlive(run.pid)) live.push(run);
     else
-      finishTailorRun(
+      finishRun(
         db,
-        run.listingId,
+        kind,
+        run.key,
         false,
-        "tailor process exited unexpectedly",
+        `${kind} process exited unexpectedly`,
       );
   }
-  return running;
+  return live;
+}
+
+export function getTailorRun(db: Database, listingId: string): Run | null {
+  return getRun(db, "tailor", listingId);
+}
+
+export function startTailorRun(
+  db: Database,
+  listingId: string,
+  pid: number,
+  now?: string,
+): boolean {
+  return startRun(db, "tailor", listingId, pid, now);
+}
+
+export function finishTailorRun(
+  db: Database,
+  listingId: string,
+  ok: boolean,
+  message: string,
+  now?: string,
+): void {
+  finishRun(db, "tailor", listingId, ok, message, now);
+}
+
+/** Listings with a tailor run in flight. */
+export function runningTailorIds(db: Database): Set<string> {
+  return new Set(runningRuns(db, "tailor").map((run) => run.key));
 }
