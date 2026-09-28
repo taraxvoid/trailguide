@@ -101,6 +101,29 @@ describe("normalizeRemoteType", () => {
     expect(job.remoteType).toBe("remote");
   });
 
+  it("keeps the positive forms remote", () => {
+    for (const location of ["Remote", "US (Remote)", "Remote - US"]) {
+      expect(
+        normalizeRemoteType({ location, remoteType: "unknown" as RemoteType })
+          .remoteType,
+      ).toBe("remote");
+    }
+  });
+
+  it("does not treat negated remote as remote", () => {
+    for (const location of [
+      "Omaha, NE (Non-remote)",
+      "No remote",
+      "Not remote",
+      "Non remote",
+    ]) {
+      expect(
+        normalizeRemoteType({ location, remoteType: "unknown" as RemoteType })
+          .remoteType,
+      ).toBe("unknown");
+    }
+  });
+
   it("leaves everything else alone", () => {
     expect(
       normalizeRemoteType({

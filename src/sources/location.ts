@@ -109,7 +109,9 @@ export function normalizeRemoteType<
 >(job: T): T {
   if (
     job.remoteType === "unknown" &&
-    containsTerm(job.location.toLowerCase(), "remote")
+    /(?<![a-z0-9])(?<!non-)(?<!non )(?<!no )(?<!not )remote(?![a-z0-9])/.test(
+      job.location.toLowerCase(),
+    )
   ) {
     return { ...job, remoteType: "remote" as const };
   }
