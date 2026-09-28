@@ -1,6 +1,12 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { TomlError, parse, stringify } from "smol-toml";
+import {
+  type Env,
+  globalConfigPath,
+  globalDbPath,
+  localConfigPath,
+} from "./paths.ts";
 
 export type Flexibility = "remote" | "in-person" | "any";
 export const FLEXIBILITIES: readonly Flexibility[] = [
@@ -201,4 +207,76 @@ export function formatConfig(config: IgorConfig): string {
 export function writeConfig(path: string, config: IgorConfig): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, formatConfig(config));
+}
+
+export interface ConfigContext {
+  cwd?: string;
+  env?: Env;
+  /** `--config <path>`: replaces the whole file chain with this one file. */
+  config?: string;
+}
+
+export interface LoadedConfig {
+  config: IgorConfig;
+  /** Files that were read, lowest precedence first. */
+  files: string[];
+}
+
+function readConfigFile(path: string): IgorConfig {
+  return parseConfig(readFileSync(path, "utf8"), path);
+}
+
+/** Reads the config chain from disk. Called per use; never cached. */
+export function loadConfig(ctx: ConfigContext = {}): LoadedConfig {
+  const cwd = ctx.cwd ?? process.cwd();
+  const env = ctx.env ?? process.env;
+
+  const explicit = ctx.config ?? (env.IGOR_CONFIG || undefined);
+  if (explicit) {
+    const path = resolve(cwd, explicit);
+    if (!existsSync(path)) {
+      throw new ConfigError(`config file not found: ${path}`);
+    }
+    return { config: readConfigFile(path), files: [path] };
+  }
+
+  let config: IgorConfig = {};
+  const files: string[] = [];
+  for (const path of [globalConfigPath(env), localConfigPath(cwd)]) {
+    if (!existsSync(path)) continue;
+    config = mergeConfigs(config, readConfigFile(path));
+    files.push(path);
+  }
+  return { config, files };
+}
+
+/**
+ * The shared DB resolver for every command: --db, then IGOR_DB, then
+ * `[db] path` from the config chain, then the global default. Always
+ * absolute, so it can be handed to child processes as is.
+ */
+export function resolveDbPath(
+  ctx: ConfigContext & { db?: string } = {},
+): string {
+  const cwd = ctx.cwd ?? process.cwd();
+  const env = ctx.env ?? process.env;
+  // Higher-precedence sources decide without reading (or failing on) config.
+  if (ctx.db) return resolve(cwd, ctx.db);
+  if (env.IGOR_DB) return resolve(cwd, env.IGOR_DB);
+  return loadConfig(ctx).config.db ?? globalDbPath(env);
+}
+
+export function describeConfig(ctx: ConfigContext = {}): string {
+  const env = ctx.env ?? process.env;
+  const { config, files } = loadConfig(ctx);
+  const filesText =
+    files.length > 0
+      ? `config files (later entries override earlier):\n${files.map((f) => `  ${f}`).join("\n")}`
+      : `config files: none (run "igor init" to create ${globalConfigPath(env)})`;
+  return [
+    filesText,
+    `database: ${resolveDbPath(ctx)}`,
+    "",
+    formatConfig(config).trimEnd(),
+  ].join("\n");
 }
