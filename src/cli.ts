@@ -25,6 +25,7 @@ import {
 import type { ListingState } from "./db.ts";
 import { dedupe } from "./dedupe.ts";
 import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
+import { isInternship, requiresClearance } from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
@@ -39,19 +40,8 @@ import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
 import { stripTrackingParams } from "./url.ts";
 
-const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
-const GOVMIL_PATTERN =
-  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war|SCI|Top Secret|clearance)\b/i;
-
-export function isInternship(job: NormalizedJob): boolean {
-  return INTERNSHIP_PATTERN.test(job.title);
-}
-
-export function requiresClearance(job: NormalizedJob): boolean {
-  return (
-    GOVMIL_PATTERN.test(job.title) || GOVMIL_PATTERN.test(job.description ?? "")
-  );
-}
+// Re-exported so existing importers (tests/cli.test.ts) keep working.
+export { isInternship, requiresClearance };
 
 export function buildSources(): Source[] {
   const sources: Source[] = [
