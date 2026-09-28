@@ -296,3 +296,17 @@ describe("db and config options", () => {
     expect(longs("tui")).toContain("--config");
   });
 });
+describe("init command", () => {
+  it("is registered with repeatable prompt-skipping flags", () => {
+    const cmd = createProgram().commands.find((c) => c.name() === "init");
+    expect(cmd?.options.map((o) => o.long)).toEqual(
+      expect.arrayContaining([
+        "--location",
+        "--keywords",
+        "--work",
+        "--db",
+        "--yes",
+      ]),
+    );
+  });
+});

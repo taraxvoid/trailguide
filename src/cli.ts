@@ -34,6 +34,7 @@ import {
 } from "./db.ts";
 import type { ListingState } from "./db.ts";
 import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
+import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import type { Env } from "./paths.ts";
 import {
   type SearchResult,
@@ -398,6 +399,11 @@ const DB_HELP =
 const CONFIG_HELP =
   "config file to use instead of the global config plus ./igor.toml";
 
+/** Commander reducer for repeatable options. */
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
 export function createProgram(
   searchAction: (options: SearchOptions) => Promise<unknown> = runSearch,
   clearAction: (options: { db?: string }) => Promise<void> = runClear,
@@ -543,6 +549,37 @@ export function createProgram(
     .option("--config <path>", CONFIG_HELP)
     .action((options: { config?: string }) => {
       console.log(describeConfig({ config: options.config }));
+    });
+
+  program
+    .command("init")
+    .description(
+      "Create the global config and database, prompting for locations, keywords, and work type",
+    )
+    .option(
+      "--location <place>",
+      "a location to search; repeat for more (skips the prompt)",
+      collect,
+    )
+    .option(
+      "--keywords <role>",
+      "a role to search for; repeat for more (skips the prompt)",
+      collect,
+    )
+    .option(
+      "--work <type>",
+      "remote, in-person, or any for every location, or <location>:<type> for one; repeatable (skips the prompt)",
+      collect,
+    )
+    .option("--db <path>", DB_HELP)
+    .option("-y, --yes", "overwrite an existing global config without asking")
+    .action(async (options: InitOptions) => {
+      const io = terminalIO();
+      try {
+        await runInit(options, io);
+      } finally {
+        io.close();
+      }
     });
 
   return program;
