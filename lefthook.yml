@@ -9,8 +9,8 @@ pre-commit:
   parallel: true
   commands:
     biome-check:
+      run: bunx @biomejs/biome check --no-errors-on-unmatched {staged_files}
       glob: "*.{ts,tsx,js,json}"
-      run: bunx @biomejs/biome check {staged_files}
     typecheck:
       glob: "*.{ts,tsx}"
       run: bun run typecheck
@@ -23,4 +23,6 @@ pre-commit:
 pre-push:
   commands:
     test:
-      run: bun run test
+      # git exports GIT_DIR etc. to hooks; tests that spawn `git -C <tmpdir>`
+      # would otherwise operate on this repo (and commit into it).
+      run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX bun run test

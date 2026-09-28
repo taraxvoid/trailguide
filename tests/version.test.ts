@@ -1,11 +1,12 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
-import { formatGitVersion, gitVersion } from "../src/version.ts";
+import { cleanGitEnv, formatGitVersion, gitVersion } from "../src/version.ts";
 
 const repo = `/tmp/igor-version-test-${Date.now()}`;
 
 function git(...args: string[]) {
   Bun.spawnSync({
+    env: cleanGitEnv(),
     cmd: [
       "git",
       "-C",
