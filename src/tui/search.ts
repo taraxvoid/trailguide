@@ -2,7 +2,13 @@ import type { Database } from "bun:sqlite";
 import { closeSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
-import { type Run, SEARCH_RUN_KEY, runningRuns, startRun } from "../db.ts";
+import {
+  type Run,
+  SEARCH_RUN_KEY,
+  exitedUnexpectedly,
+  runningRuns,
+  startRun,
+} from "../db.ts";
 
 export interface SpawnRequest {
   cmd: string[];
@@ -95,7 +101,9 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
     let claimed = false;
     let claimError: unknown;
     try {
-      claimed = startRun(db, "search", SEARCH_RUN_KEY, child.pid);
+      claimed = startRun(db, "search", SEARCH_RUN_KEY, child.pid, undefined, {
+        forChild: true,
+      });
     } catch (error) {
       claimError = error;
     }
@@ -121,8 +129,9 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
 export function describeSearchRun(run: Run, dbPath: string): string {
   const message = run.message ?? "";
   if (run.ok) return `Search done: ${message}`;
-  const hint = message.endsWith("exited unexpectedly")
-    ? ` (see ${searchLogPath(resolve(dbPath))})`
-    : "";
+  const hint =
+    message === exitedUnexpectedly("search")
+      ? ` (see ${searchLogPath(resolve(dbPath))})`
+      : "";
   return `Search failed: ${message}${hint}`;
 }

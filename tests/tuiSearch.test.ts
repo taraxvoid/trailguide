@@ -3,7 +3,14 @@ import { describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SEARCH_RUN_KEY, finishRun, getRun, openDb } from "../src/db.ts";
+import {
+  SEARCH_RUN_KEY,
+  finishRun,
+  getRun,
+  openDb,
+  runningRuns,
+  startRun,
+} from "../src/db.ts";
 import {
   type SpawnRequest,
   describeSearchRun,
@@ -164,6 +171,29 @@ describe("startBackgroundSearch", () => {
     h.cleanup();
   });
 
+  it("keeps the outcome of a child that already claimed and finished", () => {
+    const h = harness();
+    const deadPid = 999999;
+    const result = startBackgroundSearch({
+      db: h.db,
+      dbPath: h.dbPath,
+      cwd: h.dir,
+      spawn: () => {
+        startRun(h.db, "search", SEARCH_RUN_KEY, deadPid);
+        finishRun(h.db, "search", SEARCH_RUN_KEY, false, "boom");
+        return { pid: deadPid, unref() {} };
+      },
+    });
+    expect(result.started).toBe(true);
+    expect(getRun(h.db, "search", SEARCH_RUN_KEY)).toMatchObject({
+      ok: false,
+      message: "boom",
+    });
+    expect(runningRuns(h.db, "search")).toEqual([]);
+    expect(getRun(h.db, "search", SEARCH_RUN_KEY)?.message).toBe("boom");
+    h.cleanup();
+  });
+
   it("leaves no run row when spawn throws", () => {
     const h = harness();
     const result = startBackgroundSearch({
@@ -177,6 +207,26 @@ describe("startBackgroundSearch", () => {
     expect(result.started).toBe(false);
     expect(result.message).toContain("ENOENT");
     expect(getRun(h.db, "search", SEARCH_RUN_KEY)).toBeNull();
+    h.cleanup();
+  });
+});
+
+describe("startRun forChild", () => {
+  it("leaves a same-pid finished row alone; the default call resets it", () => {
+    const h = harness();
+    startRun(h.db, "search", SEARCH_RUN_KEY, 4242);
+    finishRun(h.db, "search", SEARCH_RUN_KEY, false, "boom");
+    expect(
+      startRun(h.db, "search", SEARCH_RUN_KEY, 4242, undefined, {
+        forChild: true,
+      }),
+    ).toBe(true);
+    expect(getRun(h.db, "search", SEARCH_RUN_KEY)?.message).toBe("boom");
+    expect(startRun(h.db, "search", SEARCH_RUN_KEY, 4242)).toBe(true);
+    expect(getRun(h.db, "search", SEARCH_RUN_KEY)).toMatchObject({
+      finishedAt: null,
+      message: null,
+    });
     h.cleanup();
   });
 });

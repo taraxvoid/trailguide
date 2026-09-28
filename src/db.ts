@@ -343,6 +343,10 @@ export type RunKind = "tailor" | "search";
 /** The single key used for `kind = "search"` runs (one search per db). */
 export const SEARCH_RUN_KEY = "search";
 
+/** Message recorded for a run whose process died without finishing it. */
+export const exitedUnexpectedly = (kind: RunKind): string =>
+  `${kind} process exited unexpectedly`;
+
 export interface Run {
   kind: RunKind;
   key: string;
@@ -386,6 +390,10 @@ export function getRun(db: Database, kind: RunKind, key: string): Run | null {
  * Marks a run as started by `pid`. Returns false if a different live process
  * already has one running for this (kind, key). Re-claiming with the same pid
  * is fine: the TUI records the child's pid before the child starts.
+ *
+ * With `forChild`, the caller claims on behalf of a child that may already
+ * have claimed and finished its own row: a finished row owned by `pid` is left
+ * untouched (so its outcome survives) and true is returned.
  */
 export function startRun(
   db: Database,
@@ -393,11 +401,20 @@ export function startRun(
   key: string,
   pid: number,
   now = new Date().toISOString(),
+  options: { forChild?: boolean } = {},
 ): boolean {
   // IMMEDIATE takes the write lock before the read, so two processes cannot
   // both see the run as free and both claim it.
   const claim = db.transaction((): boolean => {
     const existing = getRun(db, kind, key);
+    if (
+      options.forChild &&
+      existing &&
+      existing.pid === pid &&
+      existing.finishedAt !== null
+    ) {
+      return true;
+    }
     if (
       existing &&
       existing.finishedAt === null &&
@@ -448,14 +465,7 @@ export function runningRuns(db: Database, kind: RunKind): Run[] {
   for (const row of rows) {
     const run = toRun(row);
     if (pidAlive(run.pid)) live.push(run);
-    else
-      finishRun(
-        db,
-        kind,
-        run.key,
-        false,
-        `${kind} process exited unexpectedly`,
-      );
+    else finishRun(db, kind, run.key, false, exitedUnexpectedly(kind));
   }
   return live;
 }
