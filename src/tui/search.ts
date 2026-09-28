@@ -9,6 +9,7 @@ import {
   runningRuns,
   startRun,
 } from "../db.ts";
+import { IGOR_DISABLE_FLAG } from "../igorArt.ts";
 
 export interface SpawnRequest {
   cmd: string[];
@@ -80,6 +81,7 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
         cmd: [
           process.execPath,
           `${import.meta.dir}/../cli.ts`,
+          IGOR_DISABLE_FLAG,
           "search",
           "--db",
           dbPath,
