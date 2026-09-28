@@ -33,5 +33,11 @@ export interface SearchParams {
 
 export interface Source {
   name: NormalizedJob["source"];
+  /**
+   * True when the source applies `location` inside its API query (jsearch,
+   * adzuna). The runner calls scoped sources once per (keyword, location)
+   * and unscoped ones once per keyword with no location.
+   */
+  scoped: boolean;
   search(params: SearchParams): Promise<NormalizedJob[]>;
 }

@@ -34,6 +34,7 @@ function toLocation(job: JSearchJob): string {
 export function createJSearchSource(apiKey: string): Source {
   return {
     name: "jsearch",
+    scoped: true,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const roles = toArray(params.role);
       const locations = params.location

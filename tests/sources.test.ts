@@ -489,3 +489,34 @@ describe("weworkremotely source", () => {
     );
   });
 });
+
+describe("source scoping", () => {
+  it("marks only the location-aware APIs as scoped", () => {
+    const all = [
+      createGreenhouseSource(),
+      createLeverSource(),
+      createAshbySource(),
+      createRemoteOkSource(),
+      createRemotiveSource(),
+      createWeWorkRemotelySource(),
+      createJobApsSource(),
+      createJSearchSource("key"),
+      createAdzunaSource("id", "key"),
+    ];
+    expect(
+      all
+        .filter((s) => s.scoped)
+        .map((s) => s.name)
+        .sort(),
+    ).toEqual(["adzuna", "jsearch"]);
+  });
+
+  it("reports ashby secondary locations for matching", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(ashbyFixture)),
+    ) as unknown as typeof fetch;
+    const jobs = await createAshbySource().search({ role: "engineer" });
+    expect(jobs[0]?.location).toBe("New York, NY (HQ)");
+    expect(jobs[0]?.otherLocations).toEqual(["Remote (US)"]);
+  });
+});

@@ -25,6 +25,7 @@ function matchesRole(title: string, role: string | string[]): boolean {
 export function createRemotiveSource(): Source {
   return {
     name: "remotive",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const roles = toArray(params.role);
       const url = new URL("https://remotive.com/api/remote-jobs");
