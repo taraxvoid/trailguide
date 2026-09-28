@@ -7,6 +7,7 @@ import {
   getJob,
   jobsByState,
   listingId,
+  setJobApplied,
   setJobState,
   upsertJobs,
 } from "../src/db.ts";
@@ -166,6 +167,44 @@ describe("upsertJobs", () => {
     upsertJobs(db, jobs, states);
 
     expect(first(allJobs(db)).state).toBe("inactive");
+    db.close();
+  });
+});
+
+describe("appliedAt", () => {
+  const id = "jsearch:job-1";
+  const seed = () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ sourceId: "job-1", source: "jsearch" })]);
+    return db;
+  };
+
+  it("is set when applied and kept when archived", () => {
+    const db = seed();
+    setJobState(db, id, "applied", "2024-01-01T00:00:00Z");
+    setJobState(db, id, "archived", "2024-02-01T00:00:00Z");
+    const job = getJob(db, id);
+    expect(job?.state).toBe("archived");
+    expect(job?.appliedAt).toBe("2024-01-01T00:00:00Z");
+    db.close();
+  });
+
+  it("is cleared when set back to active", () => {
+    const db = seed();
+    setJobState(db, id, "applied", "2024-01-01T00:00:00Z");
+    setJobState(db, id, "active", "2024-02-01T00:00:00Z");
+    expect(getJob(db, id)?.appliedAt).toBeNull();
+    db.close();
+  });
+
+  it("setJobApplied toggles without changing state", () => {
+    const db = seed();
+    setJobState(db, id, "archived", "2024-01-01T00:00:00Z");
+    setJobApplied(db, id, true, "2024-02-01T00:00:00Z");
+    expect(getJob(db, id)?.appliedAt).toBe("2024-02-01T00:00:00Z");
+    expect(getJob(db, id)?.state).toBe("archived");
+    setJobApplied(db, id, false, "2024-03-01T00:00:00Z");
+    expect(getJob(db, id)?.appliedAt).toBeNull();
     db.close();
   });
 });
