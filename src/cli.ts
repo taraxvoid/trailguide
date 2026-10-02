@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
-import { Command, Option } from "commander";
+import { Command } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   parseBoundary,
@@ -9,6 +9,7 @@ import {
   truncateWords,
   weekRange,
 } from "./dateRange.ts";
+import type { ListingState } from "./db.ts";
 import {
   allJobs,
   clearJobs,
@@ -21,9 +22,8 @@ import {
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
-import type { ListingState } from "./db.ts";
 import { dedupe } from "./dedupe.ts";
-import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
+import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";

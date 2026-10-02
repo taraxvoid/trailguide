@@ -1,17 +1,17 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
 import {
-  type ListingState,
   allJobs,
   clearJobs,
   getJob,
   jobsByState,
+  type ListingState,
   listingId,
+  openDb,
   setJobApplied,
   setJobState,
   upsertJobs,
 } from "../src/db.ts";
-import { openDb } from "../src/db.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
 
 let counter = 0;

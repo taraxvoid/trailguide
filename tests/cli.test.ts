@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
-  type SearchOptions,
   buildSources,
   createProgram,
   isInternship,
   requiresClearance,
+  type SearchOptions,
 } from "../src/cli.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
 
@@ -66,11 +66,8 @@ describe("buildSources", () => {
   const originalEnv = { ...process.env };
 
   beforeEach(() => {
-    // biome-ignore lint/performance/noDelete: unset (not blank) env vars so buildSources sees them as absent
     delete process.env.JSEARCH_API_KEY;
-    // biome-ignore lint/performance/noDelete: unset (not blank) env vars so buildSources sees them as absent
     delete process.env.ADZUNA_APP_ID;
-    // biome-ignore lint/performance/noDelete: unset (not blank) env vars so buildSources sees them as absent
     delete process.env.ADZUNA_APP_KEY;
   });
 

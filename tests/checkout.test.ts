@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
 import {
-  NO_DELEGATE_ENV,
   delegateTarget,
   findCheckout,
+  NO_DELEGATE_ENV,
 } from "../src/checkout.ts";
 
 const root = `/tmp/igor-checkout-test-${Date.now()}`;
