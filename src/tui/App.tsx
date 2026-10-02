@@ -20,8 +20,8 @@ import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
-  getTailorRun,
   getTailoredResume,
+  getTailorRun,
   runningTailorIds,
   setJobApplied,
   setJobState,

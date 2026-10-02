@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { normalizeHeadingText } from "./resumeDoc.ts";
 import type { ResumeDoc } from "./resumeDoc.ts";
+import { normalizeHeadingText } from "./resumeDoc.ts";
 
 // Converts a tailored ResumeDoc into a Typst source document, then shells
 // out to the `typst` CLI to render it to PDF.

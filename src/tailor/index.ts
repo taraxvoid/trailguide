@@ -14,8 +14,8 @@ import {
   resolveOllamaModel,
 } from "./ollama.ts";
 import { applyPlan, sanitizePlan } from "./plan.ts";
-import { parseResume, toMarkdown } from "./resumeDoc.ts";
 import type { ResumeDoc } from "./resumeDoc.ts";
+import { parseResume, toMarkdown } from "./resumeDoc.ts";
 import { renderResumePdf } from "./typst.ts";
 
 // Orchestrates the "tailor this resume to this job" action: find the
