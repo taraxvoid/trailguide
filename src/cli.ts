@@ -103,7 +103,8 @@ export interface SearchOptions {
   csv: boolean;
   db?: string;
   config?: string;
-  clearance: boolean;
+  excludeClearance?: boolean;
+  includeClearance?: boolean;
 }
 
 export interface SearchDeps {
@@ -126,6 +127,11 @@ export async function runSearch(
   // search row with a failed run.
   if (options.remote && options.onsite) {
     throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
+  if (options.excludeClearance && options.includeClearance) {
+    throw new ConfigError(
+      "--exclude-clearance and --include-clearance are mutually exclusive",
+    );
   }
   const cwd = deps.cwd ?? process.cwd();
   const env = deps.env ?? process.env;
@@ -507,7 +513,14 @@ export function createProgram(
     .option("--csv", "output all stored jobs as CSV", false)
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
-    .option("--clearance", "include jobs requiring clearance", false)
+    .option(
+      "--exclude-clearance",
+      "drop jobs that require a security clearance",
+    )
+    .option(
+      "--include-clearance",
+      "keep jobs that require a clearance, even if the config excludes them",
+    )
     .action(async (options: SearchOptions) => {
       await searchAction(options);
     });

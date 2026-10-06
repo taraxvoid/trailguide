@@ -4,7 +4,6 @@ import type { NormalizedJob } from "./types.ts";
 
 // Aliases used wherever a place is matched (onsite and remote).
 const LOCATION_ALIASES: Record<string, string[]> = {
-  omaha: ["omaha", "la vista", "elkhorn", "ralston"],
   // Regions: a target of "Bay Area" or "Seattle" takes the whole metro.
   "bay area": [
     "bay area",
@@ -99,7 +98,6 @@ const LOCATION_ALIASES: Record<string, string[]> = {
 // Extra terms that make a remote listing eligible for a place. Never used
 // for onsite matching: an onsite job in Lincoln is not an Omaha job.
 const REMOTE_ONLY_ALIASES: Record<string, string[]> = {
-  omaha: ["nebraska"],
   "bay area": ["california"],
   "east bay": ["california"],
   "south bay": ["california"],
@@ -226,11 +224,24 @@ function canonicalKey(place: string): string {
   return KEY_SYNONYMS[key] ?? key;
 }
 
+/** "omaha, ne" also matches a listing that spells the state out. */
+function spelledOutState(text: string): string[] {
+  const match = /^(.+?)\s*,\s*([a-z]{2})$/.exec(text);
+  const state = match && US_STATES[(match[2] ?? "").toUpperCase()];
+  return match && state ? [`${match[1]}, ${state}`] : [];
+}
+
 /** Match terms for a place: its own text plus aliases of its alias key. */
 function aliasesFor(place: string): string[] {
   const text = place.trim().toLowerCase();
   if (text === "") return [];
-  return [...new Set([text, ...(LOCATION_ALIASES[canonicalKey(text)] ?? [])])];
+  return [
+    ...new Set([
+      text,
+      ...spelledOutState(text),
+      ...(LOCATION_ALIASES[canonicalKey(text)] ?? []),
+    ]),
+  ];
 }
 
 // Regions span many towns, and several share a name with places elsewhere
@@ -285,12 +296,13 @@ export function remoteEligible(
   jobLocation: string,
   city: string,
   region: string[] = [],
+  aliases: string[] = [],
 ): boolean {
   if (isGlobalLocation(jobLocation)) return true;
   if ([city, ...region].some(isUnitedStates) && isUsLocation(jobLocation)) {
     return true;
   }
-  if (matchesLocation(jobLocation, [city, ...region])) return true;
+  if (matchesLocation(jobLocation, [city, ...aliases, ...region])) return true;
   const job = jobLocation.toLowerCase();
   return (REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []).some((term) =>
     containsTerm(job, term),
@@ -337,9 +349,10 @@ export function matches(
   const city = target.city;
   if (options.scoped || city === null) return true;
   const places = [job.location, ...(job.otherLocations ?? [])];
+  const aliases = target.aliases ?? [];
   return places.some((place) =>
     remote
-      ? remoteEligible(place, city, target.region)
-      : matchesLocation(place, city),
+      ? remoteEligible(place, city, target.region, aliases)
+      : matchesLocation(place, [city, ...aliases]),
   );
 }

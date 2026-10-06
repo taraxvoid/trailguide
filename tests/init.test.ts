@@ -82,7 +82,6 @@ describe("runInit prompts", () => {
     ]);
     expect(await runInit({}, io)).toBe(true);
     expect(readConfig()).toEqual({
-      govmil: false,
       locations: [
         { city: "Omaha, NE", flexibility: "in-person", region: [] },
         { city: "United States", flexibility: "remote", region: [] },

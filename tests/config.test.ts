@@ -15,8 +15,9 @@ import type { Board } from "../src/sources/boards.ts";
 import { defaultBoards } from "../src/sources/seed.ts";
 
 const FULL = `
-[job]
-govmil = true
+[filter]
+clearance = "exclude"
+exclude = ["Offutt", " STRATCOM "]
 
 [db]
 path = "sandbox.db"
@@ -49,7 +50,8 @@ function errorOf(fn: () => unknown): Error {
 describe("parseConfig", () => {
   it("parses every section", () => {
     expect(parseConfig(FULL, "/etc/igor/igor.toml")).toEqual({
-      govmil: true,
+      clearance: "exclude",
+      excludeTerms: ["Offutt", "STRATCOM"],
       db: "/etc/igor/sandbox.db",
       locations: [
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
@@ -132,6 +134,31 @@ describe("parseConfig", () => {
     ]);
   });
 
+  it("reads location aliases and keeps them through a round trip", () => {
+    const config = parseConfig(
+      '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\naliases = ["La Vista", "Elkhorn"]\nregion = "Nebraska"\n[[location]]\ncity = "Austin"\naliases = "Round Rock"\n',
+      "igor.toml",
+    );
+    expect(config.locations).toEqual([
+      {
+        city: "Omaha",
+        flexibility: "in-person",
+        region: ["Nebraska"],
+        aliases: ["La Vista", "Elkhorn"],
+      },
+      {
+        city: "Austin",
+        flexibility: "any",
+        region: [],
+        aliases: ["Round Rock"],
+      },
+    ]);
+    expect(parseConfig(formatConfig(config), "x.toml")).toEqual(config);
+    expect(() =>
+      parseConfig('[[location]]\ncity = "A"\naliases = [1]\n', "igor.toml"),
+    ).toThrow('"aliases" must be a string or a list of strings');
+  });
+
   it("rejects malformed boards", () => {
     const board = (lines: string[]) =>
       parseConfig(`[[board]]\n${lines.join("\n")}\n`, "igor.toml");
@@ -154,7 +181,7 @@ describe("parseConfig", () => {
 
   it("rejects typo'd table names at the top level", () => {
     expect(() => parseConfig('[[keyword]]\nrole = "x"\n', "igor.toml")).toThrow(
-      'igor.toml: top level has unknown key "keyword" (expected job, db, resume, location, keywords, board, sources)',
+      'igor.toml: top level has unknown key "keyword" (expected filter, db, resume, location, keywords, board, sources)',
     );
     expect(() =>
       parseConfig('[[locations]]\ncity = "x"\n', "igor.toml"),
@@ -162,8 +189,8 @@ describe("parseConfig", () => {
   });
 
   it("rejects unknown keys inside known tables", () => {
-    expect(() => parseConfig("[job]\nclearance = true\n", "igor.toml")).toThrow(
-      'igor.toml: [job] has unknown key "clearance" (expected govmil)',
+    expect(() => parseConfig("[filter]\ngovmil = true\n", "igor.toml")).toThrow(
+      'igor.toml: [filter] has unknown key "govmil" (expected clearance, exclude)',
     );
     expect(() =>
       parseConfig(
@@ -189,8 +216,14 @@ describe("parseConfig", () => {
   });
 
   it("rejects wrong types", () => {
-    expect(() => parseConfig('[job]\ngovmil = "yes"\n', "igor.toml")).toThrow(
-      'igor.toml: [job] "govmil" must be true or false',
+    expect(() =>
+      parseConfig('[filter]\nclearance = "yes"\n', "igor.toml"),
+    ).toThrow('igor.toml: [filter] "clearance" must be "include" or "exclude"');
+    expect(() => parseConfig("[filter]\nexclude = [1]\n", "igor.toml")).toThrow(
+      'igor.toml: [filter] "exclude" must be a list of strings',
+    );
+    expect(() => parseConfig("[job]\ngovmil = false\n", "igor.toml")).toThrow(
+      "[job] was replaced by [filter]",
     );
     expect(() =>
       parseConfig('[[location]]\ncity = "A"\nregion = [1]\n', "igor.toml"),
@@ -224,7 +257,7 @@ describe("parseConfig", () => {
     expect(first.message).not.toContain("Invalid TOML document");
 
     const second = errorOf(() =>
-      parseConfig('[job]\ngovmil = "unterminated\n', "bad.toml"),
+      parseConfig('[filter]\nclearance = "unterminated\n', "bad.toml"),
     );
     expect(second.message).toMatch(/^bad\.toml:2:\d+: \S/);
   });
@@ -235,11 +268,12 @@ describe("mergeConfigs", () => {
 
   it("replaces lists wholesale and overrides scalars per key", () => {
     const local = parseConfig(
-      '[job]\ngovmil = false\n[[location]]\ncity = "Austin"\n',
+      '[filter]\nclearance = "include"\n[[location]]\ncity = "Austin"\n',
       "/l/igor.toml",
     );
     const merged = mergeConfigs(base, local);
-    expect(merged.govmil).toBe(false);
+    expect(merged.clearance).toBe("include");
+    expect(merged.excludeTerms).toEqual(["Offutt", "STRATCOM"]);
     expect(merged.locations).toEqual([
       { city: "Austin", flexibility: "any", region: [] },
     ]);
@@ -319,9 +353,14 @@ describe("formatConfig / writeConfig", () => {
   it("writes the file, creating missing directories", () => {
     dir = mkdtempSync(join(tmpdir(), "igor-config-"));
     const path = join(dir, "a", "b", "config.toml");
-    writeConfig(path, { govmil: false, keywords: [{ role: "swe" }] });
+    writeConfig(path, {
+      clearance: "exclude",
+      excludeTerms: ["x"],
+      keywords: [{ role: "swe" }],
+    });
     expect(parseConfig(readFileSync(path, "utf8"), path)).toEqual({
-      govmil: false,
+      clearance: "exclude",
+      excludeTerms: ["x"],
       keywords: [{ role: "swe" }],
     });
   });

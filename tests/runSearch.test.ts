@@ -65,7 +65,6 @@ function broken(name: NormalizedJob["source"], message: string): Source {
 const flags = (over: Partial<SearchOptions> = {}): SearchOptions => ({
   json: false,
   csv: false,
-  clearance: false,
   ...over,
 });
 

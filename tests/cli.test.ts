@@ -65,8 +65,6 @@ describe("requiresClearance", () => {
       "Active TS/SCI required",
       "Must be able to obtain a clearance",
       "Full-scope polygraph",
-      "Onsite at Offutt AFB",
-      "Supports STRATCOM missions",
     ]) {
       expect(requiresClearance(job({ description }))).toBe(true);
     }
@@ -252,7 +250,6 @@ describe("search command parsing", () => {
       role: ["engineer"],
       json: false,
       csv: false,
-      clearance: false,
     });
     expect(calls[0]?.db).toBeUndefined();
     expect(calls[0]?.remote).toBe(false);
@@ -287,7 +284,7 @@ describe("search command parsing", () => {
       "--remote",
       "--onsite",
       "--json",
-      "--clearance",
+      "--exclude-clearance",
       "--db",
       "custom.db",
     ]);
@@ -299,7 +296,7 @@ describe("search command parsing", () => {
       onsite: true,
       json: true,
       csv: false,
-      clearance: true,
+      excludeClearance: true,
       db: "custom.db",
     });
   });

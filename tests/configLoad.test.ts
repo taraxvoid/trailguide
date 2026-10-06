@@ -36,12 +36,12 @@ describe("loadConfig", () => {
   it("layers the local file over the global one", () => {
     write(
       globalFile(),
-      '[job]\ngovmil = true\n[[location]]\ncity = "Omaha"\n[[keywords]]\nrole = "swe"\n',
+      '[filter]\nclearance = "exclude"\n[[location]]\ncity = "Omaha"\n[[keywords]]\nrole = "swe"\n',
     );
     write(localFile(), '[[location]]\ncity = "Austin"\n');
     const { config, files } = loadConfig({ cwd, env });
     expect(files).toEqual([globalFile(), localFile()]);
-    expect(config.govmil).toBe(true);
+    expect(config.clearance).toBe("exclude");
     expect(config.locations).toEqual([
       { city: "Austin", flexibility: "any", region: [] },
     ]);

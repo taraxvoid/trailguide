@@ -13,12 +13,24 @@ const GOVMIL_EMPLOYERS =
 // "clearance" are left out: EEO boilerplate ("veteran or military status")
 // would otherwise hide most US listings.
 const GOVMIL_TERMS =
-  /\b(?:(?:security|active|secret|government|federal|dod|ts) clearances?|clearance (?:is )?required|(?:obtain|maintain) (?:a |an )?clearance|top secret|(?:ci|full[- ]scope) poly(?:graph)?|polygraph|public trust (?:clearance|position)|department of (?:defense|war)|warfighters?|Offutt|STRATCOM|DoD 8[15][47]0)\b/i;
+  /\b(?:(?:security|active|secret|government|federal|dod|ts) clearances?|clearance (?:is )?required|(?:obtain|maintain) (?:a |an )?clearance|top secret|(?:ci|full[- ]scope) poly(?:graph)?|polygraph|public trust (?:clearance|position)|department of (?:defense|war)|warfighters?|DoD 8[15][47]0)\b/i;
 // Acronyms, case-sensitive so "sci" or "dod" in ordinary words never match.
 const GOVMIL_ACRONYMS = /\b(?:TS\/SCI|SCI|DoD|DoDIN)\b/;
 
 export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
+}
+
+/** Whether the company, title or description contains any of `terms` as a whole word. */
+export function mentionsAny(job: NormalizedJob, terms: string[]): boolean {
+  if (terms.length === 0) return false;
+  const text = `${job.company}\n${job.title}\n${job.description ?? ""}`;
+  return terms.some((term) =>
+    new RegExp(
+      `(?<![a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![a-z0-9])`,
+      "i",
+    ).test(text),
+  );
 }
 
 export function requiresClearance(job: NormalizedJob): boolean {
@@ -153,7 +165,8 @@ export async function collectJobs(
 
   const jobs = dedupe([...kept, ...perTarget.flat()])
     .filter((job) => !isInternship(job))
-    .filter((job) => plan.govmil || !requiresClearance(job))
+    .filter((job) => !plan.filter.excludeClearance || !requiresClearance(job))
+    .filter((job) => !mentionsAny(job, plan.filter.excludeTerms))
     .map((job) => ({ ...job, url: stripTrackingParams(job.url) }));
 
   return {

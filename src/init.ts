@@ -198,7 +198,6 @@ export async function runInit(
     parseWorkFlags(clean(options.work), cities) ?? (await askWork(io, cities));
 
   writeConfig(configPath, {
-    govmil: false,
     locations: cities.map((city, i) => ({
       city,
       flexibility: flexibilities[i] ?? "any",
