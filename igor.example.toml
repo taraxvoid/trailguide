@@ -1,10 +1,8 @@
 # Copy to igor.toml (per project) or ~/.config/igor/config.toml (global).
 # `igor init` writes the global one for you. A local igor.toml is merged over
-# the global file: [job] keys override one by one, while [[location]] and
-# [[keywords]] REPLACE the global lists if the local file defines them.
-
-[job]
-govmil = false             # true to include jobs that mention a clearance
+# the global file: scalar keys override one by one, while [[location]],
+# [[keywords]], [[board]] and [filter] exclude REPLACE the global lists if the
+# local file defines them.
 
 # Uncomment for a self-contained sandbox next to this file (relative paths
 # resolve against this file's directory). Default: ~/.local/share/igor/igor.db
@@ -15,22 +13,51 @@ govmil = false             # true to include jobs that mention a clearance
 # Use specific cities for in-person work; broad regions only match listings
 # that name the region.
 [[location]]
-city = "Omaha"
-flexibility = "in-person"  # remote | in-person (onsite or hybrid) | any (default)
-region = ["Nebraska"]      # optional: extra places a REMOTE listing may name
+city = "Austin, TX"
+flexibility = "in-person"            # remote | in-person (onsite or hybrid) | any (default)
+aliases = ["Round Rock", "Cedar Park"]  # optional: other names for the same place
+region = ["Texas"]                   # optional: extra places a REMOTE listing may name
 
 [[location]]
 city = "United States"
 flexibility = "remote"
 
+# Built in: "Bay Area", "East Bay", "South Bay" and "Seattle" cover their
+# metro's main towns (a listing must name the state or use a bare town name).
+
+[[keywords]]
+role = "Platform Engineer"
+lane = "platform"    # optional: tailor these jobs from <resume dir>/platform.md
+
+[[keywords]]
+role = "Security Engineer"
+lane = "security"
+
+# Drop listings you never want. Both settings are optional.
+[filter]
+clearance = "include"            # "exclude" drops listings that require a security clearance
+exclude = ["Some Staffing Co"]   # whole-word, case-insensitive; checked in company, title and description
+
+# Company job boards to search in addition to the built-in set (greenhouse,
+# lever, ashby, workday). The slug is in the board's URL:
+#   boards.greenhouse.io/<slug>   jobs.lever.co/<slug>   jobs.ashbyhq.com/<slug>
+#   <slug>.<host>.myworkdayjobs.com/<site>   (workday also needs host and site)
+[[board]]
+company = "10x Genomics"
+ats = "greenhouse"
+slug = "10xgenomics"
+
+[[board]]
+company = "Cadence"
+ats = "workday"
+slug = "cadence"
+host = "wd1"
+site = "External_Careers"
+
+# Search only the [[board]] entries above, not the built-in set.
+# [sources]
+# builtin_boards = false
+
 # Resume masters for `igor tailor`. Default: ~/.config/igor/resumes
 # [resume]
 # dir = "resumes"
-
-# Optional lane per keyword: jobs it finds tailor from <resume dir>/<lane>.md.
-[[keywords]]
-role = "Software Engineer"
-lane = "swe"
-
-[[keywords]]
-role = "DevOps Engineer"

@@ -43,7 +43,9 @@ function fake(
     name,
     scoped,
     async search(params) {
-      calls.push(params);
+      // The runner adds `warn`; tests only care about the query.
+      const { warn: _warn, ...query } = params;
+      calls.push(query);
       return jobs;
     },
   };
@@ -63,7 +65,6 @@ function broken(name: NormalizedJob["source"], message: string): Source {
 const flags = (over: Partial<SearchOptions> = {}): SearchOptions => ({
   json: false,
   csv: false,
-  clearance: false,
   ...over,
 });
 

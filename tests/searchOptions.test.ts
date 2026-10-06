@@ -5,10 +5,12 @@ import {
   toSearchOptions,
 } from "../src/config.ts";
 
+const NO_FILTER = { excludeClearance: false, excludeTerms: [] };
+
 const LOADED: LoadedConfig = {
   files: ["/g/config.toml"],
   config: {
-    govmil: false,
+    clearance: "include",
     keywords: [{ role: "swe" }, { role: "devops" }],
     locations: [
       { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
@@ -32,18 +34,21 @@ describe("toSearchOptions with --role", () => {
       keywords: ["swe"],
       lanes: {},
       targets: [{ city: "Omaha", flexibility: "remote", region: [] }],
-      govmil: false,
+      filter: NO_FILTER,
     });
   });
 
   it("has one unrestricted target without --location (today's behavior)", () => {
     expect(
-      toSearchOptions({ role: ["swe"], onsite: true, clearance: true }, never),
+      toSearchOptions(
+        { role: ["swe"], onsite: true, excludeClearance: true },
+        never,
+      ),
     ).toEqual({
       keywords: ["swe"],
       lanes: {},
       targets: [{ city: null, flexibility: "in-person", region: [] }],
-      govmil: true,
+      filter: { excludeClearance: true, excludeTerms: [] },
     });
   });
 });
@@ -69,19 +74,19 @@ describe("toSearchOptions from the config", () => {
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
         { city: "United States", flexibility: "remote", region: [] },
       ],
-      govmil: false,
+      filter: NO_FILTER,
     });
   });
 
-  it("lets --location, --remote/--onsite and --clearance override pieces", () => {
+  it("lets --location, --remote/--onsite and the clearance flags override pieces", () => {
     const relocated = toSearchOptions(
-      { location: ["Reno"], clearance: true },
+      { location: ["Reno"], excludeClearance: true },
       () => LOADED,
     );
     expect(relocated.targets).toEqual([
       { city: "Reno", flexibility: "any", region: [] },
     ]);
-    expect(relocated.govmil).toBe(true);
+    expect(relocated.filter.excludeClearance).toBe(true);
 
     const onsite = toSearchOptions({ onsite: true }, () => LOADED);
     expect(onsite.targets.map((t) => t.flexibility)).toEqual([
@@ -90,9 +95,36 @@ describe("toSearchOptions from the config", () => {
     ]);
   });
 
-  it("honors govmil from the config", () => {
-    const loaded = { ...LOADED, config: { ...LOADED.config, govmil: true } };
-    expect(toSearchOptions({}, () => loaded).govmil).toBe(true);
+  it("takes the clearance setting and extra terms from the config", () => {
+    const loaded = {
+      ...LOADED,
+      config: {
+        ...LOADED.config,
+        clearance: "exclude" as const,
+        excludeTerms: ["Offutt"],
+      },
+    };
+    expect(toSearchOptions({}, () => loaded).filter).toEqual({
+      excludeClearance: true,
+      excludeTerms: ["Offutt"],
+    });
+    expect(
+      toSearchOptions({ includeClearance: true }, () => loaded).filter
+        .excludeClearance,
+    ).toBe(false);
+    expect(
+      toSearchOptions({ excludeClearance: true }, () => LOADED).filter
+        .excludeClearance,
+    ).toBe(true);
+  });
+
+  it("rejects --exclude-clearance with --include-clearance", () => {
+    expect(() =>
+      toSearchOptions(
+        { excludeClearance: true, includeClearance: true },
+        () => LOADED,
+      ),
+    ).toThrow("--exclude-clearance and --include-clearance are mutually");
   });
 });
 

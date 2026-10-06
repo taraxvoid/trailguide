@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
@@ -53,7 +54,7 @@ export function createJSearchSource(apiKey: string): Source {
             url.searchParams.set("remote_jobs_only", "true");
           }
 
-          const res = await fetch(url, {
+          const res = await httpFetch(url, {
             headers: {
               "X-RapidAPI-Key": apiKey,
               "X-RapidAPI-Host": "jsearch.p.rapidapi.com",

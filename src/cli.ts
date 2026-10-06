@@ -2,12 +2,14 @@
 import type { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
 import { Command } from "commander";
+import pkg from "../package.json" with { type: "json" };
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
   describeConfig,
   LANE_PATTERN,
   loadConfig,
+  resolveBoards,
   resolveDbPath,
   resolveResumeDir,
   toSearchOptions,
@@ -37,6 +39,7 @@ import {
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
+import { httpFetch } from "./http.ts";
 import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
@@ -50,12 +53,14 @@ import {
 } from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
+import type { Board } from "./sources/boards.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJobApsSource } from "./sources/jobaps.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
 import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
+import { companiesForAts, defaultBoards } from "./sources/seed.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { createWorkdaySource } from "./sources/workday.ts";
@@ -65,16 +70,16 @@ import { runTui } from "./tui/index.ts";
 // Re-exported so existing importers (tests/cli.test.ts) keep working.
 export { isInternship, requiresClearance };
 
-export function buildSources(): Source[] {
+export function buildSources(boards: Board[] = defaultBoards): Source[] {
   const sources: Source[] = [
-    createGreenhouseSource(),
-    createLeverSource(),
-    createAshbySource(),
+    createGreenhouseSource(companiesForAts("greenhouse", boards)),
+    createLeverSource(companiesForAts("lever", boards)),
+    createAshbySource(companiesForAts("ashby", boards)),
     createRemoteOkSource(),
     createRemotiveSource(),
     createWeWorkRemotelySource(),
     createJobApsSource(),
-    createWorkdaySource(),
+    createWorkdaySource(companiesForAts("workday", boards)),
   ];
 
   if (process.env.JSEARCH_API_KEY) {
@@ -99,7 +104,8 @@ export interface SearchOptions {
   csv: boolean;
   db?: string;
   config?: string;
-  clearance: boolean;
+  excludeClearance?: boolean;
+  includeClearance?: boolean;
 }
 
 export interface SearchDeps {
@@ -122,6 +128,11 @@ export async function runSearch(
   // search row with a failed run.
   if (options.remote && options.onsite) {
     throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
+  if (options.excludeClearance && options.includeClearance) {
+    throw new ConfigError(
+      "--exclude-clearance and --include-clearance are mutually exclusive",
+    );
   }
   const cwd = deps.cwd ?? process.cwd();
   const env = deps.env ?? process.env;
@@ -149,7 +160,12 @@ export async function runSearch(
     const plan = toSearchOptions(options, () =>
       loadConfig({ config: options.config, cwd, env }),
     );
-    const collected = await collectJobs(plan, deps.sources ?? buildSources());
+    const sources =
+      deps.sources ??
+      buildSources(
+        resolveBoards(loadConfig({ config: options.config, cwd, env }).config),
+      );
+    const collected = await collectJobs(plan, sources);
     jobs = collected.jobs;
     const deadCheck = deps.isUrlDead ?? isUrlDead;
     const states = new Map<string, ListingState>();
@@ -237,7 +253,7 @@ const URL_CHECK_TIMEOUT_MS = 15_000;
 
 async function isUrlDead(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, {
+    const res = await httpFetch(url, {
       redirect: "follow",
       signal: AbortSignal.timeout(URL_CHECK_TIMEOUT_MS),
     });
@@ -476,8 +492,11 @@ export function createProgram(
 
   program
     .name("igor")
-    .description("A minion to find software engineering jobs")
-    .option(IGOR_DISABLE_FLAG, "Disable Igor ASCII art");
+    .description(
+      "Job search and resume tailoring that only rearranges what you've already written",
+    )
+    .version(pkg.version)
+    .option(IGOR_DISABLE_FLAG, "Hide the banner shown by init and --version");
 
   program
     .command("search")
@@ -498,7 +517,14 @@ export function createProgram(
     .option("--csv", "output all stored jobs as CSV", false)
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
-    .option("--clearance", "include jobs requiring clearance", false)
+    .option(
+      "--exclude-clearance",
+      "drop jobs that require a security clearance",
+    )
+    .option(
+      "--include-clearance",
+      "keep jobs that require a clearance, even if the config excludes them",
+    )
     .action(async (options: SearchOptions) => {
       await searchAction(options);
     });

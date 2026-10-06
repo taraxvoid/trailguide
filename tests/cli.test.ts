@@ -65,8 +65,6 @@ describe("requiresClearance", () => {
       "Active TS/SCI required",
       "Must be able to obtain a clearance",
       "Full-scope polygraph",
-      "Onsite at Offutt AFB",
-      "Supports STRATCOM missions",
     ]) {
       expect(requiresClearance(job({ description }))).toBe(true);
     }
@@ -119,6 +117,26 @@ describe("buildSources", () => {
         "workday",
       ]),
     );
+  });
+
+  it("gives each board source only its own boards", async () => {
+    const original = globalThis.fetch;
+    const urls: string[] = [];
+    globalThis.fetch = (async (url: string | URL) => {
+      urls.push(String(url));
+      return new Response("[]");
+    }) as unknown as typeof fetch;
+    try {
+      const sources = buildSources([
+        { company: "Mine", ats: "lever", slug: "mine" },
+      ]);
+      for (const name of ["lever", "greenhouse"]) {
+        await sources.find((s) => s.name === name)?.search({ role: "x" });
+      }
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(urls).toEqual(["https://api.lever.co/v0/postings/mine?mode=json"]);
   });
 
   it("adds jsearch when JSEARCH_API_KEY is set", () => {
@@ -232,7 +250,6 @@ describe("search command parsing", () => {
       role: ["engineer"],
       json: false,
       csv: false,
-      clearance: false,
     });
     expect(calls[0]?.db).toBeUndefined();
     expect(calls[0]?.remote).toBe(false);
@@ -267,7 +284,7 @@ describe("search command parsing", () => {
       "--remote",
       "--onsite",
       "--json",
-      "--clearance",
+      "--exclude-clearance",
       "--db",
       "custom.db",
     ]);
@@ -279,7 +296,7 @@ describe("search command parsing", () => {
       onsite: true,
       json: true,
       csv: false,
-      clearance: true,
+      excludeClearance: true,
       db: "custom.db",
     });
   });
