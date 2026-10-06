@@ -8,6 +8,7 @@ import {
   describeConfig,
   LANE_PATTERN,
   loadConfig,
+  resolveBoards,
   resolveDbPath,
   resolveResumeDir,
   toSearchOptions,
@@ -51,12 +52,14 @@ import {
 } from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
+import type { Board } from "./sources/boards.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
 import { createJobApsSource } from "./sources/jobaps.ts";
 import { createJSearchSource } from "./sources/jsearch.ts";
 import { createLeverSource } from "./sources/lever.ts";
 import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
+import { companiesForAts, defaultBoards } from "./sources/seed.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { createWorkdaySource } from "./sources/workday.ts";
@@ -66,16 +69,16 @@ import { runTui } from "./tui/index.ts";
 // Re-exported so existing importers (tests/cli.test.ts) keep working.
 export { isInternship, requiresClearance };
 
-export function buildSources(): Source[] {
+export function buildSources(boards: Board[] = defaultBoards): Source[] {
   const sources: Source[] = [
-    createGreenhouseSource(),
-    createLeverSource(),
-    createAshbySource(),
+    createGreenhouseSource(companiesForAts("greenhouse", boards)),
+    createLeverSource(companiesForAts("lever", boards)),
+    createAshbySource(companiesForAts("ashby", boards)),
     createRemoteOkSource(),
     createRemotiveSource(),
     createWeWorkRemotelySource(),
     createJobApsSource(),
-    createWorkdaySource(),
+    createWorkdaySource(companiesForAts("workday", boards)),
   ];
 
   if (process.env.JSEARCH_API_KEY) {
@@ -150,7 +153,12 @@ export async function runSearch(
     const plan = toSearchOptions(options, () =>
       loadConfig({ config: options.config, cwd, env }),
     );
-    const collected = await collectJobs(plan, deps.sources ?? buildSources());
+    const sources =
+      deps.sources ??
+      buildSources(
+        resolveBoards(loadConfig({ config: options.config, cwd, env }).config),
+      );
+    const collected = await collectJobs(plan, sources);
     jobs = collected.jobs;
     const deadCheck = deps.isUrlDead ?? isUrlDead;
     const states = new Map<string, ListingState>();

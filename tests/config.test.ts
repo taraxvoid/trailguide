@@ -5,10 +5,14 @@ import { join } from "node:path";
 import {
   ConfigError,
   formatConfig,
+  type IgorConfig,
   mergeConfigs,
   parseConfig,
+  resolveBoards,
   writeConfig,
 } from "../src/config.ts";
+import type { Board } from "../src/sources/boards.ts";
+import { defaultBoards } from "../src/sources/seed.ts";
 
 const FULL = `
 [job]
@@ -97,9 +101,60 @@ describe("parseConfig", () => {
     ).toThrow('lane "../secret" must be lowercase letters');
   });
 
+  it("reads [[board]] entries and [sources]", () => {
+    const config = parseConfig(
+      [
+        "[sources]",
+        "builtin_boards = false",
+        "[[board]]",
+        'company = "Acme"',
+        'ats = "greenhouse"',
+        'slug = "acme"',
+        "[[board]]",
+        'company = "Big Co"',
+        'ats = "workday"',
+        'slug = "bigco"',
+        'host = "wd5"',
+        'site = "Careers"',
+      ].join("\n"),
+      "igor.toml",
+    );
+    expect(config.builtinBoards).toBe(false);
+    expect(config.boards).toEqual([
+      { company: "Acme", ats: "greenhouse", slug: "acme" },
+      {
+        company: "Big Co",
+        ats: "workday",
+        slug: "bigco",
+        host: "wd5",
+        site: "Careers",
+      },
+    ]);
+  });
+
+  it("rejects malformed boards", () => {
+    const board = (lines: string[]) =>
+      parseConfig(`[[board]]\n${lines.join("\n")}\n`, "igor.toml");
+    expect(() =>
+      board(['company = "A"', 'ats = "taleo"', 'slug = "a"']),
+    ).toThrow('invalid ats "taleo" (use greenhouse, lever, ashby, workday)');
+    expect(() =>
+      board(['company = "A"', 'ats = "workday"', 'slug = "a"']),
+    ).toThrow('is missing "host"');
+    expect(() =>
+      board(['company = "A"', 'ats = "lever"', 'slug = "a"', 'host = "wd5"']),
+    ).toThrow('"host" and "site" only apply to workday boards');
+    expect(() => board(['company = "A"', 'ats = "lever"'])).toThrow(
+      'is missing "slug"',
+    );
+    expect(() =>
+      parseConfig("[sources]\nbuiltin_boards = 1\n", "igor.toml"),
+    ).toThrow('"builtin_boards" must be true or false');
+  });
+
   it("rejects typo'd table names at the top level", () => {
     expect(() => parseConfig('[[keyword]]\nrole = "x"\n', "igor.toml")).toThrow(
-      'igor.toml: top level has unknown key "keyword" (expected job, db, resume, location, keywords)',
+      'igor.toml: top level has unknown key "keyword" (expected job, db, resume, location, keywords, board, sources)',
     );
     expect(() =>
       parseConfig('[[locations]]\ncity = "x"\n', "igor.toml"),
@@ -200,7 +255,43 @@ describe("mergeConfigs", () => {
   });
 });
 
+describe("resolveBoards", () => {
+  const mine = { company: "Mine", ats: "lever", slug: "mine" } as const;
+
+  it("adds config boards to the built-in set", () => {
+    const boards = resolveBoards({ boards: [mine] });
+    expect(boards.length).toBe(defaultBoards.length + 1);
+    expect(boards).toContainEqual(mine);
+  });
+
+  it("lets a config board replace a built-in one for the same board", () => {
+    const first = defaultBoards[0] as Board;
+    const renamed = { ...first, company: "Renamed" };
+    const boards = resolveBoards({ boards: [renamed] });
+    expect(boards.length).toBe(defaultBoards.length);
+    expect(boards.filter((b) => b.slug === first.slug)).toEqual([renamed]);
+  });
+
+  it("drops the built-in set when asked", () => {
+    expect(resolveBoards({ builtinBoards: false, boards: [mine] })).toEqual([
+      mine,
+    ]);
+    expect(resolveBoards({ builtinBoards: false })).toEqual([]);
+  });
+});
+
 describe("formatConfig / writeConfig", () => {
+  it("round-trips boards and [sources]", () => {
+    const config: IgorConfig = {
+      builtinBoards: false,
+      boards: [
+        { company: "Acme", ats: "ashby", slug: "acme" },
+        { company: "Big", ats: "workday", slug: "big", host: "wd1", site: "X" },
+      ],
+    };
+    expect(parseConfig(formatConfig(config), "x.toml")).toEqual(config);
+  });
+
   let dir: string | null = null;
   afterEach(() => {
     if (dir) rmSync(dir, { recursive: true, force: true });

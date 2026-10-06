@@ -8,6 +8,8 @@ import {
   globalResumeDir,
   localConfigPath,
 } from "./paths.ts";
+import type { Board } from "./sources/boards.ts";
+import { defaultBoards } from "./sources/seed.ts";
 
 export type Flexibility = "remote" | "in-person" | "any";
 export const FLEXIBILITIES: readonly Flexibility[] = [
@@ -22,6 +24,13 @@ export interface LocationEntry {
   /** Extra terms a remote listing may match; never used for onsite matching. */
   region: string[];
 }
+
+export const BOARD_SYSTEMS: readonly Board["ats"][] = [
+  "greenhouse",
+  "lever",
+  "ashby",
+  "workday",
+];
 
 export interface KeywordEntry {
   role: string;
@@ -41,6 +50,10 @@ export interface IgorConfig {
   resumeDir?: string;
   locations?: LocationEntry[];
   keywords?: KeywordEntry[];
+  /** Company job boards searched in addition to the built-in ones. */
+  boards?: Board[];
+  /** false: search only `boards`, not the built-in set. */
+  builtinBoards?: boolean;
 }
 
 export class ConfigError extends Error {
@@ -135,6 +148,8 @@ export function parseConfig(text: string, file: string): IgorConfig {
     "resume",
     "location",
     "keywords",
+    "board",
+    "sources",
   ]);
   const config: IgorConfig = {};
 
@@ -190,6 +205,56 @@ export function parseConfig(text: string, file: string): IgorConfig {
     );
   }
 
+  if (raw.sources !== undefined) {
+    if (!isTable(raw.sources))
+      throw new ConfigError(`${file}: [sources] must be a table`);
+    rejectUnknown(file, "[sources]", raw.sources, ["builtin_boards"]);
+    if (raw.sources.builtin_boards !== undefined) {
+      if (typeof raw.sources.builtin_boards !== "boolean") {
+        throw new ConfigError(
+          `${file}: [sources] "builtin_boards" must be true or false`,
+        );
+      }
+      config.builtinBoards = raw.sources.builtin_boards;
+    }
+  }
+
+  if (raw.board !== undefined) {
+    config.boards = tableArray(file, "board", raw.board).map((entry, i) => {
+      const where = `[[board]] entry ${i + 1}`;
+      rejectUnknown(file, where, entry, [
+        "company",
+        "ats",
+        "slug",
+        "host",
+        "site",
+      ]);
+      const company = requireString(file, where, entry, "company");
+      const ats = requireString(file, where, entry, "ats");
+      if (!BOARD_SYSTEMS.includes(ats as Board["ats"])) {
+        throw new ConfigError(
+          `${file}: ${where} has invalid ats ${JSON.stringify(ats)} (use ${BOARD_SYSTEMS.join(", ")})`,
+        );
+      }
+      const slug = requireString(file, where, entry, "slug");
+      if (ats !== "workday") {
+        if (entry.host !== undefined || entry.site !== undefined) {
+          throw new ConfigError(
+            `${file}: ${where} "host" and "site" only apply to workday boards`,
+          );
+        }
+        return { company, ats: ats as Board["ats"], slug };
+      }
+      return {
+        company,
+        ats: "workday",
+        slug,
+        host: requireString(file, where, entry, "host"),
+        site: requireString(file, where, entry, "site"),
+      };
+    });
+  }
+
   if (raw.keywords !== undefined) {
     config.keywords = tableArray(file, "keywords", raw.keywords).map(
       (entry, i) => {
@@ -222,6 +287,10 @@ export function mergeConfigs(
   if (override.resumeDir !== undefined) merged.resumeDir = override.resumeDir;
   if (override.locations !== undefined) merged.locations = override.locations;
   if (override.keywords !== undefined) merged.keywords = override.keywords;
+  if (override.boards !== undefined) merged.boards = override.boards;
+  if (override.builtinBoards !== undefined) {
+    merged.builtinBoards = override.builtinBoards;
+  }
   return merged;
 }
 
@@ -238,6 +307,16 @@ export function formatConfig(config: IgorConfig): string {
   if (config.keywords) {
     doc.keywords = config.keywords.map(({ role, lane }) =>
       lane ? { role, lane } : { role },
+    );
+  }
+  if (config.builtinBoards !== undefined) {
+    doc.sources = { builtin_boards: config.builtinBoards };
+  }
+  if (config.boards) {
+    doc.board = config.boards.map(({ company, ats, slug, host, site }) =>
+      ats === "workday"
+        ? { company, ats, slug, host, site }
+        : { company, ats, slug },
     );
   }
   const text = stringify(doc);
@@ -306,6 +385,21 @@ export function resolveDbPath(
   return loadConfig(ctx).config.db ?? globalDbPath(env);
 }
 
+/**
+ * The company boards to search: the built-in set (unless
+ * `[sources] builtin_boards = false`) plus the config's `[[board]]` entries,
+ * a config entry replacing a built-in one for the same company board.
+ */
+export function resolveBoards(config: IgorConfig): Board[] {
+  const key = (b: Board) => `${b.ats}:${b.slug}`;
+  const boards = new Map<string, Board>();
+  if (config.builtinBoards !== false) {
+    for (const board of defaultBoards) boards.set(key(board), board);
+  }
+  for (const board of config.boards ?? []) boards.set(key(board), board);
+  return [...boards.values()];
+}
+
 /** Where resume masters live: `[resume] dir`, else ~/.config/igor/resumes. */
 export function resolveResumeDir(ctx: ConfigContext = {}): string {
   const env = ctx.env ?? process.env;
@@ -319,9 +413,15 @@ export function describeConfig(ctx: ConfigContext = {}): string {
     files.length > 0
       ? `config files (later entries override earlier):\n${files.map((f) => `  ${f}`).join("\n")}`
       : `config files: none (run "igor init" to create ${globalConfigPath(env)})`;
+  const boards = resolveBoards(config);
+  const extra = config.boards?.length ?? 0;
+  const boardsText = `company boards: ${boards.length} (${
+    config.builtinBoards === false ? "no built-in set" : "built-in set"
+  }${extra > 0 ? ` + ${extra} from config` : ""})`;
   return [
     filesText,
     `database: ${resolveDbPath(ctx)}`,
+    boardsText,
     "",
     formatConfig(config).trimEnd(),
   ].join("\n");
