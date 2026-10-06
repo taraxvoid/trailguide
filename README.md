@@ -91,13 +91,16 @@ current directory: if you have an old database there, move it to the path
   ("Worldwide", "Anywhere"), or names the place. "United States" also
   matches USA, US, and North America; Omaha also matches Nebraska.
 - `in-person` (onsite or hybrid): anything not marked remote, located in the
-  city (Omaha includes La Vista, Elkhorn, and Ralston). "Bay Area" and
-  "Seattle" are regions: each covers its metro's main cities.
+  city (Omaha includes La Vista, Elkhorn, and Ralston). "Bay Area", "East
+  Bay", "South Bay" and "Seattle" are regions covering their metro's main
+  towns. A region only matches listings that name its state ("Dublin, CA",
+  not "Dublin, Ireland") or a bare town name.
 - `any` (default): either of the above.
 
 `region` is optional and only extends which remote listings are eligible for
 a city, e.g. `region = ["Texas", "TX"]` for a Texas city. Omaha gets Nebraska,
-the Bay Area California, and Seattle "Washington State" built in. Broad places like "United States" with `in-person` or `any` only
+the Bay Area regions California, and Seattle "Washington State" built in.
+Broad places like "United States" with `in-person` or `any` only
 match listings that name that place, so use specific cities for in-person
 work.
 
@@ -107,6 +110,19 @@ eligible for "United States".
 Only some sources say whether a job is remote, so `remote` is high
 precision but limited recall: adzuna is skipped for remote locations, listings
 with no remote label are missed, and hybrid is not told apart from onsite.
+
+### Company job boards
+
+Greenhouse, Lever, Ashby and Workday boards are searched for the companies in
+`seed/ats-companies.json`. A Workday entry takes the three parts of its board
+URL, `https://<slug>.<host>.myworkdayjobs.com/<site>`:
+
+```json
+{ "company": "Workday", "ats": "workday", "slug": "workday", "host": "wd5", "site": "Workday" }
+```
+
+Workday is searched once per keyword per company (up to 60 results each),
+and each matching posting is fetched for its description and locations.
 
 ## Usage
 

@@ -30,6 +30,26 @@ describe("matchesLocation", () => {
     expect(matchesLocation("Spokane, WA", "Seattle")).toBe(false);
   });
 
+  it("has East Bay and South Bay regions", () => {
+    expect(matchesLocation("Pleasanton, CA", "East Bay")).toBe(true);
+    expect(matchesLocation("Castro Valley, CA", "East Bay")).toBe(true);
+    expect(matchesLocation("USA-CA-Pleasanton", "East Bay")).toBe(true);
+    expect(matchesLocation("San Jose, CA", "South Bay")).toBe(true);
+    expect(matchesLocation("San Jose, CA", "East Bay")).toBe(false);
+    expect(matchesLocation("San Francisco, CA", "East Bay")).toBe(false);
+  });
+
+  it("only matches a region's towns in the region's state", () => {
+    expect(matchesLocation("Dublin, Ireland", "East Bay")).toBe(false);
+    expect(matchesLocation("Ireland-Dublin", "East Bay")).toBe(false);
+    expect(matchesLocation("Fremont, NE", "East Bay")).toBe(false);
+    expect(matchesLocation("Pleasanton, TX", "Bay Area")).toBe(false);
+    expect(matchesLocation("Kent, OH", "Seattle")).toBe(false);
+    expect(matchesLocation("Dublin, California", "East Bay")).toBe(true);
+    expect(matchesLocation("Pleasanton", "East Bay")).toBe(true);
+    expect(matchesLocation("Hybrid - Pleasanton", "East Bay")).toBe(true);
+  });
+
   it("expands metro aliases for known metros", () => {
     expect(matchesLocation("La Vista, NE", "omaha")).toBe(true);
     expect(matchesLocation("Elkhorn, NE", "omaha")).toBe(true);
@@ -77,6 +97,7 @@ describe("remoteEligible", () => {
       true,
     );
     expect(remoteEligible("Remote - Oregon", "Bay Area")).toBe(false);
+    expect(remoteEligible("Remote - Dublin, Ireland", "East Bay")).toBe(false);
   });
 
   it("accepts remote listings located in a US state for a US target", () => {

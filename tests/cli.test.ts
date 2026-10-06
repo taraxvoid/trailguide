@@ -116,6 +116,7 @@ describe("buildSources", () => {
         "remotive",
         "jobaps",
         "weworkremotely",
+        "workday",
       ]),
     );
   });
