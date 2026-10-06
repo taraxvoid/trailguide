@@ -2,6 +2,7 @@
 import type { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
 import { Command } from "commander";
+import pkg from "../package.json" with { type: "json" };
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
@@ -491,8 +492,11 @@ export function createProgram(
 
   program
     .name("igor")
-    .description("A minion to find software engineering jobs")
-    .option(IGOR_DISABLE_FLAG, "Disable Igor ASCII art");
+    .description(
+      "Job search and resume tailoring that only rearranges what you've already written",
+    )
+    .version(pkg.version)
+    .option(IGOR_DISABLE_FLAG, "Hide the banner shown by init and --version");
 
   program
     .command("search")
