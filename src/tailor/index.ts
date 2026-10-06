@@ -97,10 +97,8 @@ async function resolveResumePath(
   try {
     entries = await readdir(dir);
   } catch {
-    // The old layout kept masters in ./input; point at the new home.
-    const legacy = existsSync("input") ? ` Move input/*.md there.` : "";
     throw new Error(
-      `no resume directory at ${dir}. Put your resume master at ${dir}/<name>.md.${legacy}`,
+      `no resume directory at ${dir}. Put your resume master at ${dir}/<name>.md.`,
     );
   }
   const candidates = entries.filter((f) => f.endsWith(".md")).sort();
