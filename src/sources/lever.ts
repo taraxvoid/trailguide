@@ -39,6 +39,7 @@ function toRemoteType(workplaceType: string | null): RemoteType {
 export function createLeverSource(): Source {
   return {
     name: "lever",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const companies = companiesForAts("lever");
       const results: NormalizedJob[] = [];

@@ -414,6 +414,22 @@ describe("remotive source", () => {
     );
   });
 
+  it("searches every role and dedupes the merged jobs", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = mock(async (input: unknown) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify(remotiveFixture));
+    }) as unknown as typeof fetch;
+
+    const jobs = await createRemotiveSource().search({
+      role: ["engineer", "developer"],
+    });
+
+    expect(urls.some((u) => u.includes("search=engineer"))).toBe(true);
+    expect(urls.some((u) => u.includes("search=developer"))).toBe(true);
+    expect(jobs).toHaveLength(2);
+  });
+
   it("filters by location", async () => {
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(remotiveFixture)),
@@ -487,5 +503,41 @@ describe("weworkremotely source", () => {
     await expect(source.search({ role: "engineer" })).rejects.toThrow(
       "We Work Remotely request failed: 500",
     );
+  });
+});
+
+describe("source scoping", () => {
+  it("skips only adzuna for remote-only targets", () => {
+    expect(createAdzunaSource("id", "key").labelsRemote).toBe(false);
+    expect(createJSearchSource("key").labelsRemote).not.toBe(false);
+  });
+
+  it("marks only the location-aware APIs as scoped", () => {
+    const all = [
+      createGreenhouseSource(),
+      createLeverSource(),
+      createAshbySource(),
+      createRemoteOkSource(),
+      createRemotiveSource(),
+      createWeWorkRemotelySource(),
+      createJobApsSource(),
+      createJSearchSource("key"),
+      createAdzunaSource("id", "key"),
+    ];
+    expect(
+      all
+        .filter((s) => s.scoped)
+        .map((s) => s.name)
+        .sort(),
+    ).toEqual(["adzuna", "jsearch"]);
+  });
+
+  it("reports ashby secondary locations for matching", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(ashbyFixture)),
+    ) as unknown as typeof fetch;
+    const jobs = await createAshbySource().search({ role: "engineer" });
+    expect(jobs[0]?.location).toBe("New York, NY (HQ)");
+    expect(jobs[0]?.otherLocations).toEqual(["Remote (US)"]);
   });
 });

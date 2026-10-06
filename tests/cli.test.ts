@@ -107,7 +107,7 @@ describe("buildSources", () => {
 
 describe("clear command parsing", () => {
   function programWithSpy() {
-    const calls: { db: string }[] = [];
+    const calls: { db?: string }[] = [];
     const program = createProgram(
       async () => {},
       async (options) => {
@@ -128,7 +128,7 @@ describe("clear command parsing", () => {
     await program.parseAsync(["node", "igor", "clear"]);
 
     expect(calls).toHaveLength(1);
-    expect(calls[0]).toMatchObject({ db: "igor.db" });
+    expect(calls[0]?.db).toBeUndefined();
   });
 
   it("parses clear with --db", async () => {
@@ -155,11 +155,11 @@ describe("search command parsing", () => {
     return { program, calls };
   }
 
-  it("requires --role", async () => {
-    const { program } = programWithSpy();
-    await expect(
-      program.parseAsync(["node", "igor", "search"]),
-    ).rejects.toThrow(/--role/);
+  it("does not require --role (the config supplies keywords)", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync(["node", "igor", "search"]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.role).toBeUndefined();
   });
 
   it("accepts --remote as a boolean flag", async () => {
@@ -202,11 +202,25 @@ describe("search command parsing", () => {
       json: false,
       csv: false,
       clearance: false,
-      db: "igor.db",
     });
+    expect(calls[0]?.db).toBeUndefined();
     expect(calls[0]?.remote).toBe(false);
     expect(calls[0]?.onsite).toBe(false);
     expect(calls[0]?.location).toBeUndefined();
+  });
+
+  it("accepts --config", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "igor",
+      "search",
+      "--role",
+      "engineer",
+      "--config",
+      "x.toml",
+    ]);
+    expect(calls[0]?.config).toBe("x.toml");
   });
 
   it("parses all options when provided", async () => {
@@ -257,5 +271,40 @@ describe("search command parsing", () => {
       role: ["engineer", "manager"],
       location: ["Omaha", "San Francisco"],
     });
+  });
+});
+
+describe("db and config options", () => {
+  it("no command defaults --db, so the shared resolver decides", () => {
+    for (const cmd of createProgram().commands) {
+      const db = cmd.options.find((o) => o.long === "--db");
+      if (db) expect(db.defaultValue).toBeUndefined();
+    }
+  });
+
+  it("registers igor config and --config on search and tui", () => {
+    const program = createProgram();
+    const longs = (name: string) =>
+      program.commands
+        .find((c) => c.name() === name)
+        ?.options.map((o) => o.long) ?? [];
+    expect(longs("config")).toContain("--config");
+    expect(longs("search")).toContain("--config");
+    expect(longs("tui")).toContain("--config");
+  });
+});
+
+describe("init command", () => {
+  it("is registered with repeatable prompt-skipping flags", () => {
+    const cmd = createProgram().commands.find((c) => c.name() === "init");
+    expect(cmd?.options.map((o) => o.long)).toEqual(
+      expect.arrayContaining([
+        "--location",
+        "--keywords",
+        "--work",
+        "--db",
+        "--yes",
+      ]),
+    );
   });
 });

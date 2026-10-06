@@ -57,6 +57,7 @@ function toRemoteType(job: AshbyJob): RemoteType {
 export function createAshbySource(): Source {
   return {
     name: "ashby",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const companies = companiesForAts("ashby");
       const results: NormalizedJob[] = [];
@@ -86,6 +87,9 @@ export function createAshbySource(): Source {
             title: job.title,
             company,
             location: job.location,
+            otherLocations: (job.secondaryLocations ?? []).map(
+              (l) => l.location,
+            ),
             remoteType: toRemoteType(job),
             url: job.jobUrl,
             postedAt: job.publishedAt,

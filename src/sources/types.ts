@@ -16,6 +16,8 @@ export interface NormalizedJob {
   title: string;
   company: string;
   location: string;
+  /** Other places the posting lists (e.g. ashby secondary locations). Matching only; not stored. */
+  otherLocations?: string[];
   remoteType: RemoteType;
   url: string;
   postedAt: string | null;
@@ -31,5 +33,16 @@ export interface SearchParams {
 
 export interface Source {
   name: NormalizedJob["source"];
+  /**
+   * True when the source applies `location` inside its API query (jsearch,
+   * adzuna). The runner calls scoped sources once per (keyword, location)
+   * and unscoped ones once, with every keyword and no location.
+   */
+  scoped: boolean;
+  /**
+   * False when the source never labels remote jobs (adzuna), so a remote
+   * target would spend quota on results the work-type check drops.
+   */
+  labelsRemote?: boolean;
   search(params: SearchParams): Promise<NormalizedJob[]>;
 }

@@ -25,6 +25,7 @@ function matchesRole(title: string, role: string | string[]): boolean {
 export function createGreenhouseSource(): Source {
   return {
     name: "greenhouse",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const companies = companiesForAts("greenhouse");
       const results: NormalizedJob[] = [];

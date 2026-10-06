@@ -1,8 +1,15 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { Command } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
+import {
+  ConfigError,
+  describeConfig,
+  loadConfig,
+  resolveDbPath,
+  toSearchOptions,
+} from "./config.ts";
 import {
   parseBoundary,
   parseRange,
@@ -13,17 +20,29 @@ import type { ListingState } from "./db.ts";
 import {
   allJobs,
   clearJobs,
+  finishRun,
   finishTailorRun,
   jobsByState,
   jobsInStateBetween,
   listingId,
   openDb,
+  SEARCH_RUN_KEY,
+  type StoredJob,
   setJobState,
+  startRun,
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
-import { dedupe } from "./dedupe.ts";
 import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
+import { type InitOptions, runInit, terminalIO } from "./init.ts";
+import type { Env } from "./paths.ts";
+import {
+  collectJobs,
+  formatRunMessage,
+  isInternship,
+  requiresClearance,
+  type SearchResult,
+} from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";
 import { createGreenhouseSource } from "./sources/greenhouse.ts";
@@ -36,21 +55,9 @@ import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
-import { stripTrackingParams } from "./url.ts";
 
-const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
-const GOVMIL_PATTERN =
-  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war|SCI|Top Secret|clearance)\b/i;
-
-export function isInternship(job: NormalizedJob): boolean {
-  return INTERNSHIP_PATTERN.test(job.title);
-}
-
-export function requiresClearance(job: NormalizedJob): boolean {
-  return (
-    GOVMIL_PATTERN.test(job.title) || GOVMIL_PATTERN.test(job.description ?? "")
-  );
-}
+// Re-exported so existing importers (tests/cli.test.ts) keep working.
+export { isInternship, requiresClearance };
 
 export function buildSources(): Source[] {
   const sources: Source[] = [
@@ -79,59 +86,104 @@ export interface SearchOptions {
   location?: string[];
   remote?: boolean;
   onsite?: boolean;
-  role: string[];
+  /** When given, the flags are the whole search and the config is not read. */
+  role?: string[];
   json: boolean;
   csv: boolean;
-  db: string;
+  db?: string;
+  config?: string;
   clearance: boolean;
 }
 
-export async function runSearch(options: SearchOptions): Promise<void> {
-  const sources = buildSources();
-  const results = await Promise.all(
-    sources.map((source) =>
-      source
-        .search({
-          role: options.role,
-          location: options.location,
-          remote: options.remote,
-          onsite: options.onsite,
-        })
-        .catch((err) => {
-          console.error(
-            `[${source.name}] search failed: ${err instanceof Error ? err.message : err}`,
-          );
-          return [];
-        }),
-    ),
-  );
+export interface SearchDeps {
+  sources?: Source[];
+  isUrlDead?: (url: string) => Promise<boolean>;
+  cwd?: string;
+  env?: Env;
+}
 
-  const jobs = dedupe(results.flat())
-    .filter((job) => !isInternship(job))
-    .filter((job) => options.clearance || !requiresClearance(job))
-    .filter((job) => {
-      if (options.remote && job.remoteType !== "remote") return false;
-      if (options.onsite && job.remoteType === "remote") return false;
-      return true;
-    })
-    .map((job) => ({ ...job, url: stripTrackingParams(job.url) }));
-  const states = new Map<string, ListingState>();
-  await Promise.all(
-    jobs.map(async (job) => {
-      if (await isUrlDead(job.url)) {
-        states.set(listingId(job), "inactive");
-      }
-    }),
-  );
-  const db = openDb(options.db);
-  const newJobs = upsertJobs(db, jobs, states);
+/**
+ * Runs a search and records it as the db's single `search` run, so a manual
+ * run shows in the TUI and a second concurrent one is refused. Returns null
+ * when refused.
+ */
+export async function runSearch(
+  options: SearchOptions,
+  deps: SearchDeps = {},
+): Promise<SearchResult | null> {
+  // Validated before the run claim so a typo cannot overwrite the previous
+  // search row with a failed run.
+  if (options.remote && options.onsite) {
+    throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
+  const cwd = deps.cwd ?? process.cwd();
+  const env = deps.env ?? process.env;
+  // With --db (the TUI always passes it) this reads no config, so a config
+  // error below is recorded on the run instead of escaping before the claim.
+  const dbPath = resolveDbPath({
+    db: options.db,
+    config: options.config,
+    cwd,
+    env,
+  });
+  const db = openDb(dbPath);
+  if (!startRun(db, "search", SEARCH_RUN_KEY, process.pid)) {
+    db.close();
+    console.error("error: search already running");
+    process.exitCode = 1;
+    return null;
+  }
+
+  let jobs: NormalizedJob[] = [];
+  let newJobs: StoredJob[] = [];
+  let stored: StoredJob[] = [];
+  let result: SearchResult;
+  try {
+    const plan = toSearchOptions(options, () =>
+      loadConfig({ config: options.config, cwd, env }),
+    );
+    const collected = await collectJobs(plan, deps.sources ?? buildSources());
+    jobs = collected.jobs;
+    const deadCheck = deps.isUrlDead ?? isUrlDead;
+    const states = new Map<string, ListingState>();
+    await Promise.all(
+      jobs.map(async (job) => {
+        if (await deadCheck(job.url)) states.set(listingId(job), "inactive");
+      }),
+    );
+    newJobs = upsertJobs(db, jobs, states);
+    if (options.json || options.csv) stored = allJobs(db);
+    result = {
+      found: jobs.length,
+      new: newJobs.length,
+      failures: collected.failures,
+    };
+    finishRun(
+      db,
+      "search",
+      SEARCH_RUN_KEY,
+      !collected.allFailed,
+      formatRunMessage(result),
+    );
+    if (collected.allFailed) process.exitCode = 1;
+  } catch (err) {
+    finishRun(
+      db,
+      "search",
+      SEARCH_RUN_KEY,
+      false,
+      err instanceof Error ? err.message : String(err),
+    );
+    throw err;
+  } finally {
+    db.close();
+  }
 
   if (options.json) {
-    console.log(JSON.stringify(allJobs(db), null, 2));
+    console.log(JSON.stringify(stored, null, 2));
   } else if (options.csv) {
-    const rows = allJobs(db);
     console.log("title,company,location,remoteType,url");
-    for (const job of rows) {
+    for (const job of stored) {
       console.log(
         [job.title, job.company, job.location, job.remoteType, job.url]
           .map((v) => `"${v.replace(/"/g, '""')}"`)
@@ -147,16 +199,18 @@ export async function runSearch(options: SearchOptions): Promise<void> {
       );
     }
     console.log(
-      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${options.db}`,
+      `\n${jobs.length} jobs found (${newJobs.length} new), stored in ${dbPath}`,
     );
   }
+  return result;
 }
 
-export async function runClear(options: { db: string }): Promise<void> {
-  const db = openDb(options.db);
+export async function runClear(options: { db?: string }): Promise<void> {
+  const dbPath = resolveDbPath({ db: options.db });
+  const db = openDb(dbPath);
   clearJobs(db);
   db.close();
-  console.log(`Cleared all jobs from ${options.db}`);
+  console.log(`Cleared all jobs from ${dbPath}`);
 }
 
 const DEAD_PAGE_PATTERNS = [
@@ -221,8 +275,8 @@ export async function refreshListings(db: Database): Promise<{
   return { checked, skipped, activated, archived };
 }
 
-export async function runRefresh(options: { db: string }): Promise<void> {
-  const db = openDb(options.db);
+export async function runRefresh(options: { db?: string }): Promise<void> {
+  const db = openDb(resolveDbPath({ db: options.db }));
   const result = await refreshListings(db);
   db.close();
   console.log(
@@ -238,7 +292,7 @@ const LISTING_STATES: ListingState[] = [
 ];
 
 export interface JobsCliOptions {
-  db: string;
+  db?: string;
   state: string;
   when?: string;
   since?: string;
@@ -266,7 +320,7 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
     ({ from, to } = weekRange(now, -1));
   }
 
-  const db = openDb(options.db);
+  const db = openDb(resolveDbPath({ db: options.db }));
   const jobs = jobsInStateBetween(db, state, from, to).map((job) => ({
     ...job,
     description: truncateWords(job.description, options.words),
@@ -276,7 +330,7 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
 }
 
 export interface TailorCliOptions {
-  db: string;
+  db?: string;
   listingId: string;
   resume?: string;
   outputDir?: string;
@@ -286,7 +340,7 @@ export interface TailorCliOptions {
 }
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
-  const db = openDb(options.db);
+  const db = openDb(resolveDbPath({ db: options.db }));
   if (!startTailorRun(db, options.listingId, process.pid)) {
     db.close();
     console.error(
@@ -345,10 +399,20 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
   if (result.pdfPath) console.log(`Wrote ${result.pdfPath}`);
 }
 
+const DB_HELP =
+  "path to sqlite db (default: [db] path from the config, else the global db; see `igor config`)";
+const CONFIG_HELP =
+  "config file to use instead of the global config plus ./igor.toml";
+
+/** Commander reducer for repeatable options. */
+function collect(value: string, previous: string[] = []): string[] {
+  return [...previous, value];
+}
+
 export function createProgram(
-  searchAction: (options: SearchOptions) => Promise<void> = runSearch,
-  clearAction: (options: { db: string }) => Promise<void> = runClear,
-  refreshAction: (options: { db: string }) => Promise<void> = runRefresh,
+  searchAction: (options: SearchOptions) => Promise<unknown> = runSearch,
+  clearAction: (options: { db?: string }) => Promise<void> = runClear,
+  refreshAction: (options: { db?: string }) => Promise<void> = runRefresh,
   tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
 ): Command {
   const program = new Command();
@@ -360,10 +424,12 @@ export function createProgram(
 
   program
     .command("search")
-    .description("Search job sources and store results")
-    .requiredOption(
+    .description(
+      "Search job sources (from the config, or --role) and store results",
+    )
+    .option(
       "--role <query...>",
-      "role/title to search for (accepts multiple values)",
+      "role/title to search for (accepts multiple values); omit to use the config's [[keywords]]",
     )
     .option(
       "--location <city...>",
@@ -373,7 +439,8 @@ export function createProgram(
     .option("--onsite", "only search for onsite/hybrid jobs", false)
     .option("--json", "output all stored jobs as JSON", false)
     .option("--csv", "output all stored jobs as CSV", false)
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
     .option("--clearance", "include jobs requiring clearance", false)
     .action(async (options: SearchOptions) => {
       await searchAction(options);
@@ -382,24 +449,30 @@ export function createProgram(
   program
     .command("tui")
     .description("Browse jobs in an interactive TUI")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
-      await runTui({ db: options.db });
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(async (options: { db?: string; config?: string }) => {
+      // The TUI resolves paths only; the spawned search reads the settings.
+      const config = options.config ?? (process.env.IGOR_CONFIG || undefined);
+      await runTui({
+        db: resolveDbPath({ db: options.db, config }),
+        config: config ? resolve(config) : undefined,
+      });
     });
 
   program
     .command("clear")
     .description("Clear all stored jobs from the database")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
+    .option("--db <path>", DB_HELP)
+    .action(async (options: { db?: string }) => {
       await clearAction(options);
     });
 
   program
     .command("refresh")
     .description("Check all active listings to see if they're still live")
-    .option("--db <path>", "path to sqlite db", "igor.db")
-    .action(async (options: { db: string }) => {
+    .option("--db <path>", DB_HELP)
+    .action(async (options: { db?: string }) => {
       await refreshAction(options);
     });
 
@@ -421,7 +494,7 @@ export function createProgram(
       (v) => Number.parseInt(v, 10),
       200,
     )
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
     .action((stateArg: string, options: Omit<JobsCliOptions, "state">) => {
       try {
         runJobs({ ...options, state: stateArg });
@@ -437,7 +510,7 @@ export function createProgram(
       "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
-    .option("--db <path>", "path to sqlite db", "igor.db")
+    .option("--db <path>", DB_HELP)
     .option(
       "--resume <path>",
       "resume master path (default: the one .md file under input/)",
@@ -464,7 +537,7 @@ export function createProgram(
       async (
         listingIdArg: string,
         options: {
-          db: string;
+          db?: string;
           resume?: string;
           outputDir?: string;
           ollamaHost?: string;
@@ -475,6 +548,47 @@ export function createProgram(
         await tailorAction({ ...options, listingId: listingIdArg });
       },
     );
+
+  program
+    .command("config")
+    .description(
+      "Show the config files in use, the database path, and the merged config",
+    )
+    .option("--config <path>", CONFIG_HELP)
+    .action((options: { config?: string }) => {
+      console.log(describeConfig({ config: options.config }));
+    });
+
+  program
+    .command("init")
+    .description(
+      "Create the global config and database, prompting for locations, keywords, and work type",
+    )
+    .option(
+      "--location <place>",
+      "a location to search; repeat for more (skips the prompt)",
+      collect,
+    )
+    .option(
+      "--keywords <role>",
+      "a role to search for; repeat for more (skips the prompt)",
+      collect,
+    )
+    .option(
+      "--work <type>",
+      "remote, in-person, or any for every location, or <location>:<type> for one; repeatable (skips the prompt)",
+      collect,
+    )
+    .option("--db <path>", DB_HELP)
+    .option("-y, --yes", "overwrite an existing global config without asking")
+    .action(async (options: InitOptions) => {
+      const io = terminalIO();
+      try {
+        await runInit(options, io);
+      } finally {
+        io.close();
+      }
+    });
 
   return program;
 }
@@ -492,7 +606,8 @@ if (import.meta.main) {
     process.exit(await runDelegate(delegate, Bun.argv.slice(2)));
   }
   main().catch((err) => {
-    console.error(err);
+    // Config problems are user errors: print the message, not a stack.
+    console.error(err instanceof ConfigError ? `error: ${err.message}` : err);
     process.exit(1);
   });
 }

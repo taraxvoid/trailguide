@@ -83,6 +83,7 @@ function extractWorkLocation(description: string): string | null {
 export function createJobApsSource(): Source {
   return {
     name: "jobaps",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const results: NormalizedJob[] = [];
 

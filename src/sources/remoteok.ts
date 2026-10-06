@@ -27,6 +27,7 @@ function matchesRole(job: RemoteOkJob, role: string | string[]): boolean {
 export function createRemoteOkSource(): Source {
   return {
     name: "remoteok",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const res = await fetch("https://remoteok.com/api", {
         headers: { "User-Agent": "igor-job-search" },

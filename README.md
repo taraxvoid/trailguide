@@ -21,6 +21,7 @@ cp .env.example .env
 - `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
 - `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
 - `OLLAMA_HOST` / `OLLAMA_MODEL` — only needed if you want to override the defaults for `igor tailor` (see below)
+- `IGOR_DB` / `IGOR_CONFIG`: optional overrides for the db path and config file (see Configuration below)
 
 Other sources don't require creds
 
@@ -53,26 +54,84 @@ Alternatively, without linking, run it directly from the repo:
 bun run src/cli.ts search --role "software engineer"
 ```
 
+## Configuration
+
+```bash
+igor init
+```
+
+asks for locations and keywords (one per line; "Omaha, NE" is one location)
+and a work type, then writes `~/.config/igor/config.toml` and creates
+`~/.local/share/igor/igor.db` (`XDG_CONFIG_HOME` / `XDG_DATA_HOME` are
+honored). It never deletes anything, and asks before replacing an existing
+config. Non-interactive: `igor init --location "Omaha, NE" --keywords
+"software engineer" --work in-person` (each flag repeatable; `--work
+"Omaha, NE:in-person"` sets one location). See `igor.example.toml`.
+
+Every keyword is searched in every location, so at least one `[[location]]`
+and one `[[keywords]]` entry are required.
+
+A `./igor.toml` in the current directory is merged over the global config:
+`[job]` keys override one by one, and `[[location]]` / `[[keywords]]` replace
+the global lists. `[db] path = "igor.db"` in a local file gives a
+self-contained sandbox (relative paths resolve against that file's
+directory). `igor config` shows which files and database are in use.
+
+Precedence, high to low: CLI flags, `IGOR_*` environment variables
+(`IGOR_DB`, `IGOR_CONFIG`), local `igor.toml`, global `config.toml`,
+defaults. `--config <path>` (or `IGOR_CONFIG`) replaces the whole chain and
+uses only that one file. There is no fallback to a `./igor.db` in the
+current directory: if you have an old database there, move it to the path
+`igor config` reports.
+
+`flexibility` per `[[location]]`:
+
+- `remote`: listings marked remote whose location is blank, global
+  ("Worldwide", "Anywhere"), or names the place. "United States" also
+  matches USA, US, and North America; Omaha also matches Nebraska.
+- `in-person` (onsite or hybrid): anything not marked remote, located in the
+  city (Omaha includes La Vista, Elkhorn, and Ralston).
+- `any` (default): either of the above.
+
+`region` is optional and only extends which remote listings are eligible for
+a city, e.g. `region = ["Texas", "TX"]` for a Texas city. Omaha gets Nebraska
+built in. Broad places like "United States" with `in-person` or `any` only
+match listings that name that place, so use specific cities for in-person
+work.
+
+A remote listing located in a US state ("San Francisco, CA") counts as
+eligible for "United States".
+
+Only some sources say whether a job is remote, so `remote` is high
+precision but limited recall: adzuna is skipped for remote locations, listings
+with no remote label are missed, and hybrid is not told apart from onsite.
+
 ## Usage
 
 ```bash
-igor search --role <query...> [--location <city...>] [--remote remote|hybrid|onsite] [--clearance] [--json] [--csv] [--db <path>]
+igor search [--role <query...>] [--location <place...>] [--remote|--onsite] [--clearance] [--json] [--csv] [--db <path>] [--config <path>]
 ```
 
-- `--role` (required) — title/keyword to search for; accepts multiple values, e.g. `--role engineer manager`
-- `--location` — filter by location text; accepts multiple values, e.g. `--location Omaha "San Francisco"`
-- `--remote` — one of `remote`, `hybrid`, `onsite`
-- `--clearance` — include jobs that mention a clearance requirement (excluded by default)
-- `--json` — print all jobs currently stored in the db as JSON
-- `--csv` — print all jobs currently stored in the db as CSV
-- `--db` — path to the sqlite db (default `igor.db`)
+- no `--role`: the config's `[[keywords]]` and `[[location]]` entries drive the search
+- `--role`: search for exactly these roles instead (the config is not read); accepts multiple values, e.g. `--role engineer manager`
+- `--location`: replace the config's locations; accepts multiple values, e.g. `--location Omaha "San Francisco"`
+- `--remote` / `--onsite`: only remote / only not-remote jobs for every location (mutually exclusive)
+- `--clearance`: include jobs that mention a clearance requirement (`govmil = true` in the config does the same)
+- `--json` / `--csv`: print all jobs stored in the db
+- `--db`: path to the sqlite db (default: the precedence chain above)
+- `--config`: config file to use instead of the global plus local chain
+
+Every `igor search`, including one started by hand, registers itself as the
+db's single search run: it shows in the TUI, and a second one started while
+it runs exits with "search already running". Failed sources are listed in
+the run summary without failing the search.
 
 ## TUI
 
 Browse stored jobs interactively:
 
 ```bash
-igor tui [--db <path>]
+igor tui [--db <path>] [--config <path>]
 ```
 
 The header shows the branch and last commit of the checkout that's running
@@ -84,6 +143,7 @@ everywhere else. Set `IGOR_NO_DELEGATE=1` to always run the linked one.
 - ←→ / h l — switch between Active / Applied / Archived tabs
 - ↵ — expand/collapse the selected job's description
 - o — open the listing URL in your browser
+- ⌃s: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `igor-search.log` next to the db
 - ⌃t — tailor your resume to the selected job, or regenerate its PDF if it already has one (see below)
 - e — archive
 - a — mark applied
@@ -149,7 +209,7 @@ to the filename so neither overwrites the other's edits.
 Example:
 
 ```bash
-igor search --role "backend engineer" --location remote --remote remote
+igor search --role "backend engineer" --location remote --remote
 ```
 
 ## Development

@@ -52,6 +52,7 @@ function matchesRole(title: string, role: string | string[]): boolean {
 export function createWeWorkRemotelySource(): Source {
   return {
     name: "weworkremotely",
+    scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const res = await fetch(
         "https://weworkremotely.com/categories/remote-programming-jobs.rss",

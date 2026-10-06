@@ -1,0 +1,30 @@
+# Copy to igor.toml (per project) or ~/.config/igor/config.toml (global).
+# `igor init` writes the global one for you. A local igor.toml is merged over
+# the global file: [job] keys override one by one, while [[location]] and
+# [[keywords]] REPLACE the global lists if the local file defines them.
+
+[job]
+govmil = false             # true to include jobs that mention a clearance
+
+# Uncomment for a self-contained sandbox next to this file (relative paths
+# resolve against this file's directory). Default: ~/.local/share/igor/igor.db
+# [db]
+# path = "igor.db"
+
+# Every keyword is searched in every location. At least one of each is required.
+# Use specific cities for in-person work; broad regions only match listings
+# that name the region.
+[[location]]
+city = "Omaha"
+flexibility = "in-person"  # remote | in-person (onsite or hybrid) | any (default)
+region = ["Nebraska"]      # optional: extra places a REMOTE listing may name
+
+[[location]]
+city = "United States"
+flexibility = "remote"
+
+[[keywords]]
+role = "Software Engineer"
+
+[[keywords]]
+role = "DevOps Engineer"

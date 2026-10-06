@@ -22,6 +22,8 @@ export function createAdzunaSource(
 ): Source {
   return {
     name: "adzuna",
+    scoped: true,
+    labelsRemote: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
       const roles = toArray(params.role);
       const locations = params.location
