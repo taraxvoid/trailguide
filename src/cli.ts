@@ -35,6 +35,7 @@ import {
 } from "./db.ts";
 import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
+import { mapLimit } from "./limit.ts";
 import type { Env } from "./paths.ts";
 import {
   collectJobs,
@@ -146,11 +147,9 @@ export async function runSearch(
     jobs = collected.jobs;
     const deadCheck = deps.isUrlDead ?? isUrlDead;
     const states = new Map<string, ListingState>();
-    await Promise.all(
-      jobs.map(async (job) => {
-        if (await deadCheck(job.url)) states.set(listingId(job), "inactive");
-      }),
-    );
+    await mapLimit(jobs, URL_CHECK_CONCURRENCY, async (job) => {
+      if (await deadCheck(job.url)) states.set(listingId(job), "inactive");
+    });
     newJobs = upsertJobs(db, jobs, states);
     if (options.json || options.csv) stored = allJobs(db);
     result = {
@@ -226,17 +225,25 @@ const DEAD_PAGE_PATTERNS = [
   /this listing has expired/i,
 ];
 
+/** Listing URLs checked at once, by search and refresh. */
+const URL_CHECK_CONCURRENCY = 8;
+const URL_CHECK_TIMEOUT_MS = 15_000;
+
 async function isUrlDead(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, { redirect: "follow" });
+    const res = await fetch(url, {
+      redirect: "follow",
+      signal: AbortSignal.timeout(URL_CHECK_TIMEOUT_MS),
+    });
     if (res.status === 404) return true;
     if (res.status === 410) return true;
     if (res.ok) {
       const body = await res.text();
       return DEAD_PAGE_PATTERNS.some((pattern) => pattern.test(body));
     }
-  } catch {
-    return true;
+  } catch (err) {
+    // A slow host is not a dead listing; anything else (DNS, refused) is.
+    return !(err instanceof DOMException && err.name === "TimeoutError");
   }
   return false;
 }
@@ -255,12 +262,11 @@ export async function refreshListings(db: Database): Promise<{
   let activated = 0;
   let archived = 0;
 
-  for (const job of activeJobs) {
-    const lastChecked = new Date(job.lastCheckedAt).getTime();
-    if (lastChecked > cutoff) {
-      skipped++;
-      continue;
-    }
+  const due = activeJobs.filter(
+    (job) => new Date(job.lastCheckedAt).getTime() <= cutoff,
+  );
+  skipped = activeJobs.length - due.length;
+  await mapLimit(due, URL_CHECK_CONCURRENCY, async (job) => {
     checked++;
     const dead = await isUrlDead(job.url);
     // A job that dies after having been active is auto-archived rather than
@@ -270,7 +276,7 @@ export async function refreshListings(db: Database): Promise<{
     setJobState(db, job.listingId, state, new Date().toISOString());
     if (dead) archived++;
     else activated++;
-  }
+  });
 
   return { checked, skipped, activated, archived };
 }

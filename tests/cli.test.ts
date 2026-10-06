@@ -53,6 +53,36 @@ describe("requiresClearance", () => {
     ).toBe(true);
   });
 
+  it("flags defense contractors by employer", () => {
+    expect(requiresClearance(job({ company: "Booz Allen Hamilton" }))).toBe(
+      true,
+    );
+    expect(requiresClearance(job({ company: "Northrop Grumman" }))).toBe(true);
+  });
+
+  it("flags clearance terms and acronyms", () => {
+    for (const description of [
+      "Active TS/SCI required",
+      "Must be able to obtain a clearance",
+      "Full-scope polygraph",
+      "Onsite at Offutt AFB",
+      "Supports STRATCOM missions",
+    ]) {
+      expect(requiresClearance(job({ description }))).toBe(true);
+    }
+  });
+
+  it("ignores EEO boilerplate and look-alike words", () => {
+    for (const description of [
+      "We do not discriminate on the basis of veteran or military status.",
+      "Join our Data Science team as an IC.",
+      "Clearance of tech debt is part of the job.",
+      "Our customers include Fortune 500 companies.",
+    ]) {
+      expect(requiresClearance(job({ description }))).toBe(false);
+    }
+  });
+
   it("does not flag jobs with no clearance mention", () => {
     expect(
       requiresClearance(

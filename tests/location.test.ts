@@ -18,6 +18,18 @@ describe("matchesLocation", () => {
     expect(matchesLocation("Austin, TX", "omaha")).toBe(false);
   });
 
+  it("treats the Bay Area and Seattle as regions", () => {
+    expect(matchesLocation("Oakland, CA", "Bay Area")).toBe(true);
+    expect(matchesLocation("San Jose, CA", "San Francisco Bay Area")).toBe(
+      true,
+    );
+    expect(matchesLocation("Hayward, CA", "SF Bay Area")).toBe(true);
+    expect(matchesLocation("Redmond, WA", "Seattle")).toBe(true);
+    expect(matchesLocation("Bellevue, WA", "Greater Seattle Area")).toBe(true);
+    expect(matchesLocation("Los Angeles, CA", "Bay Area")).toBe(false);
+    expect(matchesLocation("Spokane, WA", "Seattle")).toBe(false);
+  });
+
   it("expands metro aliases for known metros", () => {
     expect(matchesLocation("La Vista, NE", "omaha")).toBe(true);
     expect(matchesLocation("Elkhorn, NE", "omaha")).toBe(true);
@@ -58,6 +70,14 @@ describe("matchesLocation word boundaries", () => {
 
 describe("remoteEligible", () => {
   const us = (location: string) => remoteEligible(location, "United States");
+
+  it("lets a regional target take remote listings for its state", () => {
+    expect(remoteEligible("Remote - California", "SF Bay Area")).toBe(true);
+    expect(remoteEligible("Remote, Washington State", "Seattle area")).toBe(
+      true,
+    );
+    expect(remoteEligible("Remote - Oregon", "Bay Area")).toBe(false);
+  });
 
   it("accepts remote listings located in a US state for a US target", () => {
     for (const loc of [

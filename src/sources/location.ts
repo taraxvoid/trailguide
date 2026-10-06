@@ -5,6 +5,53 @@ import type { NormalizedJob } from "./types.ts";
 // Aliases used wherever a place is matched (onsite and remote).
 const LOCATION_ALIASES: Record<string, string[]> = {
   omaha: ["omaha", "la vista", "elkhorn", "ralston"],
+  // Regions: a target of "Bay Area" or "Seattle" takes the whole metro.
+  "bay area": [
+    "bay area",
+    "san francisco",
+    "south san francisco",
+    "oakland",
+    "berkeley",
+    "emeryville",
+    "alameda",
+    "hayward",
+    "san leandro",
+    "fremont",
+    "union city",
+    "newark",
+    "pleasanton",
+    "dublin",
+    "san ramon",
+    "walnut creek",
+    "san mateo",
+    "foster city",
+    "burlingame",
+    "redwood city",
+    "menlo park",
+    "palo alto",
+    "mountain view",
+    "sunnyvale",
+    "santa clara",
+    "cupertino",
+    "milpitas",
+    "san jose",
+  ],
+  seattle: [
+    "seattle",
+    "bellevue",
+    "redmond",
+    "kirkland",
+    "bothell",
+    "woodinville",
+    "issaquah",
+    "renton",
+    "tukwila",
+    "kent",
+    "everett",
+    "lynnwood",
+    "tacoma",
+    "puget sound",
+  ],
   "united states": [
     "united states",
     "usa",
@@ -19,6 +66,8 @@ const LOCATION_ALIASES: Record<string, string[]> = {
 // for onsite matching: an onsite job in Lincoln is not an Omaha job.
 const REMOTE_ONLY_ALIASES: Record<string, string[]> = {
   omaha: ["nebraska"],
+  "bay area": ["california"],
+  seattle: ["washington state", "pacific northwest"],
 };
 
 // What a listing says when it is not tied to any region.
@@ -127,15 +176,25 @@ const KEY_SYNONYMS: Record<string, string> = {
   us: "united states",
   usa: "united states",
   "u.s.": "united states",
+  "san francisco bay area": "bay area",
+  "sf bay area": "bay area",
+  "greater seattle": "seattle",
+  "greater seattle area": "seattle",
+  "seattle area": "seattle",
+  "seattle metro": "seattle",
 };
+
+/** The alias-table key for a place, after synonyms ("Seattle area" → seattle). */
+function canonicalKey(place: string): string {
+  const key = aliasKey(place);
+  return KEY_SYNONYMS[key] ?? key;
+}
 
 /** Match terms for a place: its own text plus aliases of its alias key. */
 function aliasesFor(place: string): string[] {
   const text = place.trim().toLowerCase();
   if (text === "") return [];
-  const derived = aliasKey(text);
-  const key = KEY_SYNONYMS[derived] ?? derived;
-  return [...new Set([text, ...(LOCATION_ALIASES[key] ?? [])])];
+  return [...new Set([text, ...(LOCATION_ALIASES[canonicalKey(text)] ?? [])])];
 }
 
 export function matchesLocation(
@@ -159,8 +218,7 @@ function isGlobalLocation(jobLocation: string): boolean {
 }
 
 function isUnitedStates(place: string): boolean {
-  const key = aliasKey(place);
-  return (KEY_SYNONYMS[key] ?? key) === "united states";
+  return canonicalKey(place) === "united states";
 }
 
 /** Whether a remote listing's location lets someone in `city` take it. */
@@ -176,7 +234,7 @@ export function remoteEligible(
   const job = jobLocation.toLowerCase();
   const terms = [
     ...[city, ...region].flatMap(aliasesFor),
-    ...(REMOTE_ONLY_ALIASES[aliasKey(city)] ?? []),
+    ...(REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []),
   ];
   return terms.some((term) => containsTerm(job, term));
 }

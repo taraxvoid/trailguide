@@ -90,12 +90,13 @@ current directory: if you have an old database there, move it to the path
   ("Worldwide", "Anywhere"), or names the place. "United States" also
   matches USA, US, and North America; Omaha also matches Nebraska.
 - `in-person` (onsite or hybrid): anything not marked remote, located in the
-  city (Omaha includes La Vista, Elkhorn, and Ralston).
+  city (Omaha includes La Vista, Elkhorn, and Ralston). "Bay Area" and
+  "Seattle" are regions: each covers its metro's main cities.
 - `any` (default): either of the above.
 
 `region` is optional and only extends which remote listings are eligible for
-a city, e.g. `region = ["Texas", "TX"]` for a Texas city. Omaha gets Nebraska
-built in. Broad places like "United States" with `in-person` or `any` only
+a city, e.g. `region = ["Texas", "TX"]` for a Texas city. Omaha gets Nebraska,
+the Bay Area California, and Seattle "Washington State" built in. Broad places like "United States" with `in-person` or `any` only
 match listings that name that place, so use specific cities for in-person
 work.
 
