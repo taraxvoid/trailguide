@@ -89,6 +89,9 @@ describe("runInit prompts", () => {
       keywords: [{ role: "software engineer" }, { role: "devops engineer" }],
     });
     expect(existsSync(dbPath())).toBe(true);
+    expect(logs.join("\n")).toMatch(
+      /Company boards: \d+ built in\. Add your own with \[\[board\]\]/,
+    );
   });
 
   it("offers 'same for all' first, so one answer covers every location", async () => {
