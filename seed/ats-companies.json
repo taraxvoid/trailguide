@@ -84,5 +84,28 @@
     "slug": "crowdstrike",
     "host": "wd5",
     "site": "crowdstrikecareers"
+  },
+  { "company": "Zscaler", "ats": "greenhouse", "slug": "zscaler" },
+  { "company": "10x Genomics", "ats": "greenhouse", "slug": "10xgenomics" },
+  {
+    "company": "Cadence",
+    "ats": "workday",
+    "slug": "cadence",
+    "host": "wd1",
+    "site": "External_Careers"
+  },
+  {
+    "company": "TD SYNNEX",
+    "ats": "workday",
+    "slug": "synnex",
+    "host": "wd5",
+    "site": "tdsynnexcareers"
+  },
+  {
+    "company": "GE Vernova",
+    "ats": "workday",
+    "slug": "gevernova",
+    "host": "wd5",
+    "site": "Vernova_ExternalSite"
   }
 ]
