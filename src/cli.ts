@@ -37,6 +37,7 @@ import {
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
+import { httpFetch } from "./http.ts";
 import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
@@ -237,7 +238,7 @@ const URL_CHECK_TIMEOUT_MS = 15_000;
 
 async function isUrlDead(url: string): Promise<boolean> {
   try {
-    const res = await fetch(url, {
+    const res = await httpFetch(url, {
       redirect: "follow",
       signal: AbortSignal.timeout(URL_CHECK_TIMEOUT_MS),
     });

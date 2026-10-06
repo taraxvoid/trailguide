@@ -1,3 +1,5 @@
+import { getJson } from "../http.ts";
+import { type Board, searchBoards } from "./boards.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
 import { companiesForAts } from "./seed.ts";
@@ -54,22 +56,18 @@ function toRemoteType(job: AshbyJob): RemoteType {
   }
 }
 
-export function createAshbySource(): Source {
+export function createAshbySource(
+  boards: Board[] = companiesForAts("ashby"),
+): Source {
   return {
     name: "ashby",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const companies = companiesForAts("ashby");
-      const results: NormalizedJob[] = [];
-
-      for (const { company, slug } of companies) {
-        const res = await fetch(
+      return searchBoards(boards, params, async ({ company, slug }) => {
+        const results: NormalizedJob[] = [];
+        const body = await getJson<AshbyResponse>(
           `https://api.ashbyhq.com/posting-api/job-board/${slug}`,
         );
-        if (!res.ok) {
-          continue;
-        }
-        const body = (await res.json()) as AshbyResponse;
         for (const job of body.jobs) {
           if (!matchesRole(job.title, params.role)) continue;
           const locations = allLocations(job);
@@ -96,9 +94,8 @@ export function createAshbySource(): Source {
             description: job.descriptionPlain,
           });
         }
-      }
-
-      return results;
+        return results;
+      });
     },
   };
 }

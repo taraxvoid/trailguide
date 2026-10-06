@@ -103,7 +103,15 @@ export async function collectJobs(
   ): Promise<NormalizedJob[]> => {
     calls++;
     try {
-      const jobs = await source.search(params);
+      const jobs = await source.search({
+        ...params,
+        warn: (message) => {
+          console.error(`[${source.name}] ${message}`);
+          if (!failures.has(source.name)) {
+            failures.set(source.name, message.slice(0, 120));
+          }
+        },
+      });
       succeeded++;
       return jobs.map(normalizeRemoteType);
     } catch (err) {

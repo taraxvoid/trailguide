@@ -1,3 +1,5 @@
+import { getJson } from "../http.ts";
+import { type Board, searchBoards } from "./boards.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
 import { companiesForAts } from "./seed.ts";
@@ -36,22 +38,18 @@ function toRemoteType(workplaceType: string | null): RemoteType {
   }
 }
 
-export function createLeverSource(): Source {
+export function createLeverSource(
+  boards: Board[] = companiesForAts("lever"),
+): Source {
   return {
     name: "lever",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const companies = companiesForAts("lever");
-      const results: NormalizedJob[] = [];
-
-      for (const { company, slug } of companies) {
-        const res = await fetch(
+      return searchBoards(boards, params, async ({ company, slug }) => {
+        const results: NormalizedJob[] = [];
+        const jobs = await getJson<LeverJob[]>(
           `https://api.lever.co/v0/postings/${slug}?mode=json`,
         );
-        if (!res.ok) {
-          continue;
-        }
-        const jobs = (await res.json()) as LeverJob[];
         for (const job of jobs) {
           if (!matchesRole(job.text, params.role)) continue;
           if (
@@ -72,9 +70,8 @@ export function createLeverSource(): Source {
             description: job.descriptionPlain,
           });
         }
-      }
-
-      return results;
+        return results;
+      });
     },
   };
 }

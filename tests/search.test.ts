@@ -32,7 +32,9 @@ function fake(
     name,
     scoped,
     async search(params) {
-      calls.push(params);
+      // The runner adds `warn`; tests only care about the query.
+      const { warn: _warn, ...query } = params;
+      calls.push(query);
       return respond(params);
     },
   };

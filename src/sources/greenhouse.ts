@@ -1,3 +1,5 @@
+import { getJson } from "../http.ts";
+import { type Board, searchBoards } from "./boards.ts";
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
@@ -22,22 +24,18 @@ function matchesRole(title: string, role: string | string[]): boolean {
   return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
-export function createGreenhouseSource(): Source {
+export function createGreenhouseSource(
+  boards: Board[] = companiesForAts("greenhouse"),
+): Source {
   return {
     name: "greenhouse",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const companies = companiesForAts("greenhouse");
-      const results: NormalizedJob[] = [];
-
-      for (const { company, slug } of companies) {
-        const res = await fetch(
+      return searchBoards(boards, params, async ({ company, slug }) => {
+        const results: NormalizedJob[] = [];
+        const body = await getJson<GreenhouseResponse>(
           `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs?content=true`,
         );
-        if (!res.ok) {
-          continue;
-        }
-        const body = (await res.json()) as GreenhouseResponse;
         for (const job of body.jobs) {
           if (!matchesRole(job.title, params.role)) continue;
           if (
@@ -60,9 +58,8 @@ export function createGreenhouseSource(): Source {
             description: stripHtml(job.content),
           });
         }
-      }
-
-      return results;
+        return results;
+      });
     },
   };
 }
