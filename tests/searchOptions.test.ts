@@ -9,7 +9,7 @@ const LOADED: LoadedConfig = {
   files: ["/g/config.toml"],
   config: {
     govmil: false,
-    keywords: ["swe", "devops"],
+    keywords: [{ role: "swe" }, { role: "devops" }],
     locations: [
       { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
       { city: "United States", flexibility: "remote", region: [] },
@@ -30,6 +30,7 @@ describe("toSearchOptions with --role", () => {
       ),
     ).toEqual({
       keywords: ["swe"],
+      lanes: {},
       targets: [{ city: "Omaha", flexibility: "remote", region: [] }],
       govmil: false,
     });
@@ -40,6 +41,7 @@ describe("toSearchOptions with --role", () => {
       toSearchOptions({ role: ["swe"], onsite: true, clearance: true }, never),
     ).toEqual({
       keywords: ["swe"],
+      lanes: {},
       targets: [{ city: null, flexibility: "in-person", region: [] }],
       govmil: true,
     });
@@ -47,9 +49,22 @@ describe("toSearchOptions with --role", () => {
 });
 
 describe("toSearchOptions from the config", () => {
+  it("maps keywords to their lanes", () => {
+    const plan = toSearchOptions({}, () => ({
+      ...LOADED,
+      config: {
+        ...LOADED.config,
+        keywords: [{ role: "swe", lane: "platform" }, { role: "devops" }],
+      },
+    }));
+    expect(plan.keywords).toEqual(["swe", "devops"]);
+    expect(plan.lanes).toEqual({ swe: "platform" });
+  });
+
   it("crosses keywords with locations, keeping region", () => {
     expect(toSearchOptions({}, () => LOADED)).toEqual({
       keywords: ["swe", "devops"],
+      lanes: {},
       targets: [
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
         { city: "United States", flexibility: "remote", region: [] },
@@ -97,7 +112,7 @@ describe("toSearchOptions errors", () => {
   it("never allows an unbounded search: locations are required", () => {
     const noLocations: LoadedConfig = {
       files: ["/g/config.toml"],
-      config: { keywords: ["swe"] },
+      config: { keywords: [{ role: "swe" }] },
     };
     expect(() => toSearchOptions({}, () => noLocations)).toThrow(ConfigError);
     expect(() => toSearchOptions({}, () => noLocations)).toThrow(

@@ -72,6 +72,11 @@ export function openDb(path: string): Database {
   if (!cols.some((c) => c.name === "state_changed_at")) {
     db.run("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
   }
+  // Resume lane (see `[[keywords]] lane`). Set once by search; only
+  // setJobLane changes it afterwards, so a manual choice sticks.
+  if (!cols.some((c) => c.name === "lane")) {
+    db.run("ALTER TABLE jobs ADD COLUMN lane TEXT");
+  }
   if (!cols.some((c) => c.name === "applied_at")) {
     db.run("ALTER TABLE jobs ADD COLUMN applied_at TEXT");
     db.run(
@@ -119,9 +124,9 @@ export function upsertJobs(
   const newJobs: StoredJob[] = [];
 
   const insert = db.prepare(`
-    INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state, applied_at)
-    VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state, $appliedAt)
-    ON CONFLICT(listing_id) DO UPDATE SET last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state), state_changed_at = CASE WHEN $explicitState IS NOT NULL AND $explicitState != state THEN $lastCheckedAt ELSE state_changed_at END, applied_at = CASE WHEN $explicitState = 'applied' THEN COALESCE(applied_at, $lastCheckedAt) WHEN $explicitState = 'active' THEN NULL ELSE applied_at END
+    INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state, applied_at, lane)
+    VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $firstSeenAt, $lastSeenAt, $lastCheckedAt, $state, $appliedAt, $lane)
+    ON CONFLICT(listing_id) DO UPDATE SET lane = COALESCE(lane, $lane), last_seen_at = $lastSeenAt, last_checked_at = $lastCheckedAt, state = COALESCE($explicitState, state), state_changed_at = CASE WHEN $explicitState IS NOT NULL AND $explicitState != state THEN $lastCheckedAt ELSE state_changed_at END, applied_at = CASE WHEN $explicitState = 'applied' THEN COALESCE(applied_at, $lastCheckedAt) WHEN $explicitState = 'active' THEN NULL ELSE applied_at END
   `);
   const exists = db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?");
 
@@ -148,6 +153,7 @@ export function upsertJobs(
         $state: jobState,
         $appliedAt: jobState === "applied" ? now : null,
         $explicitState: explicitState,
+        $lane: job.lane ?? null,
       });
       if (isNew) {
         newJobs.push({
@@ -184,7 +190,20 @@ function rowToStoredJob(row: Record<string, string>): StoredJob {
     lastCheckedAt: row.last_checked_at ?? "",
     state: (row.state as ListingState) ?? "active",
     appliedAt: row.applied_at ?? null,
+    ...(row.lane ? { lane: row.lane } : {}),
   };
+}
+
+/** Sets (or with null, clears) a job's resume lane. */
+export function setJobLane(
+  db: Database,
+  listingId: string,
+  lane: string | null,
+): boolean {
+  const result = db
+    .prepare("UPDATE jobs SET lane = $lane WHERE listing_id = $listingId")
+    .run({ $lane: lane, $listingId: listingId });
+  return result.changes > 0;
 }
 
 export function allJobs(db: Database): StoredJob[] {

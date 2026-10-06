@@ -204,7 +204,7 @@ export async function runInit(
       flexibility: flexibilities[i] ?? "any",
       region: [],
     })),
-    keywords: roles,
+    keywords: roles.map((role) => ({ role })),
   });
 
   // Only the global config just written: a local ./igor.toml (a sandbox, say)

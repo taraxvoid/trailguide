@@ -11,6 +11,7 @@ import {
   listingId,
   openDb,
   setJobApplied,
+  setJobLane,
   setJobState,
   upsertJobs,
 } from "../src/db.ts";
@@ -327,5 +328,24 @@ describe("openDb paths", () => {
     openDb(path).close();
     expect(existsSync(path)).toBe(true);
     rmSync(dir, { recursive: true });
+  });
+});
+
+describe("lane", () => {
+  it("stores the lane from search and keeps a manual change", () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ lane: "platform" })]);
+    expect(getJob(db, "jsearch:1")?.lane).toBe("platform");
+
+    expect(setJobLane(db, "jsearch:1", "secplat")).toBe(true);
+    upsertJobs(db, [mockJob({ lane: "platform" })]);
+    expect(getJob(db, "jsearch:1")?.lane).toBe("secplat");
+
+    setJobLane(db, "jsearch:1", null);
+    expect(getJob(db, "jsearch:1")?.lane).toBeUndefined();
+  });
+
+  it("returns false for an unknown listing", () => {
+    expect(setJobLane(freshDb(), "jsearch:nope", "x")).toBe(false);
   });
 });
