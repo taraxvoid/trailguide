@@ -1,12 +1,15 @@
 import type { Database } from "bun:sqlite";
+import { existsSync } from "node:fs";
 import { readdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import {
   getJob,
   getTailoredResume,
+  type StoredJob,
   setTailoredResume,
   tailoredResumeOwner,
 } from "../db.ts";
+import { globalOutputDir, globalResumeDir } from "../paths.ts";
 import {
   isModelAvailable,
   requestTailorPlan,
@@ -35,8 +38,10 @@ import { renderResumePdf } from "./typst.ts";
 // which situations do that.
 
 export interface TailorOptions {
+  /** Resume masters (default ~/.config/igor/resumes; see resolveResumeDir). */
   resumeDir?: string;
   resumePath?: string;
+  /** Tailored output (default ~/.local/share/igor/resumes). */
   outputDir?: string;
   ollamaHost?: string;
   ollamaModel?: string;
@@ -64,34 +69,51 @@ function slugify(value: string): string {
   );
 }
 
+/** Used for jobs without a lane when the resume dir holds several masters. */
+const DEFAULT_RESUME = "default.md";
+
 /**
- * Finds the resume master file. There's deliberately no hardcoded personal
- * filename in this codebase - it looks for the one `.md` file under
- * `input/` (gitignored; see README) unless a path is given explicitly.
+ * Finds the resume master for a job. There's deliberately no hardcoded
+ * personal filename in this codebase. In order: an explicit path, the job's
+ * lane (`<dir>/<lane>.md`, which must exist), `<dir>/default.md`, or the one
+ * `.md` in the dir.
  */
-async function resolveResumePath(options: TailorOptions): Promise<string> {
+async function resolveResumePath(
+  options: TailorOptions,
+  job: Pick<StoredJob, "lane">,
+): Promise<string> {
   if (options.resumePath) return options.resumePath;
-  const dir = options.resumeDir ?? "input";
+  const dir = options.resumeDir ?? globalResumeDir();
+  if (job.lane) {
+    const path = join(dir, `${job.lane}.md`);
+    if (!existsSync(path)) {
+      throw new Error(
+        `no resume for lane "${job.lane}": expected ${path} (or pass --resume <path>)`,
+      );
+    }
+    return path;
+  }
   let entries: string[];
   try {
     entries = await readdir(dir);
   } catch {
     throw new Error(
-      `no "${dir}/" directory found. Put your resume master at ${dir}/<name>.md (this directory is gitignored).`,
+      `no resume directory at ${dir}. Put your resume master at ${dir}/<name>.md.`,
     );
   }
-  const candidates = entries.filter((f) => f.endsWith(".md"));
+  const candidates = entries.filter((f) => f.endsWith(".md")).sort();
+  if (candidates.includes(DEFAULT_RESUME)) return join(dir, DEFAULT_RESUME);
   if (candidates.length === 0) {
     throw new Error(
-      `no .md resume found in ${dir}/. Put your resume master at ${dir}/<name>.md.`,
+      `no .md resume found in ${dir}. Put your resume master at ${dir}/<name>.md.`,
     );
   }
   if (candidates.length > 1) {
     throw new Error(
-      `multiple .md files in ${dir}/ (${candidates.join(", ")}) - pass --resume <path> to pick one.`,
+      `multiple resumes in ${dir} (${candidates.join(", ")}) and this job has no lane: add ${DEFAULT_RESUME}, set a lane, or pass --resume <path>.`,
     );
   }
-  return `${dir}/${candidates[0]}`;
+  return join(dir, candidates[0] as string);
 }
 
 export async function tailorResume(
@@ -107,7 +129,7 @@ export async function tailorResume(
 
   let resumePath: string;
   try {
-    resumePath = await resolveResumePath(options);
+    resumePath = await resolveResumePath(options, job);
   } catch (err) {
     return { ok: false, warnings, error: (err as Error).message };
   }
@@ -170,7 +192,7 @@ export async function tailorResume(
     }
   }
 
-  const outputDir = options.outputDir ?? "output/resumes";
+  const outputDir = options.outputDir ?? globalOutputDir();
   const markdownPath = tailoredMarkdownPath(
     db,
     listingId,

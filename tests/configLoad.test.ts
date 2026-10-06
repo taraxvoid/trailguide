@@ -45,7 +45,7 @@ describe("loadConfig", () => {
     expect(config.locations).toEqual([
       { city: "Austin", flexibility: "any", region: [] },
     ]);
-    expect(config.keywords).toEqual(["swe"]);
+    expect(config.keywords).toEqual([{ role: "swe" }]);
   });
 
   it("uses only the explicit --config file, ignoring the chain", () => {
@@ -88,9 +88,9 @@ describe("loadConfig", () => {
 
   it("re-reads the files on every call", () => {
     write(localFile(), '[[keywords]]\nrole = "a"\n');
-    expect(loadConfig({ cwd, env }).config.keywords).toEqual(["a"]);
+    expect(loadConfig({ cwd, env }).config.keywords).toEqual([{ role: "a" }]);
     write(localFile(), '[[keywords]]\nrole = "b"\n');
-    expect(loadConfig({ cwd, env }).config.keywords).toEqual(["b"]);
+    expect(loadConfig({ cwd, env }).config.keywords).toEqual([{ role: "b" }]);
   });
 });
 

@@ -23,8 +23,14 @@ region = ["Nebraska"]      # optional: extra places a REMOTE listing may name
 city = "United States"
 flexibility = "remote"
 
+# Resume masters for `igor tailor`. Default: ~/.config/igor/resumes
+# [resume]
+# dir = "resumes"
+
+# Optional lane per keyword: jobs it finds tailor from <resume dir>/<lane>.md.
 [[keywords]]
 role = "Software Engineer"
+lane = "swe"
 
 [[keywords]]
 role = "DevOps Engineer"

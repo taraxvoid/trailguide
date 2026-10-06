@@ -87,7 +87,7 @@ describe("runInit prompts", () => {
         { city: "Omaha, NE", flexibility: "in-person", region: [] },
         { city: "United States", flexibility: "remote", region: [] },
       ],
-      keywords: ["software engineer", "devops engineer"],
+      keywords: [{ role: "software engineer" }, { role: "devops engineer" }],
     });
     expect(existsSync(dbPath())).toBe(true);
   });
@@ -138,7 +138,7 @@ describe("runInit flags", () => {
       io,
     );
     expect(io.asked).toEqual([]);
-    expect(readConfig().keywords).toEqual(["swe", "sre"]);
+    expect(readConfig().keywords).toEqual([{ role: "swe" }, { role: "sre" }]);
   });
 
   it("accepts --work per location, split at the last colon", async () => {

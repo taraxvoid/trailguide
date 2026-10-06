@@ -22,6 +22,8 @@ export interface NormalizedJob {
   url: string;
   postedAt: string | null;
   description: string | null;
+  /** Resume lane of the keyword that found it, if that keyword names one. */
+  lane?: string;
 }
 
 export interface SearchParams {

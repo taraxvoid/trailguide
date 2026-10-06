@@ -75,7 +75,8 @@ A `./igor.toml` in the current directory is merged over the global config:
 `[job]` keys override one by one, and `[[location]]` / `[[keywords]]` replace
 the global lists. `[db] path = "igor.db"` in a local file gives a
 self-contained sandbox (relative paths resolve against that file's
-directory). `igor config` shows which files and database are in use.
+directory). `[resume] dir` moves the resume masters the same way.
+`igor config` shows which files and database are in use.
 
 Precedence, high to low: CLI flags, `IGOR_*` environment variables
 (`IGOR_DB`, `IGOR_CONFIG`), local `igor.toml`, global `config.toml`,
@@ -148,6 +149,7 @@ everywhere else. Set `IGOR_NO_DELEGATE=1` to always run the linked one.
 - ⌃t — tailor your resume to the selected job, or regenerate its PDF if it already has one (see below)
 - e — archive
 - a — mark applied
+- L — cycle the job's resume lane (none, then each lane in the config)
 - ⌃r — refresh (checks whether active listings are still live)
 - q / esc — quit
 
@@ -174,8 +176,9 @@ groups themselves are only ever reordered, never dropped.
 
 Setup:
 
-1. Put your resume master in `input/<name>.md` (gitignored - this is your
-   personal resume, not project source). It needs a `## Highlights` section
+1. Put your resume master in `~/.config/igor/resumes/<name>.md` (or the
+   `[resume] dir` from your config; it's your personal resume, so keep it
+   out of this repo). It needs a `## Highlights` section
    and a `## Career Experience` section with each employer's bullets for
    tailoring to have anything to work with. A section whose heading mentions
    skills, technologies, or competencies is tailored too. Other sections and
@@ -190,11 +193,29 @@ Setup:
    ```
 
 ```bash
-igor tailor <listingId> [--db <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
+igor tailor <listingId> [--db <path>] [--config <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
 ```
 
-Output goes to `output/resumes/<company>-<title>.md` and `.pdf` (also
-gitignored). If Ollama or the resume's Highlights section isn't available,
+### Lanes: one master per kind of role
+
+To pitch different roles from different masters, give a `[[keywords]]` entry
+a `lane`:
+
+```toml
+[[keywords]]
+role = "Security Platform Engineer"
+lane = "secplat"        # tailors from <resume dir>/secplat.md
+```
+
+Search records the lane of the keyword that found each job. For sources
+searched with every keyword at once, it's the first keyword (in config
+order) the job title contains. Tailoring then picks, in order: `--resume`,
+the job's `<lane>.md` (an error if missing), `default.md`, or the only `.md`
+in the dir. It never guesses between masters. Change a job's lane with `L`
+in the TUI or `igor lane <listingId> [lane] [--clear]`.
+
+Output goes to `~/.local/share/igor/resumes/<company>-<title>.md` and `.pdf`
+(`--output-dir` to change it). If Ollama or the resume's Highlights section isn't available,
 or the model's response doesn't make sense, tailoring is skipped with a
 warning and the resume is still rendered unmodified - you always get a
 usable PDF out of this, never nothing and never garbage.

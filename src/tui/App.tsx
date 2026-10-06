@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { resolve } from "node:path";
 import {
   Box,
   type Key,
@@ -17,6 +18,7 @@ import React, {
 } from "react";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
+import { loadConfig } from "../config.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
@@ -27,6 +29,7 @@ import {
   runningTailorIds,
   SEARCH_RUN_KEY,
   setJobApplied,
+  setJobLane,
   setJobState,
   startTailorRun,
   tailoredListingIds,
@@ -83,7 +86,7 @@ const FOOTER_BEFORE =
 const FOOTER_TAILOR_AFTER = " [⌃t] | open tailored resume [⌃o] | mark ";
 const FOOTER_ARCHIVED_AFTER = " [e] mark ";
 const FOOTER_AFTER =
-  " [a] | toggle view [⌃e] | search [⌃s] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
+  " [a] | cycle lane [L] | toggle view [⌃e] | search [⌃s] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_TAILOR_AFTER}archived${FOOTER_ARCHIVED_AFTER}applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
@@ -176,6 +179,7 @@ function statusTags(job: StoredJob, tailored: boolean): StatusTag[] {
   const tags: StatusTag[] = [];
   if (job.appliedAt) tags.push({ label: "[applied]", color: NEON_BLUE });
   if (tailored) tags.push({ label: "[tailored]", color: NEON_GREEN });
+  if (job.lane) tags.push({ label: `[${job.lane}]`, color: undefined });
   if (state === "archived")
     tags.push({ label: "[archived]", color: MUTED_YELLOW });
   if (state === "inactive")
@@ -377,6 +381,36 @@ export default function JobBrowser({
     handleRefresh();
   }, []);
 
+  // Lanes from the config's [[keywords]], for cycling with [L]. A broken
+  // config just means no lanes to cycle through.
+  const lanes = useMemo(() => {
+    try {
+      const { keywords = [] } = loadConfig({ config: configPath }).config;
+      return [...new Set(keywords.flatMap((k) => (k.lane ? [k.lane] : [])))];
+    } catch {
+      return [];
+    }
+  }, [configPath]);
+
+  const handleLaneCycle = useCallback(() => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    // No lane, then each configured lane in turn. A lane no longer in the
+    // config is left by moving to the first configured one.
+    const options: (string | null)[] = [null, ...lanes];
+    const next =
+      options[(options.indexOf(job.lane ?? null) + 1) % options.length] ?? null;
+    setJobLane(db, job.listingId, next);
+    setJobs(allJobs(db));
+    showStatus(
+      next
+        ? `lane ${next}: ${job.title} @ ${job.company}`
+        : lanes.length > 0
+          ? `no lane: ${job.title} @ ${job.company}`
+          : 'no lanes configured (add lane = "..." to a [[keywords]] entry)',
+    );
+  }, [db, lanes, visibleJobs, selectedIndex, showStatus]);
+
   const handleStateChange = useCallback(
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
@@ -456,6 +490,7 @@ export default function JobBrowser({
         job.listingId,
         "--db",
         dbPath,
+        ...(configPath ? ["--config", resolve(configPath)] : []),
       ],
       stdio: ["ignore", "ignore", "ignore"],
       env: { ...process.env, [NO_DELEGATE_ENV]: "1" },
@@ -472,7 +507,7 @@ export default function JobBrowser({
     setStatusMessage(
       `Tailoring ${job.title} @ ${job.company} in the background (survives quitting)…`,
     );
-  }, [db, dbPath, visibleJobs, selectedIndex, tailoringIds]);
+  }, [db, dbPath, configPath, visibleJobs, selectedIndex, tailoringIds]);
 
   const handleSearch = useCallback(() => {
     const result = startBackgroundSearch({ db, dbPath, configPath });
@@ -562,6 +597,10 @@ export default function JobBrowser({
         handleStateChange("applied");
         return;
       }
+      if (input === "L") {
+        handleLaneCycle();
+        return;
+      }
     },
     [
       exit,
@@ -573,6 +612,7 @@ export default function JobBrowser({
       isRefreshing,
       handleRefresh,
       handleStateChange,
+      handleLaneCycle,
       handleTailor,
       handleSearch,
       handleOpenResume,

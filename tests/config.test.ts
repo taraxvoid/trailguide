@@ -51,7 +51,7 @@ describe("parseConfig", () => {
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
         { city: "United States", flexibility: "remote", region: [] },
       ],
-      keywords: ["Software Engineer", "DevOps Engineer"],
+      keywords: [{ role: "Software Engineer" }, { role: "DevOps Engineer" }],
     });
   });
 
@@ -76,9 +76,30 @@ describe("parseConfig", () => {
     );
   });
 
+  it("reads an optional lane per keyword and a resume dir", () => {
+    const config = parseConfig(
+      '[resume]\ndir = "resumes"\n\n[[keywords]]\nrole = "Platform Engineer"\nlane = "platform"\n\n[[keywords]]\nrole = "SRE"\n',
+      "/etc/igor/igor.toml",
+    );
+    expect(config.resumeDir).toBe("/etc/igor/resumes");
+    expect(config.keywords).toEqual([
+      { role: "Platform Engineer", lane: "platform" },
+      { role: "SRE" },
+    ]);
+  });
+
+  it("rejects lane names that can't be file names", () => {
+    expect(() =>
+      parseConfig(
+        '[[keywords]]\nrole = "x"\nlane = "../secret"\n',
+        "igor.toml",
+      ),
+    ).toThrow('lane "../secret" must be lowercase letters');
+  });
+
   it("rejects typo'd table names at the top level", () => {
     expect(() => parseConfig('[[keyword]]\nrole = "x"\n', "igor.toml")).toThrow(
-      'igor.toml: top level has unknown key "keyword" (expected job, db, location, keywords)',
+      'igor.toml: top level has unknown key "keyword" (expected job, db, resume, location, keywords)',
     );
     expect(() =>
       parseConfig('[[locations]]\ncity = "x"\n', "igor.toml"),
@@ -167,7 +188,10 @@ describe("mergeConfigs", () => {
     expect(merged.locations).toEqual([
       { city: "Austin", flexibility: "any", region: [] },
     ]);
-    expect(merged.keywords).toEqual(["Software Engineer", "DevOps Engineer"]);
+    expect(merged.keywords).toEqual([
+      { role: "Software Engineer" },
+      { role: "DevOps Engineer" },
+    ]);
     expect(merged.db).toBe("/g/sandbox.db");
   });
 
@@ -193,19 +217,21 @@ describe("formatConfig / writeConfig", () => {
   it("escapes quotes and omits empty regions", () => {
     const text = formatConfig({
       locations: [{ city: "Omaha, NE", flexibility: "any", region: [] }],
-      keywords: ['C "sharp" dev'],
+      keywords: [{ role: 'C "sharp" dev' }],
     });
     expect(text).not.toContain("region");
-    expect(parseConfig(text, "x.toml").keywords).toEqual(['C "sharp" dev']);
+    expect(parseConfig(text, "x.toml").keywords).toEqual([
+      { role: 'C "sharp" dev' },
+    ]);
   });
 
   it("writes the file, creating missing directories", () => {
     dir = mkdtempSync(join(tmpdir(), "igor-config-"));
     const path = join(dir, "a", "b", "config.toml");
-    writeConfig(path, { govmil: false, keywords: ["swe"] });
+    writeConfig(path, { govmil: false, keywords: [{ role: "swe" }] });
     expect(parseConfig(readFileSync(path, "utf8"), path)).toEqual({
       govmil: false,
-      keywords: ["swe"],
+      keywords: [{ role: "swe" }],
     });
   });
 });

@@ -5,6 +5,7 @@ import {
   type Env,
   globalConfigPath,
   globalDbPath,
+  globalResumeDir,
   localConfigPath,
 } from "./paths.ts";
 
@@ -22,13 +23,24 @@ export interface LocationEntry {
   region: string[];
 }
 
+export interface KeywordEntry {
+  role: string;
+  /** Resume lane: jobs found by this keyword tailor from `<resume dir>/<lane>.md`. */
+  lane?: string;
+}
+
+/** Lane names double as file names, so they stay simple. */
+export const LANE_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+
 /** What one config file (or a merge of several) says; everything optional. */
 export interface IgorConfig {
   govmil?: boolean;
   /** Absolute path (relative values are resolved against the file's dir). */
   db?: string;
+  /** Absolute path to the resume masters (same resolution as `db`). */
+  resumeDir?: string;
   locations?: LocationEntry[];
-  keywords?: string[];
+  keywords?: KeywordEntry[];
 }
 
 export class ConfigError extends Error {
@@ -117,7 +129,13 @@ function parseRegion(file: string, where: string, value: unknown): string[] {
 
 export function parseConfig(text: string, file: string): IgorConfig {
   const raw = parseToml(text, file);
-  rejectUnknown(file, "top level", raw, ["job", "db", "location", "keywords"]);
+  rejectUnknown(file, "top level", raw, [
+    "job",
+    "db",
+    "resume",
+    "location",
+    "keywords",
+  ]);
   const config: IgorConfig = {};
 
   if (raw.job !== undefined) {
@@ -138,6 +156,14 @@ export function parseConfig(text: string, file: string): IgorConfig {
     rejectUnknown(file, "[db]", raw.db, ["path"]);
     const path = requireString(file, "[db]", raw.db, "path");
     config.db = isAbsolute(path) ? path : resolve(dirname(file), path);
+  }
+
+  if (raw.resume !== undefined) {
+    if (!isTable(raw.resume))
+      throw new ConfigError(`${file}: [resume] must be a table`);
+    rejectUnknown(file, "[resume]", raw.resume, ["dir"]);
+    const dir = requireString(file, "[resume]", raw.resume, "dir");
+    config.resumeDir = isAbsolute(dir) ? dir : resolve(dirname(file), dir);
   }
 
   if (raw.location !== undefined) {
@@ -168,8 +194,16 @@ export function parseConfig(text: string, file: string): IgorConfig {
     config.keywords = tableArray(file, "keywords", raw.keywords).map(
       (entry, i) => {
         const where = `[[keywords]] entry ${i + 1}`;
-        rejectUnknown(file, where, entry, ["role"]);
-        return requireString(file, where, entry, "role");
+        rejectUnknown(file, where, entry, ["role", "lane"]);
+        const role = requireString(file, where, entry, "role");
+        if (entry.lane === undefined) return { role };
+        const lane = requireString(file, where, entry, "lane");
+        if (!LANE_PATTERN.test(lane)) {
+          throw new ConfigError(
+            `${file}: ${where} lane ${JSON.stringify(lane)} must be lowercase letters, digits, - or _ (it names <lane>.md)`,
+          );
+        }
+        return { role, lane };
       },
     );
   }
@@ -185,6 +219,7 @@ export function mergeConfigs(
   const merged: IgorConfig = { ...base };
   if (override.govmil !== undefined) merged.govmil = override.govmil;
   if (override.db !== undefined) merged.db = override.db;
+  if (override.resumeDir !== undefined) merged.resumeDir = override.resumeDir;
   if (override.locations !== undefined) merged.locations = override.locations;
   if (override.keywords !== undefined) merged.keywords = override.keywords;
   return merged;
@@ -194,12 +229,17 @@ export function formatConfig(config: IgorConfig): string {
   const doc: Record<string, unknown> = {};
   if (config.govmil !== undefined) doc.job = { govmil: config.govmil };
   if (config.db !== undefined) doc.db = { path: config.db };
+  if (config.resumeDir !== undefined) doc.resume = { dir: config.resumeDir };
   if (config.locations) {
     doc.location = config.locations.map(({ city, flexibility, region }) =>
       region.length > 0 ? { city, flexibility, region } : { city, flexibility },
     );
   }
-  if (config.keywords) doc.keywords = config.keywords.map((role) => ({ role }));
+  if (config.keywords) {
+    doc.keywords = config.keywords.map(({ role, lane }) =>
+      lane ? { role, lane } : { role },
+    );
+  }
   const text = stringify(doc);
   return text.endsWith("\n") || text === "" ? text : `${text}\n`;
 }
@@ -266,6 +306,12 @@ export function resolveDbPath(
   return loadConfig(ctx).config.db ?? globalDbPath(env);
 }
 
+/** Where resume masters live: `[resume] dir`, else ~/.config/igor/resumes. */
+export function resolveResumeDir(ctx: ConfigContext = {}): string {
+  const env = ctx.env ?? process.env;
+  return loadConfig(ctx).config.resumeDir ?? globalResumeDir(env);
+}
+
 export function describeConfig(ctx: ConfigContext = {}): string {
   const env = ctx.env ?? process.env;
   const { config, files } = loadConfig(ctx);
@@ -291,6 +337,8 @@ export interface SearchTarget {
 /** Every keyword is searched in every target. */
 export interface SearchPlan {
   keywords: string[];
+  /** Keyword → resume lane, for the keywords that name one. */
+  lanes: Record<string, string>;
   targets: SearchTarget[];
   govmil: boolean;
 }
@@ -332,6 +380,7 @@ export function toSearchOptions(
   if (flags.role && flags.role.length > 0) {
     return {
       keywords: flags.role,
+      lanes: {},
       targets: flagTargets ?? [
         { city: null, flexibility: flagFlexibility ?? "any", region: [] },
       ],
@@ -366,7 +415,10 @@ export function toSearchOptions(
     );
   }
   return {
-    keywords: config.keywords,
+    keywords: config.keywords.map((k) => k.role),
+    lanes: Object.fromEntries(
+      config.keywords.flatMap((k) => (k.lane ? [[k.role, k.lane]] : [])),
+    ),
     targets,
     govmil: (flags.clearance ?? false) || (config.govmil ?? false),
   };

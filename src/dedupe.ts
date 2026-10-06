@@ -28,7 +28,9 @@ export function dedupe(jobs: NormalizedJob[]): NormalizedJob[] {
       !existing ||
       (job.description?.length ?? 0) > (existing.description?.length ?? 0)
     ) {
-      seen.set(key, job);
+      // Keep a lane whichever copy wins.
+      const lane = job.lane ?? existing?.lane;
+      seen.set(key, lane ? { ...job, lane } : job);
     }
   }
   return [...seen.values()];

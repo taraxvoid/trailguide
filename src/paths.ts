@@ -21,3 +21,13 @@ export function globalDbPath(env: Env = process.env): string {
 export function localConfigPath(cwd: string): string {
   return join(cwd, "igor.toml");
 }
+
+/** Resume masters: `<lane>.md`, or the one `.md` when no lane applies. */
+export function globalResumeDir(env: Env = process.env): string {
+  return join(xdgDir(env, "XDG_CONFIG_HOME", ".config"), "igor", "resumes");
+}
+
+/** Tailored resumes (.md and .pdf), next to the database. */
+export function globalOutputDir(env: Env = process.env): string {
+  return join(xdgDir(env, "XDG_DATA_HOME", ".local/share"), "igor", "resumes");
+}

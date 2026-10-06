@@ -285,3 +285,76 @@ describe("tailorOrRegenerate", () => {
     expect(result.error).toMatch(/tailor it first/);
   });
 });
+
+describe("resume selection by lane", () => {
+  const offline = { outputDir, ollamaHost: "http://127.0.0.1:1" };
+  let dir = "";
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+  });
+
+  async function masters(files: Record<string, string>): Promise<string> {
+    dir = `/tmp/igor-tailor-lanes-${Date.now()}-${++counter}`;
+    for (const [name, title] of Object.entries(files)) {
+      await Bun.write(`${dir}/${name}`, `# ${title}\n\nNo sections here.\n`);
+    }
+    return dir;
+  }
+
+  it("uses <lane>.md for a job with a lane", async () => {
+    const resumeDir = await masters({
+      "platform.md": "Platform",
+      "secplat.md": "Security",
+    });
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ lane: "secplat" })]);
+    const result = await tailorResume(db, "jsearch:1", {
+      ...offline,
+      resumeDir,
+    });
+    expect(result.ok).toBe(true);
+    expect(await Bun.file(result.markdownPath ?? "").text()).toContain(
+      "# Security",
+    );
+  });
+
+  it("fails clearly when the lane's master is missing", async () => {
+    const resumeDir = await masters({ "platform.md": "Platform" });
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ lane: "secplat" })]);
+    const result = await tailorResume(db, "jsearch:1", {
+      ...offline,
+      resumeDir,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/no resume for lane "secplat"/);
+  });
+
+  it("uses default.md for a job without a lane", async () => {
+    const resumeDir = await masters({
+      "default.md": "Default",
+      "platform.md": "Platform",
+    });
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const result = await tailorResume(db, "jsearch:1", {
+      ...offline,
+      resumeDir,
+    });
+    expect(await Bun.file(result.markdownPath ?? "").text()).toContain(
+      "# Default",
+    );
+  });
+
+  it("refuses to guess between several masters without a lane", async () => {
+    const resumeDir = await masters({ "a.md": "A", "b.md": "B" });
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    const result = await tailorResume(db, "jsearch:1", {
+      ...offline,
+      resumeDir,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/multiple resumes .* no lane/);
+  });
+});

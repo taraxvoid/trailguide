@@ -54,6 +54,25 @@ export function formatRunMessage(result: SearchResult): string {
   return `${result.found} found, ${result.new} new${failed}`;
 }
 
+/**
+ * The lane for a job from an unscoped source, which was searched with every
+ * keyword at once: the first keyword (in config order) its title contains.
+ */
+export function laneFromTitle(
+  title: string,
+  plan: Pick<SearchPlan, "keywords" | "lanes">,
+): string | undefined {
+  const role = plan.keywords.find((k) => {
+    const escaped = k.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "i").test(title);
+  });
+  return role === undefined ? undefined : plan.lanes[role];
+}
+
+function withLane(job: NormalizedJob, lane: string | undefined): NormalizedJob {
+  return lane ? { ...job, lane } : job;
+}
+
 function scopedParams(role: string, target: SearchTarget): SearchParams {
   return {
     role,
@@ -113,14 +132,16 @@ export async function collectJobs(
           );
           return found
             .flat()
-            .filter((job) => matches(job, target, { scoped: true }));
+            .filter((job) => matches(job, target, { scoped: true }))
+            .map((job) => withLane(job, plan.lanes[role]));
         }),
       ),
     ),
   ]);
   const kept = loose
     .flat()
-    .filter((job) => plan.targets.some((target) => matches(job, target)));
+    .filter((job) => plan.targets.some((target) => matches(job, target)))
+    .map((job) => withLane(job, laneFromTitle(job.title, plan)));
 
   const jobs = dedupe([...kept, ...perTarget.flat()])
     .filter((job) => !isInternship(job))

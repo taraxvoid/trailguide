@@ -55,6 +55,7 @@ function failing(
 
 const OMAHA_AND_US: SearchPlan = {
   keywords: ["swe"],
+  lanes: {},
   govmil: false,
   targets: [
     { city: "Omaha", flexibility: "in-person", region: [] },
@@ -171,6 +172,7 @@ describe("collectJobs filtering", () => {
   it("checks only the work type when no location was given", async () => {
     const plan: SearchPlan = {
       keywords: ["swe"],
+      lanes: {},
       govmil: false,
       targets: [{ city: null, flexibility: "remote", region: [] }],
     };
@@ -257,5 +259,52 @@ describe("formatRunMessage", () => {
         ],
       }),
     ).toBe("3 found, 1 new; failed: jsearch: 429, adzuna: timeout");
+  });
+});
+
+describe("lanes", () => {
+  const plan: SearchPlan = {
+    keywords: ["Platform Engineer", "Security Engineer"],
+    lanes: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
+    govmil: false,
+    targets: [{ city: null, flexibility: "any", region: [] }],
+  };
+
+  it("tags scoped results with their keyword's lane", async () => {
+    const scoped = fake("jsearch", true, (params) => [
+      job({
+        sourceId: String(params.role),
+        title: "Engineer",
+        company: String(params.role),
+        url: `https://e.com/${params.role}`,
+      }),
+    ]);
+    const { jobs } = await collectJobs(plan, [scoped.source]);
+    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.lane]))).toEqual({
+      "Platform Engineer": "platform",
+      "Security Engineer": "secplat",
+    });
+  });
+
+  it("tags unscoped results by the first keyword in the title", async () => {
+    const loose = fake("greenhouse", false, () => [
+      job({
+        sourceId: "s",
+        title: "Senior Security Engineer",
+        url: "https://e.com/s",
+      }),
+      job({ sourceId: "n", title: "Data Analyst", url: "https://e.com/n" }),
+      job({
+        sourceId: "w",
+        title: "Platform Engineering Manager",
+        url: "https://e.com/w",
+      }),
+    ]);
+    const { jobs } = await collectJobs(plan, [loose.source]);
+    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.lane]))).toEqual({
+      s: "secplat",
+      n: undefined,
+      w: undefined,
+    });
   });
 });

@@ -6,8 +6,10 @@ import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
   describeConfig,
+  LANE_PATTERN,
   loadConfig,
   resolveDbPath,
+  resolveResumeDir,
   toSearchOptions,
 } from "./config.ts";
 import {
@@ -22,12 +24,14 @@ import {
   clearJobs,
   finishRun,
   finishTailorRun,
+  getJob,
   jobsByState,
   jobsInStateBetween,
   listingId,
   openDb,
   SEARCH_RUN_KEY,
   type StoredJob,
+  setJobLane,
   setJobState,
   startRun,
   startTailorRun,
@@ -281,6 +285,47 @@ export async function refreshListings(db: Database): Promise<{
   return { checked, skipped, activated, archived };
 }
 
+export interface LaneCliOptions {
+  listingId: string;
+  lane?: string;
+  clear?: boolean;
+  db?: string;
+  config?: string;
+}
+
+export function runLane(options: LaneCliOptions): void {
+  if (options.lane && options.clear) {
+    throw new ConfigError("pass a lane or --clear, not both");
+  }
+  if (options.lane && !LANE_PATTERN.test(options.lane)) {
+    throw new ConfigError(
+      `lane ${JSON.stringify(options.lane)} must be lowercase letters, digits, - or _`,
+    );
+  }
+  const db = openDb(resolveDbPath({ db: options.db, config: options.config }));
+  try {
+    const job = getJob(db, options.listingId);
+    if (!job) {
+      console.error(`error: no job found with id ${options.listingId}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!options.lane && !options.clear) {
+      console.log(job.lane ?? "(no lane)");
+      return;
+    }
+    const lane = options.clear ? null : (options.lane ?? null);
+    setJobLane(db, options.listingId, lane);
+    console.log(
+      lane
+        ? `${options.listingId}: lane ${lane}`
+        : `${options.listingId}: lane cleared`,
+    );
+  } finally {
+    db.close();
+  }
+}
+
 export async function runRefresh(options: { db?: string }): Promise<void> {
   const db = openDb(resolveDbPath({ db: options.db }));
   const result = await refreshListings(db);
@@ -337,6 +382,7 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
 
 export interface TailorCliOptions {
   db?: string;
+  config?: string;
   listingId: string;
   resume?: string;
   outputDir?: string;
@@ -346,7 +392,7 @@ export interface TailorCliOptions {
 }
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
-  const db = openDb(resolveDbPath({ db: options.db }));
+  const db = openDb(resolveDbPath({ db: options.db, config: options.config }));
   if (!startTailorRun(db, options.listingId, process.pid)) {
     db.close();
     console.error(
@@ -360,6 +406,9 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
     result = await tailorOrRegenerate(db, options.listingId, {
       fresh: options.fresh,
       resumePath: options.resume,
+      resumeDir: options.resume
+        ? undefined
+        : resolveResumeDir({ config: options.config }),
       outputDir: options.outputDir,
       ollamaHost: options.ollamaHost,
       ollamaModel: options.ollamaModel,
@@ -513,18 +562,18 @@ export function createProgram(
   program
     .command("tailor")
     .description(
-      "Tailor your resume (input/<name>.md) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
+      "Tailor your resume (<lane>.md from the resume dir) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
     .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
     .option(
       "--resume <path>",
-      "resume master path (default: the one .md file under input/)",
+      "resume master path (default: the job's <lane>.md, else default.md or the one .md in the resume dir)",
     )
     .option(
       "--output-dir <path>",
-      "where to write the tailored .md/.pdf",
-      "output/resumes",
+      "where to write the tailored .md/.pdf (default: ~/.local/share/igor/resumes)",
     )
     .option(
       "--ollama-host <host>",
@@ -544,6 +593,7 @@ export function createProgram(
         listingIdArg: string,
         options: {
           db?: string;
+          config?: string;
           resume?: string;
           outputDir?: string;
           ollamaHost?: string;
@@ -552,6 +602,26 @@ export function createProgram(
         },
       ) => {
         await tailorAction({ ...options, listingId: listingIdArg });
+      },
+    );
+
+  program
+    .command("lane")
+    .description(
+      "Show a job's resume lane, set it, or clear it with --clear (tailor uses <lane>.md)",
+    )
+    .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
+    .argument("[lane]", "lane to set")
+    .option("--clear", "remove the job's lane", false)
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(
+      (
+        listingIdArg: string,
+        lane: string | undefined,
+        options: { clear?: boolean; db?: string; config?: string },
+      ) => {
+        runLane({ ...options, listingId: listingIdArg, lane });
       },
     );
 
