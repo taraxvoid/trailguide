@@ -14,5 +14,75 @@
   { "company": "Remarcable", "ats": "ashby", "slug": "remarcable-inc" },
   { "company": "Galliant", "ats": "ashby", "slug": "galliant" },
   { "company": "Spreetail", "ats": "lever", "slug": "spreetail" },
-  { "company": "Gallup", "ats": "greenhouse", "slug": "gallup" }
+  { "company": "Gallup", "ats": "greenhouse", "slug": "gallup" },
+  {
+    "company": "Workday",
+    "ats": "workday",
+    "slug": "workday",
+    "host": "wd5",
+    "site": "Workday"
+  },
+  {
+    "company": "PayPal",
+    "ats": "workday",
+    "slug": "paypal",
+    "host": "wd1",
+    "site": "jobs"
+  },
+  {
+    "company": "Adobe",
+    "ats": "workday",
+    "slug": "adobe",
+    "host": "wd5",
+    "site": "external_experienced"
+  },
+  {
+    "company": "NVIDIA",
+    "ats": "workday",
+    "slug": "nvidia",
+    "host": "wd5",
+    "site": "NVIDIAExternalCareerSite"
+  },
+  {
+    "company": "HPE",
+    "ats": "workday",
+    "slug": "hpe",
+    "host": "wd5",
+    "site": "WFMathpe"
+  },
+  {
+    "company": "F5",
+    "ats": "workday",
+    "slug": "ffive",
+    "host": "wd5",
+    "site": "f5jobs"
+  },
+  {
+    "company": "Walmart Global Tech",
+    "ats": "workday",
+    "slug": "walmart",
+    "host": "wd5",
+    "site": "WalmartExternal"
+  },
+  {
+    "company": "Monolithic Power Systems",
+    "ats": "workday",
+    "slug": "monolithicpower",
+    "host": "wd12",
+    "site": "MPS_Careers"
+  },
+  {
+    "company": "SiFive",
+    "ats": "workday",
+    "slug": "sifive",
+    "host": "wd1",
+    "site": "sifivecareers"
+  },
+  {
+    "company": "CrowdStrike",
+    "ats": "workday",
+    "slug": "crowdstrike",
+    "host": "wd5",
+    "site": "crowdstrikecareers"
+  }
 ]

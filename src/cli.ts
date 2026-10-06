@@ -58,6 +58,7 @@ import { createRemoteOkSource } from "./sources/remoteok.ts";
 import { createRemotiveSource } from "./sources/remotive.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
+import { createWorkdaySource } from "./sources/workday.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
 import { runTui } from "./tui/index.ts";
 
@@ -73,6 +74,7 @@ export function buildSources(): Source[] {
     createRemotiveSource(),
     createWeWorkRemotelySource(),
     createJobApsSource(),
+    createWorkdaySource(),
   ];
 
   if (process.env.JSEARCH_API_KEY) {

@@ -35,6 +35,40 @@ const LOCATION_ALIASES: Record<string, string[]> = {
     "cupertino",
     "milpitas",
     "san jose",
+    "castro valley",
+    "danville",
+    "livermore",
+  ],
+  "east bay": [
+    "east bay",
+    "oakland",
+    "berkeley",
+    "emeryville",
+    "alameda",
+    "san leandro",
+    "castro valley",
+    "hayward",
+    "union city",
+    "fremont",
+    "newark",
+    "dublin",
+    "pleasanton",
+    "livermore",
+    "san ramon",
+    "danville",
+    "walnut creek",
+    "concord",
+  ],
+  "south bay": [
+    "south bay",
+    "san jose",
+    "santa clara",
+    "sunnyvale",
+    "mountain view",
+    "milpitas",
+    "cupertino",
+    "campbell",
+    "los gatos",
   ],
   seattle: [
     "seattle",
@@ -67,6 +101,8 @@ const LOCATION_ALIASES: Record<string, string[]> = {
 const REMOTE_ONLY_ALIASES: Record<string, string[]> = {
   omaha: ["nebraska"],
   "bay area": ["california"],
+  "east bay": ["california"],
+  "south bay": ["california"],
   seattle: ["washington state", "pacific northwest"],
 };
 
@@ -197,13 +233,36 @@ function aliasesFor(place: string): string[] {
   return [...new Set([text, ...(LOCATION_ALIASES[canonicalKey(text)] ?? [])])];
 }
 
+// Regions span many towns, and several share a name with places elsewhere
+// (Dublin, Ireland; Fremont, NE; Pleasanton, TX). A region only matches a
+// listing that names its state, or a bare town name.
+const REGION_STATES: Record<string, { code: string; name: string }> = {
+  "bay area": { code: "CA", name: "california" },
+  "east bay": { code: "CA", name: "california" },
+  "south bay": { code: "CA", name: "california" },
+  seattle: { code: "WA", name: "washington" },
+};
+
+function inRegionState(jobLocation: string, place: string): boolean {
+  const state = REGION_STATES[canonicalKey(place)];
+  // "Pleasanton" or "Hybrid - Pleasanton" is bare; "Ireland-Dublin" (a
+  // Workday location name) and "Fremont, NE" are qualified.
+  if (!state || !/,|[A-Za-z]-[A-Za-z]/.test(jobLocation)) return true;
+  return (
+    new RegExp(`(?<![A-Za-z])${state.code}(?![A-Za-z])`).test(jobLocation) ||
+    containsTerm(jobLocation.toLowerCase(), state.name)
+  );
+}
+
 export function matchesLocation(
   jobLocation: string,
   queryLocation: string | string[],
 ): boolean {
   const job = jobLocation.toLowerCase();
-  return toArray(queryLocation).some((query) =>
-    aliasesFor(query).some((alias) => containsTerm(job, alias)),
+  return toArray(queryLocation).some(
+    (query) =>
+      aliasesFor(query).some((alias) => containsTerm(job, alias)) &&
+      inRegionState(jobLocation, query),
   );
 }
 
@@ -231,12 +290,11 @@ export function remoteEligible(
   if ([city, ...region].some(isUnitedStates) && isUsLocation(jobLocation)) {
     return true;
   }
+  if (matchesLocation(jobLocation, [city, ...region])) return true;
   const job = jobLocation.toLowerCase();
-  const terms = [
-    ...[city, ...region].flatMap(aliasesFor),
-    ...(REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []),
-  ];
-  return terms.some((term) => containsTerm(job, term));
+  return (REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []).some((term) =>
+    containsTerm(job, term),
+  );
 }
 
 /**
