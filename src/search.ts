@@ -5,17 +5,26 @@ import type { NormalizedJob, SearchParams, Source } from "./sources/types.ts";
 import { stripTrackingParams } from "./url.ts";
 
 const INTERNSHIP_PATTERN = /\bintern(?:ship)?s?\b/i;
-const GOVMIL_PATTERN =
-  /\b(?:Lockheed|Raytheon|Deloitte|Leidos|Offutt|military|warfighter|clearance|DoD|department of defense|department of war|SCI|Top Secret|clearance)\b/i;
+// Defense and government contractors, matched on the employer or title only:
+// a commercial listing may name one as a customer.
+const GOVMIL_EMPLOYERS =
+  /\b(?:Lockheed|Raytheon|RTX|Northrop|General Dynamics|GDIT|Leidos|SAIC|Booz Allen|CACI|ManTech|Peraton|BAE Systems|Parsons|KBR|Deloitte)\b/i;
+// Clearance and defense terms anywhere in the listing. Bare "military" and
+// "clearance" are left out: EEO boilerplate ("veteran or military status")
+// would otherwise hide most US listings.
+const GOVMIL_TERMS =
+  /\b(?:(?:security|active|secret|government|federal|dod|ts) clearances?|clearance (?:is )?required|(?:obtain|maintain) (?:a |an )?clearance|top secret|(?:ci|full[- ]scope) poly(?:graph)?|polygraph|public trust (?:clearance|position)|department of (?:defense|war)|warfighters?|Offutt|STRATCOM|DoD 8[15][47]0)\b/i;
+// Acronyms, case-sensitive so "sci" or "dod" in ordinary words never match.
+const GOVMIL_ACRONYMS = /\b(?:TS\/SCI|SCI|DoD|DoDIN)\b/;
 
 export function isInternship(job: NormalizedJob): boolean {
   return INTERNSHIP_PATTERN.test(job.title);
 }
 
 export function requiresClearance(job: NormalizedJob): boolean {
-  return (
-    GOVMIL_PATTERN.test(job.title) || GOVMIL_PATTERN.test(job.description ?? "")
-  );
+  if (GOVMIL_EMPLOYERS.test(`${job.company} ${job.title}`)) return true;
+  const text = `${job.title}\n${job.description ?? ""}`;
+  return GOVMIL_TERMS.test(text) || GOVMIL_ACRONYMS.test(text);
 }
 
 export interface SourceFailure {
