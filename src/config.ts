@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { TomlError, parse, stringify } from "smol-toml";
+import { parse, stringify, TomlError } from "smol-toml";
 import {
   type Env,
   globalConfigPath,

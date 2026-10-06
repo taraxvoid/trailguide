@@ -2,14 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { type SearchOptions, runSearch } from "../src/cli.ts";
+import { runSearch, type SearchOptions } from "../src/cli.ts";
 import { ConfigError } from "../src/config.ts";
 import {
-  SEARCH_RUN_KEY,
   allJobs,
   finishRun,
   getRun,
   openDb,
+  SEARCH_RUN_KEY,
   startRun,
 } from "../src/db.ts";
 import type {

@@ -4,16 +4,16 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  SEARCH_RUN_KEY,
   finishRun,
   getRun,
   openDb,
   runningRuns,
+  SEARCH_RUN_KEY,
   startRun,
 } from "../src/db.ts";
 import {
-  type SpawnRequest,
   describeSearchRun,
+  type SpawnRequest,
   searchLogPath,
   startBackgroundSearch,
 } from "../src/tui/search.ts";

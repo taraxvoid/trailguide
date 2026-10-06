@@ -3,10 +3,10 @@ import { closeSync, openSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import {
-  type Run,
-  SEARCH_RUN_KEY,
   exitedUnexpectedly,
+  type Run,
   runningRuns,
+  SEARCH_RUN_KEY,
   startRun,
 } from "../db.ts";
 import { IGOR_DISABLE_FLAG } from "../igorArt.ts";

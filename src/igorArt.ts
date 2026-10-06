@@ -25,6 +25,6 @@ export function displayIgor(): void {
   console.log(IGOR_QUOTE);
   console.log("-----------------------------------------");
   console.log(
-    `\nBanish with ${IGOR_DISABLE_FLAG} \(or set ${IGOR_DISABLE_ENV}\)`,
+    `\nBanish with ${IGOR_DISABLE_FLAG} (or set ${IGOR_DISABLE_ENV})`,
   );
 }

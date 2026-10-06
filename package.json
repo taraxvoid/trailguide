@@ -12,12 +12,12 @@
   },
   "scripts": {
     "lint": "biome check .",
+    "lint:migrate": "biome migrate --write",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "check": "bun run lint && bun run typecheck && bun run test",
-    "postinstall": "bunx @biomejs/biome migrate --write",
     "smoke-live": "bun run tests/smoke-live.ts",
     "check:licenses": "bun scripts/check-licenses.ts",
     "tui": "bun run src/cli.ts tui"
@@ -33,8 +33,9 @@
     "smol-toml": "^1.9.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.5.15",
     "@lizenz/checker": "^0.0.2",
+    "@socketsecurity/bun-security-scanner": "^1.1.3",
     "@types/bun": "^1.1.14",
     "@types/react": "^19.3.0",
     "typescript": "^7.0.2"

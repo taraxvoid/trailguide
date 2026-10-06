@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
-import { Command, Option } from "commander";
+import { Command } from "commander";
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
@@ -16,9 +16,8 @@ import {
   truncateWords,
   weekRange,
 } from "./dateRange.ts";
+import type { ListingState } from "./db.ts";
 import {
-  SEARCH_RUN_KEY,
-  type StoredJob,
   allJobs,
   clearJobs,
   finishRun,
@@ -27,21 +26,22 @@ import {
   jobsInStateBetween,
   listingId,
   openDb,
+  SEARCH_RUN_KEY,
+  type StoredJob,
   setJobState,
   startRun,
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
-import type { ListingState } from "./db.ts";
-import { IGOR_DISABLE_FLAG, displayIgor, shouldShowIgor } from "./igorArt.ts";
+import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import type { Env } from "./paths.ts";
 import {
-  type SearchResult,
   collectJobs,
   formatRunMessage,
   isInternship,
   requiresClearance,
+  type SearchResult,
 } from "./search.ts";
 import { createAdzunaSource } from "./sources/adzuna.ts";
 import { createAshbySource } from "./sources/ashby.ts";

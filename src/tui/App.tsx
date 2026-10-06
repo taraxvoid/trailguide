@@ -19,13 +19,13 @@ import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
-  SEARCH_RUN_KEY,
   allJobs,
   getRun,
-  getTailorRun,
   getTailoredResume,
+  getTailorRun,
   runningRuns,
   runningTailorIds,
+  SEARCH_RUN_KEY,
   setJobApplied,
   setJobState,
   startTailorRun,

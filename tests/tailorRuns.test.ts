@@ -2,7 +2,6 @@ import { Database } from "bun:sqlite";
 import { describe, expect, it, spyOn } from "bun:test";
 import { rmSync } from "node:fs";
 import {
-  SEARCH_RUN_KEY,
   finishRun,
   finishTailorRun,
   getRun,
@@ -10,6 +9,7 @@ import {
   openDb,
   runningRuns,
   runningTailorIds,
+  SEARCH_RUN_KEY,
   startRun,
   startTailorRun,
 } from "../src/db.ts";
