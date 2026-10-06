@@ -22,7 +22,9 @@ still get your resume, untailored. See [docs/architecture.md](docs/architecture.
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) >= 1.4.0.
+Requires [Bun](https://bun.sh) >= 1.4.0. If you use [mise](https://mise.jdx.dev),
+`mise install` sets up Bun and the rest of the toolchain (Typst, just,
+lefthook, gitleaks) at the pinned versions.
 
 ```bash
 git clone https://github.com/taraxvoid/igor && cd igor
@@ -270,6 +272,8 @@ Searches run when you ask for them, not on a timer. Please keep it that way
 if you script it.
 
 ## Development
+
+`mise install` provides the tools below (see `mise.toml`).
 
 ```bash
 just lint      # biome + gitleaks

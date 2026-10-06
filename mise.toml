@@ -1,0 +1,10 @@
+# Tool versions for local development (`mise install`). CI installs bun from
+# .bun-version; keep the two in step.
+[tools]
+bun = "1.4.2"
+just = "1.58.0"
+lefthook = "2.1.17"
+gitleaks = "8.30.1"
+actionlint = "1.7.12"
+# Renders tailored resumes to PDF (`igor tailor`).
+typst = "0.15.1"
