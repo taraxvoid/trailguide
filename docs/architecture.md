@@ -50,9 +50,10 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
    contact details, employers, dates and education, is kept as opaque text.
 2. A local model (Ollama) is shown the listing and the ids and returns a plan:
    which ids to show, in what order.
-3. `sanitizePlan` drops anything that is not a known id, unknown employers and
-   duplicates, and refuses to drop an employer. `applyPlan` can only select and
-   reorder.
+3. `sanitizePlan` drops every id that is invented, misspelled or duplicated,
+   and anything the model leaves out keeps its original order. Employers and
+   skill groups are never dropped, only reordered. `applyPlan` can only select
+   and reorder.
 4. The result is written as markdown, which is then the canonical copy for
    that job (hand edits survive), and rendered to PDF with Typst.
 
