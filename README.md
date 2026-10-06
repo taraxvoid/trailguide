@@ -199,9 +199,12 @@ Setup:
    tailoring to have anything to work with. A section whose heading mentions
    skills, technologies, or competencies is tailored too. Other sections and
    their formatting are free-form and always passed through unchanged.
-2. Install [Typst](https://typst.app) (`brew install typst` or see
-   [installation docs](https://github.com/typst/typst#installation)) - used
-   to render the PDF.
+2. Install [Typst](https://typst.app), used to render the PDF. The version
+   is pinned in `mise.toml`, so with [mise](https://mise.jdx.dev) installed
+   just run `mise install` from the repo. Otherwise install the same version
+   any other way (see the
+   [installation docs](https://github.com/typst/typst#installation)) and
+   put `typst` on your `PATH`.
 3. Install [Ollama](https://ollama.com) and pull a thinking-capable model
    (the default is `qwen3:8b`, a good fit for 16GB of RAM):
    ```bash

@@ -1,0 +1,3 @@
+[tools]
+# Renders tailored resume PDFs; bump deliberately, Typst output changes between minors.
+typst = "0.15.1"
