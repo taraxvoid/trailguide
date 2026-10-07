@@ -80,3 +80,11 @@ describe("sectionOf / sectionCounts", () => {
     expect(counts.get("none")).toBe(1);
   });
 });
+
+describe("trail headers", () => {
+  it("prefixes configured trail names with 'Trail: '", () => {
+    expect(
+      sectionOf(job("a", "active", "secplat"), "active", ["secplat"]).label,
+    ).toBe("Trail: secplat");
+  });
+});

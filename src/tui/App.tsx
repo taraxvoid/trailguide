@@ -70,7 +70,7 @@ const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 // sage/sky for "good" states, warm sand/terracotta for keys and archived.
 const SAGE = "#8fbf9f";
 const SKY = "#7aa7d9";
-const SAND = "#e0b86e";
+const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
@@ -796,7 +796,7 @@ export default function JobBrowser({
                 color={item.active ? item.accent : undefined}
               >
                 {item.before}
-                <Text bold dimColor={false} color={SAND}>
+                <Text bold underline dimColor={false} color={SAND}>
                   {item.key}
                 </Text>
                 {item.after}

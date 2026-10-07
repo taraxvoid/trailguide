@@ -28,7 +28,11 @@ export function sectionOf(
   if (job.state === "applied")
     return { id: "applied", label: "Applied", tone: "applied" };
   if (job.trail && trails.includes(job.trail))
-    return { id: `trail:${job.trail}`, label: job.trail, tone: "trail" };
+    return {
+      id: `trail:${job.trail}`,
+      label: `Trail: ${job.trail}`,
+      tone: "trail",
+    };
   if (trails.length > 0)
     return { id: "none", label: NO_TRAIL_LABEL, tone: "none" };
   return { id: "active", label: "Active", tone: "trail" };
