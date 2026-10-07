@@ -36,6 +36,13 @@ import {
 } from "../db.ts";
 import { linkifyPdfPath, openTarget } from "./open.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
+import {
+  orderJobs,
+  type SectionTone,
+  sectionCounts,
+  sectionOf,
+  type ViewTab,
+} from "./sections.ts";
 
 interface AppProps {
   db: Database;
@@ -78,8 +85,6 @@ function pulseColor(tick: number): string {
 }
 
 const SECTION_HEADER_LINES = 1;
-// Worst case in the active view: an "Applied" header and an "Active" header.
-const MAX_SECTION_HEADERS = 2;
 
 // The footer is a list of items whose shortcut letter is capitalized inside
 // the label and highlighted. footerPlainText() flattens the same items for
@@ -101,6 +106,7 @@ function footerItems(
   tailored: boolean | null,
   archived: boolean,
   applied: boolean,
+  otherView: string,
 ): FooterItem[] {
   return [
     { before: "", key: "O", after: "pen link" },
@@ -115,14 +121,14 @@ function footerItems(
     { before: "archiv", key: "E", accent: TERRACOTTA, active: archived },
     { key: "A", after: "pplied", accent: SKY, active: applied },
     { before: "cycle trai", key: "L" },
-    { key: "Tab", after: " toggle view" },
+    { key: "Tab", after: ` → ${otherView}` },
     { key: "S", after: "earch" },
     { key: "R", after: "efresh (auto-archives dead jobs)" },
   ];
 }
 
 function footerPlainText(): string {
-  const items = footerItems(true, false, false).map(
+  const items = footerItems(true, false, false, "Archived (999)").map(
     (i) => `${i.before ?? ""}${i.key}${i.after ?? ""}`,
   );
   return [FOOTER_NAV, ...items, FOOTER_QUIT].join(" | ");
@@ -130,17 +136,12 @@ function footerPlainText(): string {
 
 const FOOTER_TEXT = footerPlainText();
 
-const VIEW_TABS = ["active", "archived"] as const;
-type ViewTab = (typeof VIEW_TABS)[number];
-
-function tabLabel(tab: ViewTab): string {
-  switch (tab) {
-    case "active":
-      return "Active";
-    case "archived":
-      return "Archived";
-  }
-}
+const TONE_COLORS: Record<SectionTone, string | undefined> = {
+  applied: SKY,
+  archived: TERRACOTTA,
+  trail: SAGE,
+  none: undefined,
+};
 
 function formatRemote(type: string): string | null {
   switch (type) {
@@ -275,22 +276,25 @@ export default function JobBrowser({
     tailoredListingIds(db),
   );
 
-  // The active view pins applied jobs above the still-active ones.
-  const visibleJobs = useMemo(() => {
-    if (viewTab === "archived")
-      return jobs.filter((j) => j.state === "archived");
-    return [
-      // Applied and tailored first, then the rest of applied (stable sort).
-      ...jobs
-        .filter((j) => j.state === "applied")
-        .sort(
-          (x, y) =>
-            Number(tailoredIds.has(y.listingId)) -
-            Number(tailoredIds.has(x.listingId)),
-        ),
-      ...jobs.filter((j) => j.state === "active"),
-    ];
-  }, [jobs, viewTab, tailoredIds]);
+  // Trails from the config's [[keywords]], for cycling with L. A broken
+  // config just means no trails to cycle through.
+  const trails = useMemo(() => {
+    try {
+      const { keywords = [] } = loadConfig({ config: configPath }).config;
+      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
+    } catch {
+      return [];
+    }
+  }, [configPath]);
+
+  const visibleJobs = useMemo(
+    () => orderJobs(jobs, viewTab, trails, tailoredIds),
+    [jobs, viewTab, trails, tailoredIds],
+  );
+  const counts = useMemo(
+    () => sectionCounts(visibleJobs, viewTab, trails),
+    [visibleJobs, viewTab, trails],
+  );
 
   const selectedJob = visibleJobs[selectedIndex] ?? null;
 
@@ -360,7 +364,7 @@ export default function JobBrowser({
     FOOTER_FIXED_LINES +
     footerLines +
     bottomSectionLines +
-    (viewTab === "active" ? MAX_SECTION_HEADERS * SECTION_HEADER_LINES : 0);
+    counts.size * SECTION_HEADER_LINES;
 
   // No floor of 1 here: when the chrome (header/detail/footer) alone
   // already fills the terminal, forcing a row anyway would overflow the
@@ -421,17 +425,6 @@ export default function JobBrowser({
   useEffect(() => {
     handleRefresh();
   }, []);
-
-  // Trails from the config's [[keywords]], for cycling with L. A broken
-  // config just means no trails to cycle through.
-  const trails = useMemo(() => {
-    try {
-      const { keywords = [] } = loadConfig({ config: configPath }).config;
-      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
-    } catch {
-      return [];
-    }
-  }, [configPath]);
 
   const handleTrailCycle = useCallback(() => {
     const job = visibleJobs[selectedIndex];
@@ -667,22 +660,13 @@ export default function JobBrowser({
     return visibleJobs.slice(scrollOffset, scrollOffset + visibleCount);
   }, [visibleJobs, scrollOffset, visibleCount]);
 
-  const appliedCount = useMemo(
-    () => jobs.filter((j) => j.state === "applied").length,
+  const activeCount = useMemo(
+    () =>
+      jobs.filter((j) => j.state === "active" || j.state === "applied").length,
     [jobs],
   );
-
-  const tabCounts = useMemo(
-    () =>
-      Object.fromEntries(
-        VIEW_TABS.map((tab) => [
-          tab,
-          jobs.filter(
-            (j) =>
-              j.state === tab || (tab === "active" && j.state === "applied"),
-          ).length,
-        ]),
-      ) as Record<ViewTab, number>,
+  const archivedCount = useMemo(
+    () => jobs.filter((j) => j.state === "archived").length,
     [jobs],
   );
 
@@ -706,20 +690,6 @@ export default function JobBrowser({
             </Text>
           )}
         </Box>
-        <Text>
-          {VIEW_TABS.filter((tab) => tab === viewTab).map((tab, i) => (
-            <React.Fragment key={tab}>
-              {i > 0 && <Text dimColor> </Text>}
-              <Text
-                bold={tab === viewTab}
-                color={tab === viewTab ? SAGE : undefined}
-                dimColor={tab !== viewTab}
-              >
-                {tabLabel(tab)} ({tabCounts[tab]})
-              </Text>
-            </React.Fragment>
-          ))}
-        </Text>
       </Box>
 
       <Box height={GAP_LINE} />
@@ -738,19 +708,20 @@ export default function JobBrowser({
         ) : (
           visibleSlice.map((job, i) => {
             const actualIndex = scrollOffset + i;
-            const section = job.state === "applied" ? "applied" : "active";
+            const section = sectionOf(job, viewTab, trails);
             const prev = visibleSlice[i - 1];
             const showHeader =
-              viewTab === "active" &&
-              (i === 0 ||
-                (prev?.state === "applied") !== (section === "applied"));
+              i === 0 ||
+              (prev && sectionOf(prev, viewTab, trails).id !== section.id);
             return (
               <React.Fragment key={job.listingId}>
                 {showHeader && (
-                  <Text bold color={section === "applied" ? SKY : SAGE}>
-                    {section === "applied"
-                      ? `Applied (${appliedCount})`
-                      : `Active (${visibleJobs.length - appliedCount})`}
+                  <Text
+                    bold
+                    color={TONE_COLORS[section.tone]}
+                    dimColor={section.tone === "none"}
+                  >
+                    {`${section.label} (${counts.get(section.id) ?? 0})`}
                   </Text>
                 )}
                 <JobRow
@@ -813,6 +784,9 @@ export default function JobBrowser({
             selectedIsTailored,
             selectedJob?.state === "archived",
             !!selectedJob?.appliedAt,
+            viewTab === "active"
+              ? `Archived (${archivedCount})`
+              : `Active (${activeCount})`,
           ).map((item) => (
             <Text key={item.key}>
               {" | "}

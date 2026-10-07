@@ -179,7 +179,7 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 
 - ↑↓ / k j: navigate job list
 - ←→ / h l: page up/down
-- Tab: switch between the Active and Archived views
+- Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
 - S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
