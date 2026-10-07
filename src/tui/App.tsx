@@ -691,7 +691,8 @@ export default function JobBrowser({
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
         <Box flexShrink={1} marginRight={2}>
           <Text bold color={SAGE}>
-            ⚡ Trailguide at your sshhservishss ⚡
+            Hi! I'll be your guide through the forested trails of job
+            applications. 🌲🏕️🥾🎒⛰️~
           </Text>
           {version && (
             <Text dimColor wrap="truncate-end">
