@@ -1,5 +1,5 @@
 {
-  "name": "igor",
+  "name": "trailguide",
   "version": "0.1.0",
   "description": "Job search and resume tailoring that only rearranges what you've already written",
   "type": "module",
@@ -8,7 +8,7 @@
   "author": "Tara <1711810+taraxvoid@users.noreply.github.com>",
   "license": "MIT",
   "bin": {
-    "igor": "./src/cli.ts"
+    "trailguide": "./src/cli.ts"
   },
   "scripts": {
     "lint": "biome check .",

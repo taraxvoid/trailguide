@@ -174,7 +174,7 @@ describe("clear command parsing", () => {
 
   it("parses clear with defaults", async () => {
     const { program, calls } = programWithSpy();
-    await program.parseAsync(["node", "igor", "clear"]);
+    await program.parseAsync(["node", "trailguide", "clear"]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]?.db).toBeUndefined();
@@ -182,7 +182,13 @@ describe("clear command parsing", () => {
 
   it("parses clear with --db", async () => {
     const { program, calls } = programWithSpy();
-    await program.parseAsync(["node", "igor", "clear", "--db", "test.db"]);
+    await program.parseAsync([
+      "node",
+      "trailguide",
+      "clear",
+      "--db",
+      "test.db",
+    ]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({ db: "test.db" });
@@ -206,7 +212,7 @@ describe("search command parsing", () => {
 
   it("does not require --role (the config supplies keywords)", async () => {
     const { program, calls } = programWithSpy();
-    await program.parseAsync(["node", "igor", "search"]);
+    await program.parseAsync(["node", "trailguide", "search"]);
     expect(calls).toHaveLength(1);
     expect(calls[0]?.role).toBeUndefined();
   });
@@ -215,7 +221,7 @@ describe("search command parsing", () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
       "node",
-      "igor",
+      "trailguide",
       "search",
       "--role",
       "engineer",
@@ -230,7 +236,7 @@ describe("search command parsing", () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
       "node",
-      "igor",
+      "trailguide",
       "search",
       "--role",
       "engineer",
@@ -243,7 +249,13 @@ describe("search command parsing", () => {
 
   it("applies defaults when only --role is given", async () => {
     const { program, calls } = programWithSpy();
-    await program.parseAsync(["node", "igor", "search", "--role", "engineer"]);
+    await program.parseAsync([
+      "node",
+      "trailguide",
+      "search",
+      "--role",
+      "engineer",
+    ]);
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).toMatchObject({
@@ -261,7 +273,7 @@ describe("search command parsing", () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
       "node",
-      "igor",
+      "trailguide",
       "search",
       "--role",
       "engineer",
@@ -275,7 +287,7 @@ describe("search command parsing", () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
       "node",
-      "igor",
+      "trailguide",
       "search",
       "--role",
       "engineer",
@@ -305,7 +317,7 @@ describe("search command parsing", () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
       "node",
-      "igor",
+      "trailguide",
       "search",
       "--role",
       "engineer",
@@ -330,7 +342,7 @@ describe("db and config options", () => {
     }
   });
 
-  it("registers igor config and --config on search and tui", () => {
+  it("registers trailguide config and --config on search and tui", () => {
     const program = createProgram();
     const longs = (name: string) =>
       program.commands

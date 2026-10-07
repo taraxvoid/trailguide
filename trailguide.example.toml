@@ -1,13 +1,13 @@
-# Copy to igor.toml (per project) or ~/.config/igor/config.toml (global).
-# `igor init` writes the global one for you. A local igor.toml is merged over
+# Copy to trailguide.toml (per project) or ~/.config/trailguide/config.toml (global).
+# `trailguide init` writes the global one for you. A local trailguide.toml is merged over
 # the global file: scalar keys override one by one, while [[location]],
 # [[keywords]], [[board]] and [filter] exclude REPLACE the global lists if the
 # local file defines them.
 
 # Uncomment for a self-contained sandbox next to this file (relative paths
-# resolve against this file's directory). Default: ~/.local/share/igor/igor.db
+# resolve against this file's directory). Default: ~/.local/share/trailguide/trailguide.db
 # [db]
-# path = "igor.db"
+# path = "trailguide.db"
 
 # Every keyword is searched in every location. At least one of each is required.
 # Use specific cities for in-person work; broad regions only match listings
@@ -27,11 +27,11 @@ flexibility = "remote"
 
 [[keywords]]
 role = "Platform Engineer"
-lane = "platform"    # optional: tailor these jobs from <resume dir>/platform.md
+trail = "platform"    # optional: tailor these jobs from <resume dir>/platform.md
 
 [[keywords]]
 role = "Security Engineer"
-lane = "security"
+trail = "security"
 
 # Drop listings you never want. Both settings are optional.
 [filter]
@@ -58,6 +58,6 @@ site = "External_Careers"
 # [sources]
 # builtin_boards = false
 
-# Resume masters for `igor tailor`. Default: ~/.config/igor/resumes
+# Resume masters for `trailguide tailor`. Default: ~/.config/trailguide/resumes
 # [resume]
 # dir = "resumes"

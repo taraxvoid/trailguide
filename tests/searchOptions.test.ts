@@ -32,7 +32,7 @@ describe("toSearchOptions with --role", () => {
       ),
     ).toEqual({
       keywords: ["swe"],
-      lanes: {},
+      trails: {},
       targets: [{ city: "Omaha", flexibility: "remote", region: [] }],
       filter: NO_FILTER,
     });
@@ -46,7 +46,7 @@ describe("toSearchOptions with --role", () => {
       ),
     ).toEqual({
       keywords: ["swe"],
-      lanes: {},
+      trails: {},
       targets: [{ city: null, flexibility: "in-person", region: [] }],
       filter: { excludeClearance: true, excludeTerms: [] },
     });
@@ -54,22 +54,22 @@ describe("toSearchOptions with --role", () => {
 });
 
 describe("toSearchOptions from the config", () => {
-  it("maps keywords to their lanes", () => {
+  it("maps keywords to their trails", () => {
     const plan = toSearchOptions({}, () => ({
       ...LOADED,
       config: {
         ...LOADED.config,
-        keywords: [{ role: "swe", lane: "platform" }, { role: "devops" }],
+        keywords: [{ role: "swe", trail: "platform" }, { role: "devops" }],
       },
     }));
     expect(plan.keywords).toEqual(["swe", "devops"]);
-    expect(plan.lanes).toEqual({ swe: "platform" });
+    expect(plan.trails).toEqual({ swe: "platform" });
   });
 
   it("crosses keywords with locations, keeping region", () => {
     expect(toSearchOptions({}, () => LOADED)).toEqual({
       keywords: ["swe", "devops"],
-      lanes: {},
+      trails: {},
       targets: [
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
         { city: "United States", flexibility: "remote", region: [] },
@@ -135,10 +135,10 @@ describe("toSearchOptions errors", () => {
     ).toThrow("--remote and --onsite are mutually exclusive");
   });
 
-  it("hints at igor init when there is no config and no --role", () => {
+  it("hints at trailguide init when there is no config and no --role", () => {
     expect(() =>
       toSearchOptions({}, () => ({ config: {}, files: [] })),
-    ).toThrow(/igor init/);
+    ).toThrow(/trailguide init/);
   });
 
   it("never allows an unbounded search: locations are required", () => {
@@ -158,11 +158,11 @@ describe("toSearchOptions errors", () => {
 
   it("requires keywords", () => {
     const noKeywords: LoadedConfig = {
-      files: ["/g/config.toml", "/p/igor.toml"],
+      files: ["/g/config.toml", "/p/trailguide.toml"],
       config: { locations: LOADED.config.locations },
     };
     expect(() => toSearchOptions({}, () => noKeywords)).toThrow(
-      "no [[keywords]] configured (/g/config.toml, /p/igor.toml)",
+      "no [[keywords]] configured (/g/config.toml, /p/trailguide.toml)",
     );
   });
 });

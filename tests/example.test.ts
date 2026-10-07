@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { parseConfig, resolveBoards } from "../src/config.ts";
 
 // The example config is documentation people copy; keep it valid.
-describe("igor.example.toml", () => {
-  const path = join(import.meta.dir, "..", "igor.example.toml");
+describe("trailguide.example.toml", () => {
+  const path = join(import.meta.dir, "..", "trailguide.example.toml");
   const config = parseConfig(readFileSync(path, "utf8"), path);
 
   it("parses and exercises every section", () => {
@@ -14,7 +14,7 @@ describe("igor.example.toml", () => {
       "Round Rock",
       "Cedar Park",
     ]);
-    expect(config.keywords?.map((k) => k.lane)).toEqual([
+    expect(config.keywords?.map((k) => k.trail)).toEqual([
       "platform",
       "security",
     ]);

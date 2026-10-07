@@ -29,8 +29,8 @@ import {
   runningTailorIds,
   SEARCH_RUN_KEY,
   setJobApplied,
-  setJobLane,
   setJobState,
+  setJobTrail,
   startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
@@ -39,9 +39,9 @@ import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 
 interface AppProps {
   db: Database;
-  /** Absolute path to the sqlite file, passed to the detached igor children. */
+  /** Absolute path to the sqlite file, passed to the detached trailguide children. */
   dbPath: string;
-  /** Explicit config file (--config or IGOR_CONFIG), forwarded to `igor search`. */
+  /** Explicit config file (--config or TRAILGUIDE_CONFIG), forwarded to `trailguide search`. */
   configPath?: string;
   /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
   version?: string | null;
@@ -59,18 +59,21 @@ const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/ur
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
-const NEON_GREEN = "#39ff14";
-const NEON_BLUE = "#4dd2ff";
-const MUTED_YELLOW = "#a89a4a";
+// Muted mid-tones that stay legible on both dark and light terminals: cool
+// sage/sky for "good" states, warm sand/terracotta for keys and archived.
+const SAGE = "#8fbf9f";
+const SKY = "#7aa7d9";
+const SAND = "#e0b86e";
+const TERRACOTTA = "#c98f6b";
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
 
-// Slow sine pulse between full neon green and a dim floor.
+// Slow sine pulse between full sage and a dim floor.
 function pulseColor(tick: number): string {
   const phase = (tick % PULSE_PERIOD_TICKS) / PULSE_PERIOD_TICKS;
   const level = 0.2 + 0.8 * (0.5 + 0.5 * Math.cos(phase * 2 * Math.PI));
-  const [r, g, b] = [0x39, 0xff, 0x14].map((c) => Math.round(c * level));
+  const [r, g, b] = [0x8f, 0xbf, 0x9f].map((c) => Math.round(c * level));
   return `#${[r, g, b].map((c) => (c as number).toString(16).padStart(2, "0")).join("")}`;
 }
 
@@ -78,16 +81,54 @@ const SECTION_HEADER_LINES = 1;
 // Worst case in the active view: an "Applied" header and an "Active" header.
 const MAX_SECTION_HEADERS = 2;
 
-// The footer is rendered in pieces so the tailor/regen/archived/applied verbs
-// can be colored; FOOTER_TEXT stitches the same pieces back together for the
-// wrap-height measurement, so the two can't drift apart.
-const FOOTER_BEFORE =
-  "Nav: [↑↓/k/j] / [←→/pgup/pgdn] | Actions: expand [↵] | open link [o] | ";
-const FOOTER_TAILOR_AFTER = " [⌃t] | open tailored resume [⌃o] | mark ";
-const FOOTER_ARCHIVED_AFTER = " [e] mark ";
-const FOOTER_AFTER =
-  " [a] | cycle lane [L] | toggle view [⌃e] | search [⌃s] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
-const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_TAILOR_AFTER}archived${FOOTER_ARCHIVED_AFTER}applied${FOOTER_AFTER}`;
+// The footer is a list of items whose shortcut letter is capitalized inside
+// the label and highlighted. footerPlainText() flattens the same items for
+// the wrap-height measurement (using the longest tailor label), so the render
+// and the measurement can't drift apart.
+interface FooterItem {
+  before?: string;
+  key: string;
+  after?: string;
+  /** Label color when the selected job is in the state this item names. */
+  accent?: string;
+  active?: boolean;
+}
+
+const FOOTER_NAV = "Nav: ↑↓/k/j | ←→/h/l/pgup/pgdn | ↵ expand";
+const FOOTER_QUIT = "quit (q/Ctrl+C)";
+
+function footerItems(
+  tailored: boolean | null,
+  archived: boolean,
+  applied: boolean,
+): FooterItem[] {
+  return [
+    { before: "", key: "O", after: "pen link" },
+    {
+      before: tailored ? "(re)" : "",
+      key: "T",
+      after: "ailor",
+      accent: SAGE,
+      active: tailored !== null,
+    },
+    { key: "V", after: "iew tailored resume" },
+    { before: "archiv", key: "E", accent: TERRACOTTA, active: archived },
+    { key: "A", after: "pplied", accent: SKY, active: applied },
+    { before: "cycle trai", key: "L" },
+    { key: "Tab", after: " toggle view" },
+    { key: "S", after: "earch" },
+    { key: "R", after: "efresh (auto-archives dead jobs)" },
+  ];
+}
+
+function footerPlainText(): string {
+  const items = footerItems(true, false, false).map(
+    (i) => `${i.before ?? ""}${i.key}${i.after ?? ""}`,
+  );
+  return [FOOTER_NAV, ...items, FOOTER_QUIT].join(" | ");
+}
+
+const FOOTER_TEXT = footerPlainText();
 
 const VIEW_TABS = ["active", "archived"] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -177,11 +218,11 @@ interface StatusTag {
 function statusTags(job: StoredJob, tailored: boolean): StatusTag[] {
   const { state } = job;
   const tags: StatusTag[] = [];
-  if (job.appliedAt) tags.push({ label: "[applied]", color: NEON_BLUE });
-  if (tailored) tags.push({ label: "[tailored]", color: NEON_GREEN });
-  if (job.lane) tags.push({ label: `[${job.lane}]`, color: undefined });
+  if (job.appliedAt) tags.push({ label: "[applied]", color: SKY });
+  if (tailored) tags.push({ label: "[tailored]", color: SAGE });
+  if (job.trail) tags.push({ label: `[${job.trail}]`, color: undefined });
   if (state === "archived")
-    tags.push({ label: "[archived]", color: MUTED_YELLOW });
+    tags.push({ label: "[archived]", color: TERRACOTTA });
   if (state === "inactive")
     tags.push({ label: "[inactive]", color: undefined });
   return tags;
@@ -216,7 +257,7 @@ export default function JobBrowser({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  // Listings with a tailor/regen in flight. Each is a detached `igor tailor`
+  // Listings with a tailor/regen in flight. Each is a detached `trailguide tailor`
   // process (so it survives quitting the TUI); the runs table is the
   // source of truth and is polled below.
   const [tailoringIds, setTailoringIds] = useState<Set<string>>(() =>
@@ -224,7 +265,7 @@ export default function JobBrowser({
   );
   const [pulseTick, setPulseTick] = useState(0);
   const prevRunning = useRef<Set<string>>(tailoringIds);
-  // A detached `igor search`; the runs table is the source of truth, so the
+  // A detached `trailguide search`; the runs table is the source of truth, so the
   // indicator survives restarting the TUI.
   const [isSearching, setIsSearching] = useState(
     () => runningRuns(db, "search").length > 0,
@@ -381,41 +422,42 @@ export default function JobBrowser({
     handleRefresh();
   }, []);
 
-  // Lanes from the config's [[keywords]], for cycling with [L]. A broken
-  // config just means no lanes to cycle through.
-  const lanes = useMemo(() => {
+  // Trails from the config's [[keywords]], for cycling with L. A broken
+  // config just means no trails to cycle through.
+  const trails = useMemo(() => {
     try {
       const { keywords = [] } = loadConfig({ config: configPath }).config;
-      return [...new Set(keywords.flatMap((k) => (k.lane ? [k.lane] : [])))];
+      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
     } catch {
       return [];
     }
   }, [configPath]);
 
-  const handleLaneCycle = useCallback(() => {
+  const handleTrailCycle = useCallback(() => {
     const job = visibleJobs[selectedIndex];
     if (!job) return;
-    // No lane, then each configured lane in turn. A lane no longer in the
+    // No trail, then each configured trail in turn. A trail no longer in the
     // config is left by moving to the first configured one.
-    const options: (string | null)[] = [null, ...lanes];
+    const options: (string | null)[] = [null, ...trails];
     const next =
-      options[(options.indexOf(job.lane ?? null) + 1) % options.length] ?? null;
-    setJobLane(db, job.listingId, next);
+      options[(options.indexOf(job.trail ?? null) + 1) % options.length] ??
+      null;
+    setJobTrail(db, job.listingId, next);
     setJobs(allJobs(db));
     showStatus(
       next
-        ? `lane ${next}: ${job.title} @ ${job.company}`
-        : lanes.length > 0
-          ? `no lane: ${job.title} @ ${job.company}`
-          : 'no lanes configured (add lane = "..." to a [[keywords]] entry)',
+        ? `trail ${next}: ${job.title} @ ${job.company}`
+        : trails.length > 0
+          ? `no trail: ${job.title} @ ${job.company}`
+          : 'no trails configured (add trail = "..." to a [[keywords]] entry)',
     );
-  }, [db, lanes, visibleJobs, selectedIndex, showStatus]);
+  }, [db, trails, visibleJobs, selectedIndex, showStatus]);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
       const job = visibleJobs[selectedIndex];
       if (!job) return;
-      // On an archived job [a] toggles the applied mark without unarchiving.
+      // On an archived job A toggles the applied mark without unarchiving.
       if (state === "applied" && job.state === "archived") {
         const now = new Date().toISOString();
         setJobApplied(db, job.listingId, !job.appliedAt, now);
@@ -425,7 +467,7 @@ export default function JobBrowser({
         );
         return;
       }
-      // Pressing [a] on an already-applied job undoes it.
+      // Pressing A on an already-applied job undoes it.
       const next =
         state === "applied" && job.state === "applied" ? "active" : state;
       setJobState(db, job.listingId, next, new Date().toISOString());
@@ -480,7 +522,7 @@ export default function JobBrowser({
   const handleTailor = useCallback(() => {
     const job = visibleJobs[selectedIndex];
     if (!job || tailoringIds.has(job.listingId)) return;
-    // Detached so it outlives the TUI. IGOR_NO_DELEGATE keeps the recorded
+    // Detached so it outlives the TUI. TRAILGUIDE_NO_DELEGATE keeps the recorded
     // pid the real worker rather than a checkout-delegating wrapper.
     const proc = Bun.spawn({
       cmd: [
@@ -526,7 +568,7 @@ export default function JobBrowser({
     const record = getTailoredResume(db, job.listingId);
     const pdfPath = record?.markdownPath.replace(/\.md$/, ".pdf");
     if (!pdfPath || !(await Bun.file(pdfPath).exists())) {
-      showStatus("No generated resume for this job (ctrl+T to tailor one)");
+      showStatus("No generated resume for this job (press T to tailor one)");
       return;
     }
     openTarget(pdfPath);
@@ -539,11 +581,11 @@ export default function JobBrowser({
         exit();
         return;
       }
-      if (key.ctrl && input === "r") {
+      if (input === "R") {
         if (!isRefreshing) handleRefresh();
         return;
       }
-      if (key.ctrl && input === "s") {
+      if (input === "S") {
         handleSearch();
         return;
       }
@@ -567,7 +609,7 @@ export default function JobBrowser({
         );
         return;
       }
-      if (key.ctrl && input === "e") {
+      if (key.tab) {
         setViewTab((prev) => (prev === "active" ? "archived" : "active"));
         return;
       }
@@ -577,28 +619,28 @@ export default function JobBrowser({
         }
         return;
       }
-      if (input === "o" && selectedJob) {
+      if (input === "O" && selectedJob) {
         openTarget(selectedJob.url);
         return;
       }
-      if (key.ctrl && input === "o" && selectedJob) {
+      if (input === "V" && selectedJob) {
         handleOpenResume();
         return;
       }
-      if (key.ctrl && input === "t" && selectedJob) {
+      if (input === "T" && selectedJob) {
         handleTailor();
         return;
       }
-      if (input === "e") {
+      if (input === "E") {
         handleStateChange("archived");
         return;
       }
-      if (input === "a") {
+      if (input === "A") {
         handleStateChange("applied");
         return;
       }
       if (input === "L") {
-        handleLaneCycle();
+        handleTrailCycle();
         return;
       }
     },
@@ -612,7 +654,7 @@ export default function JobBrowser({
       isRefreshing,
       handleRefresh,
       handleStateChange,
-      handleLaneCycle,
+      handleTrailCycle,
       handleTailor,
       handleSearch,
       handleOpenResume,
@@ -648,8 +690,8 @@ export default function JobBrowser({
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
         <Box flexShrink={1} marginRight={2}>
-          <Text bold color="green">
-            ⚡ Igor at your sshhservishss ⚡
+          <Text bold color={SAGE}>
+            ⚡ Trailguide at your sshhservishss ⚡
           </Text>
           {version && (
             <Text dimColor wrap="truncate-end">
@@ -669,7 +711,7 @@ export default function JobBrowser({
               {i > 0 && <Text dimColor> </Text>}
               <Text
                 bold={tab === viewTab}
-                color={tab === viewTab ? "green" : undefined}
+                color={tab === viewTab ? SAGE : undefined}
                 dimColor={tab !== viewTab}
               >
                 {tabLabel(tab)} ({tabCounts[tab]})
@@ -688,7 +730,8 @@ export default function JobBrowser({
           <Box flexDirection="column" alignItems="center" marginTop={2}>
             <Text dimColor>No jobs found.</Text>
             <Text dimColor>
-              Press ctrl+S to search (run igor init first if you have no config)
+              Press S to search (run trailguide init first if you have no
+              config)
             </Text>
           </Box>
         ) : (
@@ -703,10 +746,7 @@ export default function JobBrowser({
             return (
               <React.Fragment key={job.listingId}>
                 {showHeader && (
-                  <Text
-                    bold
-                    color={section === "applied" ? NEON_BLUE : "green"}
-                  >
+                  <Text bold color={section === "applied" ? SKY : SAGE}>
                     {section === "applied"
                       ? `Applied (${appliedCount})`
                       : `Active (${visibleJobs.length - appliedCount})`}
@@ -743,7 +783,7 @@ export default function JobBrowser({
             borderColor="gray"
             flexDirection="column"
           >
-            <Text bold color="green">
+            <Text bold color={SAGE}>
               {selectedJob.title}
               <StatusTags tags={selectedTags} />
             </Text>
@@ -767,39 +807,29 @@ export default function JobBrowser({
 
       <Box paddingY={1} marginTop={1} borderStyle="single" borderColor="gray">
         <Text dimColor>
-          {FOOTER_BEFORE}
-          <Text
-            dimColor={false}
-            bold={selectedIsTailored === false}
-            color={selectedIsTailored === false ? NEON_GREEN : undefined}
-          >
-            tailor
-          </Text>
-          /
-          <Text
-            dimColor={false}
-            bold={selectedIsTailored === true}
-            color={selectedIsTailored === true ? NEON_GREEN : undefined}
-          >
-            regen
-          </Text>
-          {FOOTER_TAILOR_AFTER}
-          <Text
-            dimColor={false}
-            bold={selectedJob?.state === "archived"}
-            color={selectedJob?.state === "archived" ? MUTED_YELLOW : undefined}
-          >
-            archived
-          </Text>
-          {FOOTER_ARCHIVED_AFTER}
-          <Text
-            dimColor={false}
-            bold={!!selectedJob?.appliedAt}
-            color={selectedJob?.appliedAt ? NEON_BLUE : undefined}
-          >
-            applied
-          </Text>
-          {FOOTER_AFTER}
+          {FOOTER_NAV}
+          {footerItems(
+            selectedIsTailored,
+            selectedJob?.state === "archived",
+            !!selectedJob?.appliedAt,
+          ).map((item) => (
+            <Text key={item.key}>
+              {" | "}
+              <Text
+                dimColor={false}
+                bold={item.active}
+                color={item.active ? item.accent : undefined}
+              >
+                {item.before}
+                <Text bold dimColor={false} color={SAND}>
+                  {item.key}
+                </Text>
+                {item.after}
+              </Text>
+            </Text>
+          ))}
+          {" | "}
+          {FOOTER_QUIT}
         </Text>
       </Box>
     </Box>
@@ -820,9 +850,9 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
           (green), archived (muted yellow). */}
       {[0, 1, 2].map((slot) => {
         const slots = [
-          job.appliedAt ? NEON_BLUE : null,
-          pulse ?? (isTailored ? NEON_GREEN : null),
-          job.state === "archived" ? MUTED_YELLOW : null,
+          job.appliedAt ? SKY : null,
+          pulse ?? (isTailored ? SAGE : null),
+          job.state === "archived" ? TERRACOTTA : null,
         ].filter((c): c is string => c !== null);
         const color = slots[slot];
         return (
@@ -840,7 +870,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
       >
         <Box>
           {isSelected && (
-            <Text bold color="green">
+            <Text bold color={SAGE}>
               ▸{" "}
             </Text>
           )}

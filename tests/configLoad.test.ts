@@ -13,11 +13,11 @@ function write(path: string, text: string) {
   writeFileSync(path, text);
 }
 
-const globalFile = () => join(root, "cfg", "igor", "config.toml");
-const localFile = () => join(cwd, "igor.toml");
+const globalFile = () => join(root, "cfg", "trailguide", "config.toml");
+const localFile = () => join(cwd, "trailguide.toml");
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "igor-load-"));
+  root = mkdtempSync(join(tmpdir(), "trailguide-load-"));
   cwd = join(root, "proj");
   mkdirSync(cwd, { recursive: true });
   env = {
@@ -60,10 +60,10 @@ describe("loadConfig", () => {
     expect(config.locations?.[0]?.city).toBe("Reno");
   });
 
-  it("honors IGOR_CONFIG the same way, with the flag winning", () => {
+  it("honors TRAILGUIDE_CONFIG the same way, with the flag winning", () => {
     write(join(root, "env.toml"), '[[location]]\ncity = "Env"\n');
     write(join(root, "flag.toml"), '[[location]]\ncity = "Flag"\n');
-    const envConfig = { ...env, IGOR_CONFIG: join(root, "env.toml") };
+    const envConfig = { ...env, TRAILGUIDE_CONFIG: join(root, "env.toml") };
     expect(
       loadConfig({ cwd, env: envConfig }).config.locations?.[0]?.city,
     ).toBe("Env");
@@ -97,14 +97,14 @@ describe("loadConfig", () => {
 describe("resolveDbPath", () => {
   it("defaults to the global data dir", () => {
     expect(resolveDbPath({ cwd, env })).toBe(
-      join(root, "data", "igor", "igor.db"),
+      join(root, "data", "trailguide", "trailguide.db"),
     );
   });
 
-  it("prefers flag, then IGOR_DB, then config, then default", () => {
+  it("prefers flag, then TRAILGUIDE_DB, then config, then default", () => {
     write(localFile(), '[db]\npath = "/from/config.db"\n');
     expect(resolveDbPath({ cwd, env })).toBe("/from/config.db");
-    const withEnv = { ...env, IGOR_DB: "/from/env.db" };
+    const withEnv = { ...env, TRAILGUIDE_DB: "/from/env.db" };
     expect(resolveDbPath({ cwd, env: withEnv })).toBe("/from/env.db");
     expect(resolveDbPath({ cwd, env: withEnv, db: "/from/flag.db" })).toBe(
       "/from/flag.db",
@@ -113,7 +113,7 @@ describe("resolveDbPath", () => {
 
   it("makes relative flag and env values absolute against the cwd", () => {
     expect(resolveDbPath({ cwd, env, db: "x.db" })).toBe(join(cwd, "x.db"));
-    expect(resolveDbPath({ cwd, env: { ...env, IGOR_DB: "y.db" } })).toBe(
+    expect(resolveDbPath({ cwd, env: { ...env, TRAILGUIDE_DB: "y.db" } })).toBe(
       join(cwd, "y.db"),
     );
   });
@@ -143,12 +143,12 @@ describe("describeConfig", () => {
     const text = describeConfig({ cwd, env });
     expect(text).toContain(localFile());
     expect(text).toContain(
-      `database: ${join(root, "data", "igor", "igor.db")}`,
+      `database: ${join(root, "data", "trailguide", "trailguide.db")}`,
     );
     expect(text).toContain('city = "Omaha"');
   });
 
-  it("points at igor init when there is no config", () => {
-    expect(describeConfig({ cwd, env })).toContain('run "igor init"');
+  it("points at trailguide init when there is no config", () => {
+    expect(describeConfig({ cwd, env })).toContain('run "trailguide init"');
   });
 });

@@ -73,7 +73,7 @@ let cwd: string;
 let env: Record<string, string>;
 let spies: { mockRestore(): void }[];
 
-const dbPath = () => join(root, "data", "igor", "igor.db");
+const dbPath = () => join(root, "data", "trailguide", "trailguide.db");
 const deps = (sources: Source[]) => ({
   sources,
   isUrlDead: async () => false,
@@ -81,7 +81,7 @@ const deps = (sources: Source[]) => ({
   env,
 });
 const writeGlobal = (text: string) => {
-  const path = join(root, "cfg", "igor", "config.toml");
+  const path = join(root, "cfg", "trailguide", "config.toml");
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, text);
   return path;
@@ -97,7 +97,7 @@ const OMAHA_AND_US =
   '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\n[[location]]\ncity = "United States"\nflexibility = "remote"\n[[keywords]]\nrole = "swe"\n';
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "igor-runsearch-"));
+  root = mkdtempSync(join(tmpdir(), "trailguide-runsearch-"));
   cwd = join(root, "proj");
   mkdirSync(cwd);
   env = {
@@ -250,9 +250,11 @@ describe("runSearch config errors", () => {
     expect(searchRun()).toEqual(before);
   });
 
-  it("hints at igor init when there is no config and no --role", async () => {
-    await expect(runSearch(flags(), deps([]))).rejects.toThrow(/igor init/);
-    expect(searchRun()?.message).toMatch(/igor init/);
+  it("hints at trailguide init when there is no config and no --role", async () => {
+    await expect(runSearch(flags(), deps([]))).rejects.toThrow(
+      /trailguide init/,
+    );
+    expect(searchRun()?.message).toMatch(/trailguide init/);
   });
 });
 

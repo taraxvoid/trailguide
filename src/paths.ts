@@ -11,23 +11,39 @@ function xdgDir(env: Env, key: string, homeRelative: string): string {
 }
 
 export function globalConfigPath(env: Env = process.env): string {
-  return join(xdgDir(env, "XDG_CONFIG_HOME", ".config"), "igor", "config.toml");
+  return join(
+    xdgDir(env, "XDG_CONFIG_HOME", ".config"),
+    "trailguide",
+    "config.toml",
+  );
 }
 
 export function globalDbPath(env: Env = process.env): string {
-  return join(xdgDir(env, "XDG_DATA_HOME", ".local/share"), "igor", "igor.db");
+  return join(
+    xdgDir(env, "XDG_DATA_HOME", ".local/share"),
+    "trailguide",
+    "trailguide.db",
+  );
 }
 
 export function localConfigPath(cwd: string): string {
-  return join(cwd, "igor.toml");
+  return join(cwd, "trailguide.toml");
 }
 
-/** Resume masters: `<lane>.md`, or the one `.md` when no lane applies. */
+/** Resume masters: `<trail>.md`, or the one `.md` when no trail applies. */
 export function globalResumeDir(env: Env = process.env): string {
-  return join(xdgDir(env, "XDG_CONFIG_HOME", ".config"), "igor", "resumes");
+  return join(
+    xdgDir(env, "XDG_CONFIG_HOME", ".config"),
+    "trailguide",
+    "resumes",
+  );
 }
 
 /** Tailored resumes (.md and .pdf), next to the database. */
 export function globalOutputDir(env: Env = process.env): string {
-  return join(xdgDir(env, "XDG_DATA_HOME", ".local/share"), "igor", "resumes");
+  return join(
+    xdgDir(env, "XDG_DATA_HOME", ".local/share"),
+    "trailguide",
+    "resumes",
+  );
 }

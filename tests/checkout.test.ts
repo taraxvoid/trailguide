@@ -6,12 +6,12 @@ import {
   NO_DELEGATE_ENV,
 } from "../src/checkout.ts";
 
-const root = `/tmp/igor-checkout-test-${Date.now()}`;
-const main = `${root}/igor`;
+const root = `/tmp/trailguide-checkout-test-${Date.now()}`;
+const main = `${root}/trailguide`;
 const worktree = `${main}/.claude/worktrees/feature`;
-const other = `${root}/not-igor`;
+const other = `${root}/not-trailguide`;
 
-async function fakeCheckout(dir: string, name = "igor") {
+async function fakeCheckout(dir: string, name = "trailguide") {
   await Bun.write(`${dir}/package.json`, JSON.stringify({ name }));
   await Bun.write(`${dir}/src/cli.ts`, "");
 }
