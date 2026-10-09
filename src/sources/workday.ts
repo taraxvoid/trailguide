@@ -1,7 +1,9 @@
+import { getJson, httpFetch } from "../http.ts";
 import { mapLimit } from "../limit.ts";
+import { type Board, searchBoards } from "./boards.ts";
 import { stripHtml } from "./html.ts";
 import { toArray } from "./params.ts";
-import { companiesForAts, type SeedCompany } from "./seed.ts";
+import { companiesForAts } from "./seed.ts";
 import type {
   NormalizedJob,
   RemoteType,
@@ -41,7 +43,7 @@ const PAGE_SIZE = 20;
 const MAX_PAGES = 3;
 const DETAIL_CONCURRENCY = 4;
 
-type WorkdayCompany = SeedCompany & { host: string; site: string };
+type WorkdayCompany = Board & { host: string; site: string };
 
 function boardBase({ slug, host }: WorkdayCompany): string {
   return `https://${slug}.${host}.myworkdayjobs.com`;
@@ -67,7 +69,7 @@ async function searchPostings(
   const url = `${boardBase(company)}/wday/cxs/${company.slug}/${company.site}/jobs`;
   const found: WorkdayPosting[] = [];
   for (let page = 0; page < MAX_PAGES; page++) {
-    const res = await fetch(url, {
+    const body = await getJson<WorkdaySearchResponse>(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -80,8 +82,6 @@ async function searchPostings(
         searchText: role,
       }),
     });
-    if (!res.ok) break;
-    const body = (await res.json()) as WorkdaySearchResponse;
     const postings = body.jobPostings ?? [];
     found.push(...postings.filter((p) => matchesRole(p.title, role)));
     if (postings.length < PAGE_SIZE) break;
@@ -97,7 +97,7 @@ async function toJob(
   const base = boardBase(company);
   let info: WorkdayDetailResponse["jobPostingInfo"];
   try {
-    const res = await fetch(
+    const res = await httpFetch(
       `${base}/wday/cxs/${company.slug}/${company.site}${posting.externalPath}`,
       { headers: { Accept: "application/json" } },
     );
@@ -122,16 +122,18 @@ async function toJob(
   };
 }
 
-export function createWorkdaySource(): Source {
+export function createWorkdaySource(
+  boards: Board[] = companiesForAts("workday"),
+): Source {
   return {
     name: "workday",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const companies = companiesForAts("workday").filter(
-        (c): c is WorkdayCompany => Boolean(c.host && c.site),
-      );
-      const results: NormalizedJob[] = [];
-      for (const company of companies) {
+      return searchBoards(boards, params, async (board) => {
+        if (!board.host || !board.site) {
+          throw new Error("workday boards need a host and a site");
+        }
+        const company = board as WorkdayCompany;
         // One search per keyword: Workday's searchText is a single query.
         const seen = new Map<string, WorkdayPosting>();
         for (const role of toArray(params.role)) {
@@ -139,13 +141,10 @@ export function createWorkdaySource(): Source {
             seen.set(posting.externalPath, posting);
           }
         }
-        results.push(
-          ...(await mapLimit([...seen.values()], DETAIL_CONCURRENCY, (p) =>
-            toJob(company, p),
-          )),
+        return mapLimit([...seen.values()], DETAIL_CONCURRENCY, (p) =>
+          toJob(company, p),
         );
-      }
-      return results;
+      });
     },
   };
 }

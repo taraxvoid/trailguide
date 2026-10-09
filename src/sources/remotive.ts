@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
@@ -32,7 +33,7 @@ export function createRemotiveSource(): Source {
         (roles.length > 0 ? roles : [""]).map(async (role) => {
           const url = new URL("https://remotive.com/api/remote-jobs");
           url.searchParams.set("search", role);
-          const res = await fetch(url);
+          const res = await httpFetch(url);
           if (!res.ok) {
             throw new Error(
               `Remotive request failed: ${res.status} ${await res.text()}`,

@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import {
   ConfigError,
   type Flexibility,
+  resolveBoards,
   resolveDbPath,
   writeConfig,
 } from "./config.ts";
@@ -182,7 +183,7 @@ export async function runInit(
       ? flagCities
       : await askLines(
           io,
-          "Locations to search, one per line; a blank line ends the list. Use specific cities for in-person work (e.g. Omaha, NE); a region like United States suits remote work.",
+          "Locations to search, one per line; a blank line ends the list. Use specific cities for in-person work (e.g. Austin, TX); a region like United States suits remote work.",
           "location",
         );
   const flagRoles = clean(options.keywords);
@@ -198,7 +199,6 @@ export async function runInit(
     parseWorkFlags(clean(options.work), cities) ?? (await askWork(io, cities));
 
   writeConfig(configPath, {
-    govmil: false,
     locations: cities.map((city, i) => ({
       city,
       flexibility: flexibilities[i] ?? "any",
@@ -221,6 +221,9 @@ export async function runInit(
 
   io.log(`Wrote ${configPath}`);
   io.log(`${existed ? "Using existing" : "Created"} database ${dbPath}`);
+  io.log(
+    `Company boards: ${resolveBoards({}).length} built in. Add your own with [[board]] entries (see igor.example.toml).`,
+  );
   io.log(
     'Next: run "igor tui" and press Ctrl+S to search, or run "igor search".',
   );
