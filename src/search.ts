@@ -67,22 +67,25 @@ export function formatRunMessage(result: SearchResult): string {
 }
 
 /**
- * The lane for a job from an unscoped source, which was searched with every
+ * The trail for a job from an unscoped source, which was searched with every
  * keyword at once: the first keyword (in config order) its title contains.
  */
-export function laneFromTitle(
+export function trailFromTitle(
   title: string,
-  plan: Pick<SearchPlan, "keywords" | "lanes">,
+  plan: Pick<SearchPlan, "keywords" | "trails">,
 ): string | undefined {
   const role = plan.keywords.find((k) => {
     const escaped = k.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     return new RegExp(`(?<![a-z0-9])${escaped}(?![a-z0-9])`, "i").test(title);
   });
-  return role === undefined ? undefined : plan.lanes[role];
+  return role === undefined ? undefined : plan.trails[role];
 }
 
-function withLane(job: NormalizedJob, lane: string | undefined): NormalizedJob {
-  return lane ? { ...job, lane } : job;
+function withTrail(
+  job: NormalizedJob,
+  trail: string | undefined,
+): NormalizedJob {
+  return trail ? { ...job, trail } : job;
 }
 
 function scopedParams(role: string, target: SearchTarget): SearchParams {
@@ -153,7 +156,7 @@ export async function collectJobs(
           return found
             .flat()
             .filter((job) => matches(job, target, { scoped: true }))
-            .map((job) => withLane(job, plan.lanes[role]));
+            .map((job) => withTrail(job, plan.trails[role]));
         }),
       ),
     ),
@@ -161,7 +164,7 @@ export async function collectJobs(
   const kept = loose
     .flat()
     .filter((job) => plan.targets.some((target) => matches(job, target)))
-    .map((job) => withLane(job, laneFromTitle(job.title, plan)));
+    .map((job) => withTrail(job, trailFromTitle(job.title, plan)));
 
   const jobs = dedupe([...kept, ...perTarget.flat()])
     .filter((job) => !isInternship(job))

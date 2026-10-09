@@ -1,6 +1,6 @@
-# How igor works
+# How trailguide works
 
-igor searches company job boards and aggregators, stores what it finds in a
+trailguide searches company job boards and aggregators, stores what it finds in a
 local SQLite database, and tailors a resume to a listing without ever writing
 new resume text. Everything runs on your machine; the only network traffic is
 requests to public job-board APIs.
@@ -14,8 +14,8 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
 
 ## Search
 
-- **Config** (`src/config.ts`) is layered: CLI flags, `IGOR_*` environment
-  variables, a local `igor.toml`, the global `~/.config/igor/config.toml`.
+- **Config** (`src/config.ts`) is layered: CLI flags, `TRAILGUIDE_*` environment
+  variables, a local `trailguide.toml`, the global `~/.config/trailguide/config.toml`.
   Scalars override per key and lists replace wholesale. Parsing is strict:
   unknown keys and wrong types are errors that name the file and the entry.
   `toSearchOptions` turns it into a `SearchPlan` (keywords, locations, filters).
@@ -43,7 +43,7 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
 
 ## Tailoring
 
-`igor tailor` is built so that the model cannot change what your resume says.
+`trailguide tailor` is built so that the model cannot change what your resume says.
 
 1. `parseResume` splits the master into small, id-addressed pieces (highlight
    bullets, each employer's bullets, skill lines). Everything else, including
@@ -59,13 +59,13 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
 
 If Ollama, the model or Typst is missing, or the plan is nonsense, you still
 get the untailored resume rather than an error or garbage. A resume master is
-chosen per listing from its *lane* (`<lane>.md`), never guessed.
+chosen per listing from its *trail* (`<trail>.md`), never guessed.
 
 ## Layout
 
 | path | what |
 |---|---|
-| `src/cli.ts` | commands (commander), `runSearch`, `runTailor`, `runLane` |
+| `src/cli.ts` | commands (commander), `runSearch`, `runTailor`, `runTrail` |
 | `src/config.ts`, `src/paths.ts` | config parsing, merging, XDG paths |
 | `src/search.ts` | collecting, matching and filtering jobs |
 | `src/sources/` | one file per job source, plus location matching |

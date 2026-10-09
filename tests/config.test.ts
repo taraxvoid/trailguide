@@ -5,10 +5,10 @@ import { join } from "node:path";
 import {
   ConfigError,
   formatConfig,
-  type IgorConfig,
   mergeConfigs,
   parseConfig,
   resolveBoards,
+  type TrailguideConfig,
   writeConfig,
 } from "../src/config.ts";
 import type { Board } from "../src/sources/boards.ts";
@@ -49,10 +49,10 @@ function errorOf(fn: () => unknown): Error {
 
 describe("parseConfig", () => {
   it("parses every section", () => {
-    expect(parseConfig(FULL, "/etc/igor/igor.toml")).toEqual({
+    expect(parseConfig(FULL, "/etc/trailguide/trailguide.toml")).toEqual({
       clearance: "exclude",
       excludeTerms: ["Offutt", "STRATCOM"],
-      db: "/etc/igor/sandbox.db",
+      db: "/etc/trailguide/sandbox.db",
       locations: [
         { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
         { city: "United States", flexibility: "remote", region: [] },
@@ -64,7 +64,7 @@ describe("parseConfig", () => {
   it("defaults flexibility to any and accepts region as a single string", () => {
     const config = parseConfig(
       '[[location]]\ncity = "Austin"\nregion = "Texas"\n',
-      "igor.toml",
+      "trailguide.toml",
     );
     expect(config.locations).toEqual([
       { city: "Austin", flexibility: "any", region: ["Texas"] },
@@ -77,30 +77,30 @@ describe("parseConfig", () => {
   });
 
   it("keeps absolute db paths as they are", () => {
-    expect(parseConfig('[db]\npath = "/data/x.db"\n', "igor.toml").db).toBe(
-      "/data/x.db",
-    );
+    expect(
+      parseConfig('[db]\npath = "/data/x.db"\n', "trailguide.toml").db,
+    ).toBe("/data/x.db");
   });
 
-  it("reads an optional lane per keyword and a resume dir", () => {
+  it("reads an optional trail per keyword and a resume dir", () => {
     const config = parseConfig(
-      '[resume]\ndir = "resumes"\n\n[[keywords]]\nrole = "Platform Engineer"\nlane = "platform"\n\n[[keywords]]\nrole = "SRE"\n',
-      "/etc/igor/igor.toml",
+      '[resume]\ndir = "resumes"\n\n[[keywords]]\nrole = "Platform Engineer"\ntrail = "platform"\n\n[[keywords]]\nrole = "SRE"\n',
+      "/etc/trailguide/trailguide.toml",
     );
-    expect(config.resumeDir).toBe("/etc/igor/resumes");
+    expect(config.resumeDir).toBe("/etc/trailguide/resumes");
     expect(config.keywords).toEqual([
-      { role: "Platform Engineer", lane: "platform" },
+      { role: "Platform Engineer", trail: "platform" },
       { role: "SRE" },
     ]);
   });
 
-  it("rejects lane names that can't be file names", () => {
+  it("rejects trail names that can't be file names", () => {
     expect(() =>
       parseConfig(
-        '[[keywords]]\nrole = "x"\nlane = "../secret"\n',
-        "igor.toml",
+        '[[keywords]]\nrole = "x"\ntrail = "../secret"\n',
+        "trailguide.toml",
       ),
-    ).toThrow('lane "../secret" must be lowercase letters');
+    ).toThrow('trail "../secret" must be lowercase letters');
   });
 
   it("reads [[board]] entries and [sources]", () => {
@@ -119,7 +119,7 @@ describe("parseConfig", () => {
         'host = "wd5"',
         'site = "Careers"',
       ].join("\n"),
-      "igor.toml",
+      "trailguide.toml",
     );
     expect(config.builtinBoards).toBe(false);
     expect(config.boards).toEqual([
@@ -137,7 +137,7 @@ describe("parseConfig", () => {
   it("reads location aliases and keeps them through a round trip", () => {
     const config = parseConfig(
       '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\naliases = ["La Vista", "Elkhorn"]\nregion = "Nebraska"\n[[location]]\ncity = "Austin"\naliases = "Round Rock"\n',
-      "igor.toml",
+      "trailguide.toml",
     );
     expect(config.locations).toEqual([
       {
@@ -155,13 +155,16 @@ describe("parseConfig", () => {
     ]);
     expect(parseConfig(formatConfig(config), "x.toml")).toEqual(config);
     expect(() =>
-      parseConfig('[[location]]\ncity = "A"\naliases = [1]\n', "igor.toml"),
+      parseConfig(
+        '[[location]]\ncity = "A"\naliases = [1]\n',
+        "trailguide.toml",
+      ),
     ).toThrow('"aliases" must be a string or a list of strings');
   });
 
   it("rejects malformed boards", () => {
     const board = (lines: string[]) =>
-      parseConfig(`[[board]]\n${lines.join("\n")}\n`, "igor.toml");
+      parseConfig(`[[board]]\n${lines.join("\n")}\n`, "trailguide.toml");
     expect(() =>
       board(['company = "A"', 'ats = "taleo"', 'slug = "a"']),
     ).toThrow('invalid ats "taleo" (use greenhouse, lever, ashby, workday)');
@@ -175,66 +178,75 @@ describe("parseConfig", () => {
       'is missing "slug"',
     );
     expect(() =>
-      parseConfig("[sources]\nbuiltin_boards = 1\n", "igor.toml"),
+      parseConfig("[sources]\nbuiltin_boards = 1\n", "trailguide.toml"),
     ).toThrow('"builtin_boards" must be true or false');
   });
 
   it("rejects typo'd table names at the top level", () => {
-    expect(() => parseConfig('[[keyword]]\nrole = "x"\n', "igor.toml")).toThrow(
-      'igor.toml: top level has unknown key "keyword" (expected filter, db, resume, location, keywords, board, sources)',
+    expect(() =>
+      parseConfig('[[keyword]]\nrole = "x"\n', "trailguide.toml"),
+    ).toThrow(
+      'trailguide.toml: top level has unknown key "keyword" (expected filter, db, resume, location, keywords, board, sources)',
     );
     expect(() =>
-      parseConfig('[[locations]]\ncity = "x"\n', "igor.toml"),
+      parseConfig('[[locations]]\ncity = "x"\n', "trailguide.toml"),
     ).toThrow('unknown key "locations"');
   });
 
   it("rejects unknown keys inside known tables", () => {
-    expect(() => parseConfig("[filter]\ngovmil = true\n", "igor.toml")).toThrow(
-      'igor.toml: [filter] has unknown key "govmil" (expected clearance, exclude)',
+    expect(() =>
+      parseConfig("[filter]\ngovmil = true\n", "trailguide.toml"),
+    ).toThrow(
+      'trailguide.toml: [filter] has unknown key "govmil" (expected clearance, exclude)',
     );
     expect(() =>
       parseConfig(
         '[[keywords]]\nrole = "A"\n[[keywords]]\nname = "B"\n',
-        "igor.toml",
+        "trailguide.toml",
       ),
-    ).toThrow('igor.toml: [[keywords]] entry 2 has unknown key "name"');
+    ).toThrow('trailguide.toml: [[keywords]] entry 2 has unknown key "name"');
   });
 
   it("names the entry that is missing a field", () => {
     expect(() =>
       parseConfig(
         '[[keywords]]\nrole = "A"\n[[keywords]]\nrole = ""\n',
-        "igor.toml",
+        "trailguide.toml",
       ),
-    ).toThrow('igor.toml: [[keywords]] entry 2 is missing "role"');
+    ).toThrow('trailguide.toml: [[keywords]] entry 2 is missing "role"');
     expect(() =>
       parseConfig(
         '[[location]]\ncity = "A"\n[[location]]\nflexibility = "any"\n',
-        "igor.toml",
+        "trailguide.toml",
       ),
-    ).toThrow('igor.toml: [[location]] entry 2 is missing "city"');
+    ).toThrow('trailguide.toml: [[location]] entry 2 is missing "city"');
   });
 
   it("rejects wrong types", () => {
     expect(() =>
-      parseConfig('[filter]\nclearance = "yes"\n', "igor.toml"),
-    ).toThrow('igor.toml: [filter] "clearance" must be "include" or "exclude"');
-    expect(() => parseConfig("[filter]\nexclude = [1]\n", "igor.toml")).toThrow(
-      'igor.toml: [filter] "exclude" must be a list of strings',
-    );
-    expect(() => parseConfig("[job]\ngovmil = false\n", "igor.toml")).toThrow(
-      "[job] was replaced by [filter]",
+      parseConfig('[filter]\nclearance = "yes"\n', "trailguide.toml"),
+    ).toThrow(
+      'trailguide.toml: [filter] "clearance" must be "include" or "exclude"',
     );
     expect(() =>
-      parseConfig('[[location]]\ncity = "A"\nregion = [1]\n', "igor.toml"),
+      parseConfig("[filter]\nexclude = [1]\n", "trailguide.toml"),
+    ).toThrow('trailguide.toml: [filter] "exclude" must be a list of strings');
+    expect(() =>
+      parseConfig("[job]\ngovmil = false\n", "trailguide.toml"),
+    ).toThrow("[job] was replaced by [filter]");
+    expect(() =>
+      parseConfig(
+        '[[location]]\ncity = "A"\nregion = [1]\n',
+        "trailguide.toml",
+      ),
     ).toThrow(
-      'igor.toml: [[location]] entry 1 "region" must be a string or a list of strings',
+      'trailguide.toml: [[location]] entry 1 "region" must be a string or a list of strings',
     );
-    expect(() => parseConfig("[[keywords]]\nrole = 3\n", "igor.toml")).toThrow(
-      'igor.toml: [[keywords]] entry 1 "role" must be a string',
-    );
-    expect(() => parseConfig('keywords = "swe"\n', "igor.toml")).toThrow(
-      'igor.toml: "keywords" must be written as [[keywords]] tables',
+    expect(() =>
+      parseConfig("[[keywords]]\nrole = 3\n", "trailguide.toml"),
+    ).toThrow('trailguide.toml: [[keywords]] entry 1 "role" must be a string');
+    expect(() => parseConfig('keywords = "swe"\n', "trailguide.toml")).toThrow(
+      'trailguide.toml: "keywords" must be written as [[keywords]] tables',
     );
   });
 
@@ -242,10 +254,10 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig(
         '[[location]]\ncity = "A"\nflexibility = "onsite"\n',
-        "igor.toml",
+        "trailguide.toml",
       ),
     ).toThrow(
-      'igor.toml: [[location]] entry 1 has invalid flexibility "onsite" (use remote, in-person, or any)',
+      'trailguide.toml: [[location]] entry 1 has invalid flexibility "onsite" (use remote, in-person, or any)',
     );
   });
 
@@ -269,7 +281,7 @@ describe("mergeConfigs", () => {
   it("replaces lists wholesale and overrides scalars per key", () => {
     const local = parseConfig(
       '[filter]\nclearance = "include"\n[[location]]\ncity = "Austin"\n',
-      "/l/igor.toml",
+      "/l/trailguide.toml",
     );
     const merged = mergeConfigs(base, local);
     expect(merged.clearance).toBe("include");
@@ -316,7 +328,7 @@ describe("resolveBoards", () => {
 
 describe("formatConfig / writeConfig", () => {
   it("round-trips boards and [sources]", () => {
-    const config: IgorConfig = {
+    const config: TrailguideConfig = {
       builtinBoards: false,
       boards: [
         { company: "Acme", ats: "ashby", slug: "acme" },
@@ -333,10 +345,10 @@ describe("formatConfig / writeConfig", () => {
   });
 
   it("round-trips through parseConfig", () => {
-    const config = parseConfig(FULL, "/etc/igor/igor.toml");
-    expect(parseConfig(formatConfig(config), "/etc/igor/igor.toml")).toEqual(
-      config,
-    );
+    const config = parseConfig(FULL, "/etc/trailguide/trailguide.toml");
+    expect(
+      parseConfig(formatConfig(config), "/etc/trailguide/trailguide.toml"),
+    ).toEqual(config);
   });
 
   it("escapes quotes and omits empty regions", () => {
@@ -351,7 +363,7 @@ describe("formatConfig / writeConfig", () => {
   });
 
   it("writes the file, creating missing directories", () => {
-    dir = mkdtempSync(join(tmpdir(), "igor-config-"));
+    dir = mkdtempSync(join(tmpdir(), "trailguide-config-"));
     const path = join(dir, "a", "b", "config.toml");
     writeConfig(path, {
       clearance: "exclude",

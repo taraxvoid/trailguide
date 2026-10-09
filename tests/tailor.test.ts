@@ -10,7 +10,7 @@ import {
 
 let counter = 0;
 function freshDb() {
-  const path = `/tmp/igor-tailor-test-${Date.now()}-${++counter}.db`;
+  const path = `/tmp/trailguide-tailor-test-${Date.now()}-${++counter}.db`;
   rmSync(path, { force: true });
   return openDb(path);
 }
@@ -30,7 +30,7 @@ function mockJob(overrides: Partial<NormalizedJob> = {}): NormalizedJob {
   };
 }
 
-const outputDir = `/tmp/igor-tailor-test-output-${Date.now()}`;
+const outputDir = `/tmp/trailguide-tailor-test-output-${Date.now()}`;
 const resumeDir = `${import.meta.dir}/fixtures`;
 const resumePath = `${resumeDir}/resume-sample.md`;
 
@@ -156,7 +156,7 @@ describe("tailorResume", () => {
   it("renders the resume unmodified (with a warning) when there's no Highlights section", async () => {
     const db = freshDb();
     upsertJobs(db, [mockJob()]);
-    const plainResumeDir = `/tmp/igor-tailor-plain-${Date.now()}`;
+    const plainResumeDir = `/tmp/trailguide-tailor-plain-${Date.now()}`;
     await Bun.write(
       `${plainResumeDir}/resume.md`,
       "# Just a title\n\nNo sections here.\n",
@@ -286,7 +286,7 @@ describe("tailorOrRegenerate", () => {
   });
 });
 
-describe("resume selection by lane", () => {
+describe("resume selection by trail", () => {
   const offline = { outputDir, ollamaHost: "http://127.0.0.1:1" };
   let dir = "";
   afterEach(() => {
@@ -294,20 +294,20 @@ describe("resume selection by lane", () => {
   });
 
   async function masters(files: Record<string, string>): Promise<string> {
-    dir = `/tmp/igor-tailor-lanes-${Date.now()}-${++counter}`;
+    dir = `/tmp/trailguide-tailor-trails-${Date.now()}-${++counter}`;
     for (const [name, title] of Object.entries(files)) {
       await Bun.write(`${dir}/${name}`, `# ${title}\n\nNo sections here.\n`);
     }
     return dir;
   }
 
-  it("uses <lane>.md for a job with a lane", async () => {
+  it("uses <trail>.md for a job with a trail", async () => {
     const resumeDir = await masters({
       "platform.md": "Platform",
       "secplat.md": "Security",
     });
     const db = freshDb();
-    upsertJobs(db, [mockJob({ lane: "secplat" })]);
+    upsertJobs(db, [mockJob({ trail: "secplat" })]);
     const result = await tailorResume(db, "jsearch:1", {
       ...offline,
       resumeDir,
@@ -318,19 +318,19 @@ describe("resume selection by lane", () => {
     );
   });
 
-  it("fails clearly when the lane's master is missing", async () => {
+  it("fails clearly when the trail's master is missing", async () => {
     const resumeDir = await masters({ "platform.md": "Platform" });
     const db = freshDb();
-    upsertJobs(db, [mockJob({ lane: "secplat" })]);
+    upsertJobs(db, [mockJob({ trail: "secplat" })]);
     const result = await tailorResume(db, "jsearch:1", {
       ...offline,
       resumeDir,
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/no resume for lane "secplat"/);
+    expect(result.error).toMatch(/no resume for trail "secplat"/);
   });
 
-  it("uses default.md for a job without a lane", async () => {
+  it("uses default.md for a job without a trail", async () => {
     const resumeDir = await masters({
       "default.md": "Default",
       "platform.md": "Platform",
@@ -346,7 +346,7 @@ describe("resume selection by lane", () => {
     );
   });
 
-  it("refuses to guess between several masters without a lane", async () => {
+  it("refuses to guess between several masters without a trail", async () => {
     const resumeDir = await masters({ "a.md": "A", "b.md": "B" });
     const db = freshDb();
     upsertJobs(db, [mockJob()]);
@@ -355,6 +355,6 @@ describe("resume selection by lane", () => {
       resumeDir,
     });
     expect(result.ok).toBe(false);
-    expect(result.error).toMatch(/multiple resumes .* no lane/);
+    expect(result.error).toMatch(/multiple resumes .* no trail/);
   });
 });

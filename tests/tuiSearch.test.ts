@@ -19,8 +19,8 @@ import {
 } from "../src/tui/search.ts";
 
 function harness() {
-  const dir = mkdtempSync(join(tmpdir(), "igor-tui-"));
-  const dbPath = join(dir, "igor.db");
+  const dir = mkdtempSync(join(tmpdir(), "trailguide-tui-"));
+  const dbPath = join(dir, "trailguide.db");
   const db = openDb(dbPath);
   const requests: SpawnRequest[] = [];
   let killed = 0;
@@ -46,11 +46,11 @@ const argAfter = (cmd: string[], flag: string) =>
   cmd.includes(flag) ? cmd[cmd.indexOf(flag) + 1] : undefined;
 
 describe("startBackgroundSearch", () => {
-  it("spawns a detached igor search with absolute paths and records the run", () => {
+  it("spawns a detached trailguide search with absolute paths and records the run", () => {
     const h = harness();
     const result = startBackgroundSearch({
       db: h.db,
-      dbPath: "igor.db",
+      dbPath: "trailguide.db",
       configPath: "my.toml",
       cwd: h.dir,
       spawn: h.spawn,
@@ -59,12 +59,12 @@ describe("startBackgroundSearch", () => {
     expect(h.requests).toHaveLength(1);
     const request = h.requests[0] as SpawnRequest;
     expect(request.cmd).toContain("search");
-    expect(request.cmd).toContain("--no-igor");
-    expect(argAfter(request.cmd, "--db")).toBe(join(h.dir, "igor.db"));
+    expect(request.cmd).toContain("--no-banner");
+    expect(argAfter(request.cmd, "--db")).toBe(join(h.dir, "trailguide.db"));
     expect(argAfter(request.cmd, "--config")).toBe(join(h.dir, "my.toml"));
     expect(request.cwd).toBe(h.dir);
     expect(request.detached).toBe(true);
-    expect(request.env.IGOR_NO_DELEGATE).toBe("1");
+    expect(request.env.TRAILGUIDE_NO_DELEGATE).toBe("1");
     expect(getRun(h.db, "search", SEARCH_RUN_KEY)).toMatchObject({
       pid: process.pid,
       finishedAt: null,
@@ -87,7 +87,7 @@ describe("startBackgroundSearch", () => {
   it("sends output to a log next to the db, truncated per run", () => {
     const h = harness();
     const log = searchLogPath(h.dbPath);
-    expect(log).toBe(join(h.dir, "igor-search.log"));
+    expect(log).toBe(join(h.dir, "trailguide-search.log"));
     writeFileSync(log, "output from an older run\n");
     startBackgroundSearch({
       db: h.db,
@@ -244,22 +244,22 @@ describe("describeSearchRun", () => {
   });
 
   it("shows the summary or the failure", () => {
-    expect(describeSearchRun(run(true, "3 found, 1 new"), "/d/igor.db")).toBe(
-      "Search done: 3 found, 1 new",
-    );
-    expect(describeSearchRun(run(false, "bad config"), "/d/igor.db")).toBe(
-      "Search failed: bad config",
-    );
+    expect(
+      describeSearchRun(run(true, "3 found, 1 new"), "/d/trailguide.db"),
+    ).toBe("Search done: 3 found, 1 new");
+    expect(
+      describeSearchRun(run(false, "bad config"), "/d/trailguide.db"),
+    ).toBe("Search failed: bad config");
   });
 
   it("points at the log when the process died", () => {
     expect(
       describeSearchRun(
         run(false, "search process exited unexpectedly"),
-        "/d/igor.db",
+        "/d/trailguide.db",
       ),
     ).toBe(
-      "Search failed: search process exited unexpectedly (see /d/igor-search.log)",
+      "Search failed: search process exited unexpectedly (see /d/trailguide-search.log)",
     );
   });
 });

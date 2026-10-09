@@ -59,7 +59,7 @@ function failing(
 
 const OMAHA_AND_US: SearchPlan = {
   keywords: ["swe"],
-  lanes: {},
+  trails: {},
   filter: NO_FILTER,
   targets: [
     {
@@ -181,7 +181,7 @@ describe("collectJobs filtering", () => {
   it("checks only the work type when no location was given", async () => {
     const plan: SearchPlan = {
       keywords: ["swe"],
-      lanes: {},
+      trails: {},
       filter: NO_FILTER,
       targets: [{ city: null, flexibility: "remote", region: [] }],
     };
@@ -304,15 +304,15 @@ describe("formatRunMessage", () => {
   });
 });
 
-describe("lanes", () => {
+describe("trails", () => {
   const plan: SearchPlan = {
     keywords: ["Platform Engineer", "Security Engineer"],
-    lanes: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
+    trails: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
     filter: NO_FILTER,
     targets: [{ city: null, flexibility: "any", region: [] }],
   };
 
-  it("tags scoped results with their keyword's lane", async () => {
+  it("tags scoped results with their keyword's trail", async () => {
     const scoped = fake("jsearch", true, (params) => [
       job({
         sourceId: String(params.role),
@@ -322,7 +322,7 @@ describe("lanes", () => {
       }),
     ]);
     const { jobs } = await collectJobs(plan, [scoped.source]);
-    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.lane]))).toEqual({
+    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.trail]))).toEqual({
       "Platform Engineer": "platform",
       "Security Engineer": "secplat",
     });
@@ -343,7 +343,7 @@ describe("lanes", () => {
       }),
     ]);
     const { jobs } = await collectJobs(plan, [loose.source]);
-    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.lane]))).toEqual({
+    expect(Object.fromEntries(jobs.map((j) => [j.sourceId, j.trail]))).toEqual({
       s: "secplat",
       n: undefined,
       w: undefined,

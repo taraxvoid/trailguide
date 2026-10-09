@@ -16,11 +16,11 @@ function capture(response: () => Response) {
 }
 
 describe("httpFetch", () => {
-  it("identifies igor and sets a timeout", async () => {
+  it("identifies trailguide and sets a timeout", async () => {
     const seen = capture(() => new Response("{}"));
     await httpFetch("https://example.com/a");
     expect(USER_AGENT).toMatch(
-      /^igor\/\d+\.\d+\.\d+ \(\+https:\/\/github\.com\//,
+      /^trailguide\/\d+\.\d+\.\d+ \(\+https:\/\/github\.com\//,
     );
     expect(seen[0]?.init?.headers).toEqual({ "User-Agent": USER_AGENT });
     expect(seen[0]?.init?.signal).toBeInstanceOf(AbortSignal);
