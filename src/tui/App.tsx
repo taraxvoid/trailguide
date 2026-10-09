@@ -86,7 +86,7 @@ const FOOTER_BEFORE =
 const FOOTER_TAILOR_AFTER = " [⌃t] | open tailored resume [⌃o] | mark ";
 const FOOTER_ARCHIVED_AFTER = " [e] mark ";
 const FOOTER_AFTER =
-  " [a] | cycle lane [L] | toggle view [⌃e] | search [⌃s] | refresh (auto-archives dead jobs) [⌃r] | quit [q/Ctrl+C]";
+  " [a] | cycle lane [L] | toggle view [⌃e] | search [⌃s] | refresh [⌃r] | quit [q/Ctrl+C]";
 const FOOTER_TEXT = `${FOOTER_BEFORE}tailor/regen${FOOTER_TAILOR_AFTER}archived${FOOTER_ARCHIVED_AFTER}applied${FOOTER_AFTER}`;
 
 const VIEW_TABS = ["active", "archived"] as const;
@@ -649,7 +649,7 @@ export default function JobBrowser({
       <Box paddingY={1} justifyContent="space-between" alignItems="center">
         <Box flexShrink={1} marginRight={2}>
           <Text bold color="green">
-            ⚡ Igor at your sshhservishss ⚡
+            ⚡ Igor at your service ⚡
           </Text>
           {version && (
             <Text dimColor wrap="truncate-end">

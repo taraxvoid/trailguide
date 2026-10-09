@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
@@ -29,9 +30,7 @@ export function createRemoteOkSource(): Source {
     name: "remoteok",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const res = await fetch("https://remoteok.com/api", {
-        headers: { "User-Agent": "igor-job-search" },
-      });
+      const res = await httpFetch("https://remoteok.com/api");
       if (!res.ok) {
         throw new Error(
           `RemoteOK request failed: ${res.status} ${await res.text()}`,

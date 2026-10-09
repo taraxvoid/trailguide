@@ -1,148 +1,166 @@
 # igor
 
-a minion to find and apply for jorbs
+Job search and resume tailoring that only rearranges what you've already written.
 
-## Requirements
+igor searches company job boards (Greenhouse, Lever, Ashby, Workday) and
+aggregators for the roles and places you configure, keeps what it finds in a
+local SQLite database, and lets you browse, triage and apply from a terminal
+UI. For each job it can also tailor your resume: a local model picks and
+orders *which of your own bullets* to show, and a PDF comes out the other end.
 
-- [Bun](https://bun.sh) >= 1.4.0
+Everything runs on your machine. Your resume never leaves it; the only network
+traffic is requests to public job-board APIs (see [Network use](#network-use)).
 
-## Setup
+## Why a model can't change your resume
+
+Tailoring is built so the model has no way to write resume text. Your master
+is parsed into small bullets with ids; the model only returns a list of ids in
+the order it wants them, and anything it invents, misspells or repeats is
+dropped. Contact details, employers, dates and education are copied through
+verbatim. If Ollama or Typst is missing, or the model's answer is nonsense, you
+still get your resume, untailored. See [docs/architecture.md](docs/architecture.md).
+
+## Quick start
+
+Requires [Bun](https://bun.sh) >= 1.4.0.
 
 ```bash
+git clone https://github.com/taraxvoid/igor && cd igor
 bun install
+bun link          # puts `igor` on your PATH, pointing at this checkout
+igor init         # asks for locations and keywords, writes your config
+igor tui          # then press Ctrl+S to search
 ```
+
+Without linking: `bun run src/cli.ts <command>`. Tailoring additionally needs
+[Typst](https://typst.app) and [Ollama](https://ollama.com); see
+[Tailoring your resume](#tailoring-your-resume).
 
 Optional API credentials go in a `.env` file (copy `.env.example`):
 
-```bash
-cp .env.example .env
-```
+- `JSEARCH_API_KEY`: [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch), which searches Google for Jobs
+- `ADZUNA_APP_ID` / `ADZUNA_APP_KEY`: [Adzuna developer credentials](https://developer.adzuna.com/)
+- `OLLAMA_HOST` / `OLLAMA_MODEL`: override the defaults used by `igor tailor`
+- `IGOR_DB` / `IGOR_CONFIG`: override the database path and config file
 
-- `JSEARCH_API_KEY` — [RapidAPI key for JSearch](https://rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch)
-- `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` — [Adzuna developer credentials](https://developer.adzuna.com/)
-- `OLLAMA_HOST` / `OLLAMA_MODEL` — only needed if you want to override the defaults for `igor tailor` (see below)
-- `IGOR_DB` / `IGOR_CONFIG`: optional overrides for the db path and config file (see Configuration below)
-
-Other sources don't require creds
-
-## Running `igor` on your PATH
-
-`igor` is defined as a `bin` in `package.json`, pointing at `src/cli.ts`. To
-run your local checkout as a global `igor` command:
-
-```bash
-bun link
-```
-
-This adds `igor` to your PATH (via Bun's global bin dir) and points it at
-this working copy — edits to `src/` take effect immediately, no rebuild step.
-Verify it resolves:
-
-```bash
-igor --help
-```
-
-To remove the link later:
-
-```bash
-bun unlink
-```
-
-Alternatively, without linking, run it directly from the repo:
-
-```bash
-bun run src/cli.ts search --role "software engineer"
-```
+Every other source needs no credentials.
 
 ## Configuration
 
+`igor init` asks for locations and keywords (one per line; "Austin, TX" is one
+location) and a work type, then writes `~/.config/igor/config.toml` and
+creates `~/.local/share/igor/igor.db` (`XDG_CONFIG_HOME` / `XDG_DATA_HOME` are
+honored). It never deletes anything, and asks before replacing an existing
+config. Non-interactive:
+
 ```bash
-igor init
+igor init --location "Austin, TX" --keywords "software engineer" --work in-person
 ```
 
-asks for locations and keywords (one per line; "Omaha, NE" is one location)
-and a work type, then writes `~/.config/igor/config.toml` and creates
-`~/.local/share/igor/igor.db` (`XDG_CONFIG_HOME` / `XDG_DATA_HOME` are
-honored). It never deletes anything, and asks before replacing an existing
-config. Non-interactive: `igor init --location "Omaha, NE" --keywords
-"software engineer" --work in-person` (each flag repeatable; `--work
-"Omaha, NE:in-person"` sets one location). See `igor.example.toml`.
+(each flag is repeatable; `--work "Austin, TX:in-person"` sets one location).
+[`igor.example.toml`](igor.example.toml) shows every section.
 
 Every keyword is searched in every location, so at least one `[[location]]`
 and one `[[keywords]]` entry are required.
 
 A `./igor.toml` in the current directory is merged over the global config:
-`[job]` keys override one by one, and `[[location]]` / `[[keywords]]` replace
-the global lists. `[db] path = "igor.db"` in a local file gives a
-self-contained sandbox (relative paths resolve against that file's
-directory). `[resume] dir` moves the resume masters the same way.
-`igor config` shows which files and database are in use.
+scalar keys override one by one, and lists (`[[location]]`, `[[keywords]]`,
+`[[board]]`, `[filter] exclude`) replace the global ones. `[db] path =
+"igor.db"` in a local file gives a self-contained sandbox (relative paths
+resolve against that file's directory). `igor config` shows which files,
+database and boards are in use.
 
-Precedence, high to low: CLI flags, `IGOR_*` environment variables
-(`IGOR_DB`, `IGOR_CONFIG`), local `igor.toml`, global `config.toml`,
-defaults. `--config <path>` (or `IGOR_CONFIG`) replaces the whole chain and
-uses only that one file. There is no fallback to a `./igor.db` in the
-current directory: if you have an old database there, move it to the path
-`igor config` reports.
+Precedence, high to low: CLI flags, `IGOR_*` environment variables, local
+`igor.toml`, global `config.toml`, defaults. `--config <path>` (or
+`IGOR_CONFIG`) replaces the whole chain and uses only that one file.
+
+### Locations
 
 `flexibility` per `[[location]]`:
 
 - `remote`: listings marked remote whose location is blank, global
   ("Worldwide", "Anywhere"), or names the place. "United States" also
-  matches USA, US, and North America; Omaha also matches Nebraska.
+  matches USA, US, and North America.
 - `in-person` (onsite or hybrid): anything not marked remote, located in the
-  city (Omaha includes La Vista, Elkhorn, and Ralston). "Bay Area", "East
-  Bay", "South Bay" and "Seattle" are regions covering their metro's main
-  towns. A region only matches listings that name its state ("Dublin, CA",
-  not "Dublin, Ireland") or a bare town name.
+  city.
 - `any` (default): either of the above.
 
-`region` is optional and only extends which remote listings are eligible for
-a city, e.g. `region = ["Texas", "TX"]` for a Texas city. Omaha gets Nebraska,
-the Bay Area regions California, and Seattle "Washington State" built in.
-Broad places like "United States" with `in-person` or `any` only
-match listings that name that place, so use specific cities for in-person
-work.
+`aliases` lists other names for the same place and counts everywhere:
+`aliases = ["La Vista", "Elkhorn"]` on "Omaha". `region` only extends which
+remote listings are eligible for the city, e.g. `region = ["Texas", "TX"]`.
+"City, ST" also matches the state spelled out.
 
-A remote listing located in a US state ("San Francisco, CA") counts as
-eligible for "United States".
+"Bay Area", "East Bay", "South Bay" and "Seattle" are built-in regions
+covering their metro's main towns. A region only matches listings that name
+its state ("Dublin, CA", not "Dublin, Ireland") or use a bare town name. Broad
+places like "United States" with `in-person` or `any` only match listings
+that name that place, so use specific cities for in-person work.
 
-Only some sources say whether a job is remote, so `remote` is high
-precision but limited recall: adzuna is skipped for remote locations, listings
-with no remote label are missed, and hybrid is not told apart from onsite.
+Only some sources say whether a job is remote, so `remote` is high precision
+but limited recall: adzuna is skipped for remote locations, listings with no
+remote label are missed, and hybrid is not told apart from onsite.
 
 ### Company job boards
 
-Greenhouse, Lever, Ashby and Workday boards are searched for the companies in
-`seed/ats-companies.json`. A Workday entry takes the three parts of its board
-URL, `https://<slug>.<host>.myworkdayjobs.com/<site>`:
+The Greenhouse, Lever, Ashby and Workday boards of a built-in set of companies
+are searched (see `seed/ats-companies.json`). Add your own with `[[board]]`
+entries, taking the slug from the board's URL:
 
-```json
-{ "company": "Workday", "ats": "workday", "slug": "workday", "host": "wd5", "site": "Workday" }
+```toml
+[[board]]
+company = "Cadence"
+ats = "workday"
+slug = "cadence"      # https://cadence.wd1.myworkdayjobs.com/External_Careers
+host = "wd1"          #          ^slug    ^host            ^site
+site = "External_Careers"
+
+[[board]]
+company = "10x Genomics"
+ats = "greenhouse"
+slug = "10xgenomics"  # https://boards.greenhouse.io/10xgenomics
 ```
 
-Workday is searched once per keyword per company (up to 60 results each),
-and each matching posting is fetched for its description and locations.
+`[sources] builtin_boards = false` searches only your own. A board that fails
+(wrong slug, outage) is listed in the run summary and skipped; the rest are
+still searched. Workday is searched once per keyword per company (up to 60
+results each), and each matching posting is fetched for its description and
+locations.
+
+### Filters
+
+Internship postings are always dropped. `[filter]` adds two optional settings:
+
+```toml
+[filter]
+clearance = "exclude"            # drop listings that require a security clearance (default: include)
+exclude = ["Some Staffing Co"]   # drop listings mentioning any of these
+```
+
+`exclude` terms match whole words, case-insensitively, in the company, title
+and description. On the command line, `--exclude-clearance` and
+`--include-clearance` override the config for one search.
 
 ## Usage
 
 ```bash
-igor search [--role <query...>] [--location <place...>] [--remote|--onsite] [--clearance] [--json] [--csv] [--db <path>] [--config <path>]
+igor search [--role <query...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
 ```
 
 - no `--role`: the config's `[[keywords]]` and `[[location]]` entries drive the search
-- `--role`: search for exactly these roles instead (the config is not read); accepts multiple values, e.g. `--role engineer manager`
-- `--location`: replace the config's locations; accepts multiple values, e.g. `--location Omaha "San Francisco"`
+- `--role`: search for exactly these roles instead (the config's keywords and locations are not used); accepts multiple values, e.g. `--role engineer manager`
+- `--location`: replace the config's locations; accepts multiple values, e.g. `--location Austin "San Francisco"`
 - `--remote` / `--onsite`: only remote / only not-remote jobs for every location (mutually exclusive)
-- `--clearance`: include jobs that mention a clearance requirement (`govmil = true` in the config does the same)
 - `--json` / `--csv`: print all jobs stored in the db
 - `--db`: path to the sqlite db (default: the precedence chain above)
 - `--config`: config file to use instead of the global plus local chain
 
+Other commands: `igor tui`, `igor jobs`, `igor refresh`, `igor tailor`,
+`igor lane`, `igor clear`, `igor config`, `igor init`; `igor --help` lists them.
+
 Every `igor search`, including one started by hand, registers itself as the
 db's single search run: it shows in the TUI, and a second one started while
-it runs exits with "search already running". Failed sources are listed in
-the run summary without failing the search.
+it runs exits with "search already running". Failed sources and boards are
+listed in the run summary without failing the search.
 
 ## TUI
 
@@ -157,54 +175,50 @@ The header shows the branch and last commit of the checkout that's running
 igor checkout (or worktree) you're currently inside, and the linked one
 everywhere else. Set `IGOR_NO_DELEGATE=1` to always run the linked one.
 
-- ↑↓ / k j — navigate job list
-- ←→ / h l — switch between Active / Applied / Archived tabs
-- ↵ — expand/collapse the selected job's description
-- o — open the listing URL in your browser
+- ↑↓ / k j: navigate job list
+- ←→ / h l: switch between Active / Applied / Archived tabs
+- ↵: expand/collapse the selected job's description
+- o: open the listing URL in your browser
 - ⌃s: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `igor-search.log` next to the db
-- ⌃t — tailor your resume to the selected job, or regenerate its PDF if it already has one (see below)
-- e — archive
-- a — mark applied
-- L — cycle the job's resume lane (none, then each lane in the config)
-- ⌃r — refresh (checks whether active listings are still live)
-- q / esc — quit
+- ⌃t: tailor your resume to the selected job, or regenerate its PDF if it already has one (see below)
+- e: archive
+- a: mark applied
+- L: cycle the job's resume lane (none, then each lane in the config)
+- ⌃r: refresh (checks whether active listings are still live)
+- q / esc: quit
 
-Internship postings are always filtered out. Results are deduped across
-sources and persisted to the sqlite db so repeated searches only flag what's
-`NEW`.
+Results are deduped across sources and persisted to the sqlite db, so
+repeated searches only flag what's `NEW`.
 
 ## Tailoring your resume
 
 `igor tailor <listingId>` (or ⌃t in the TUI) reorders your resume's
 Highlights, each job's accomplishment bullets, and your Skills section to
 foreground whatever's most relevant to a specific listing, then renders a
-PDF. It never invents, rewrites, or drops factual content — a local model
-only ever picks and orders *which of your own bullets* to show; everything
-else (your contact info, employer names/dates/titles, education,
-certifications, ...) is reproduced exactly as written.
+PDF. It never invents, rewrites, or drops factual content: a local model only
+ever picks and orders *which of your own bullets* to show; everything else
+(your contact info, employer names/dates/titles, education, certifications,
+...) is reproduced exactly as written.
 
 A Skills section is keyword stuffing rather than a set of claims, so it gets
 treated a little differently: its sub-groups ("Technical", "Cyber
 Security", ...) are reordered so the ones a posting cares about lead, and
-individual skill lines a posting has no use for are pruned — a gig that
-never mentions the cloud doesn't need to read your cloud-hosting line. The
-groups themselves are only ever reordered, never dropped.
+individual skill lines a posting has no use for are pruned. The groups
+themselves are only ever reordered, never dropped.
 
 Setup:
 
 1. Put your resume master in `~/.config/igor/resumes/<name>.md` (or the
    `[resume] dir` from your config; it's your personal resume, so keep it
+<<<<<<< HEAD
    out of this repo). It needs a `## Highlights` section
    and a `## Career Experience` section with each employer's bullets for
    tailoring to have anything to work with. A section whose heading mentions
    skills, technologies, or competencies is tailored too. Other sections and
    their formatting are free-form and always passed through unchanged.
 2. Install [Typst](https://typst.app), used to render the PDF. The version
-   is pinned in `mise.toml`, so with [mise](https://mise.jdx.dev) installed
-   just run `mise install` from the repo. Otherwise install the same version
-   any other way (see the
-   [installation docs](https://github.com/typst/typst#installation)) and
-   put `typst` on your `PATH`.
+   is pinned in `mise.toml` - with [mise](https://mise.jdx.dev) installed
+   run `mise install` from the repo. (or [get typst another way](https://github.com/typst/typst#installation)) and
 3. Install [Ollama](https://ollama.com) and pull a thinking-capable model
    (the default is `qwen3:8b`, a good fit for 16GB of RAM):
    ```bash
@@ -214,6 +228,20 @@ Setup:
 ```bash
 igor tailor <listingId> [--db <path>] [--config <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
 ```
+
+Output goes to `~/.local/share/igor/resumes/<company>-<title>.md` and `.pdf`
+(`--output-dir` to change it). If Ollama or the resume's Highlights section
+isn't available, or the model's response doesn't make sense, tailoring is
+skipped with a warning and the resume is still rendered unmodified: you always
+get a usable PDF out of this, never nothing and never garbage.
+
+The tailored `.md` is then the canonical resume for that job: igor records
+which file belongs to which listing, so you can edit it by hand and run
+`igor tailor <listingId>` (or ⌃t) again to regenerate the PDF from your
+edits. That skips the model and the master entirely. To start over from the
+master, delete the `.md` or pass `--fresh` (which overwrites it). If two
+listings share a company and title, the second gets its listing id appended
+to the filename so neither overwrites the other's edits.
 
 ### Lanes: one master per kind of role
 
@@ -233,25 +261,14 @@ the job's `<lane>.md` (an error if missing), `default.md`, or the only `.md`
 in the dir. It never guesses between masters. Change a job's lane with `L`
 in the TUI or `igor lane <listingId> [lane] [--clear]`.
 
-Output goes to `~/.local/share/igor/resumes/<company>-<title>.md` and `.pdf`
-(`--output-dir` to change it). If Ollama or the resume's Highlights section isn't available,
-or the model's response doesn't make sense, tailoring is skipped with a
-warning and the resume is still rendered unmodified - you always get a
-usable PDF out of this, never nothing and never garbage.
+## Network use
 
-The tailored `.md` is then the canonical resume for that job: igor records
-which file belongs to which listing, so you can edit it by hand and run
-`igor tailor <listingId>` (or ⌃t) again to regenerate the PDF from your
-edits. That skips the model and the master entirely. To start over from the
-master, delete the `.md` or pass `--fresh` (which overwrites it). If two
-listings share a company and title, the second gets its listing id appended
-to the filename so neither overwrites the other's edits.
-
-Example:
-
-```bash
-igor search --role "backend engineer" --location remote --remote
-```
+igor only talks to the public job-board APIs of the sources it searches, and
+tries to be a polite client: every request sends `User-Agent: igor/<version>
+(+https://github.com/taraxvoid/igor)`, times out after 20 seconds, and runs
+under small concurrency limits (4 boards at a time per source, 8 link checks).
+Searches run when you ask for them, not on a timer. Please keep it that way
+if you script it.
 
 ## Development
 
@@ -262,3 +279,9 @@ just test      # bun test
 just check     # lint + typecheck + test
 just smoke-live  # hits real third-party APIs; skips sources with no credentials set
 ```
+
+[docs/architecture.md](docs/architecture.md) explains how the pieces fit.
+
+## License
+
+MIT

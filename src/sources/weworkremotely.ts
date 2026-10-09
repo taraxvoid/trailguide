@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { stripHtml } from "./html.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
@@ -54,7 +55,7 @@ export function createWeWorkRemotelySource(): Source {
     name: "weworkremotely",
     scoped: false,
     async search(params: SearchParams): Promise<NormalizedJob[]> {
-      const res = await fetch(
+      const res = await httpFetch(
         "https://weworkremotely.com/categories/remote-programming-jobs.rss",
       );
       if (!res.ok) {

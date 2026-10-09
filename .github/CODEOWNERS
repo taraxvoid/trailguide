@@ -5,7 +5,7 @@
 # branch protection).
 .github/            @taraxvoid
 /justfile           @taraxvoid
-/lefthook.yaml           @taraxvoid
+/lefthook.yml            @taraxvoid
 /package.json       @taraxvoid
 /bun.lock           @taraxvoid
 /scripts/           @taraxvoid

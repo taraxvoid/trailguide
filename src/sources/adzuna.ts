@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
 
@@ -45,7 +46,7 @@ export function createAdzunaSource(
             url.searchParams.set("where", location);
           }
 
-          const res = await fetch(url);
+          const res = await httpFetch(url);
           if (!res.ok) {
             throw new Error(
               `Adzuna request failed: ${res.status} ${await res.text()}`,
