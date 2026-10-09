@@ -214,14 +214,15 @@ Setup:
 
 1. Put your resume master in `~/.config/trailguide/resumes/<name>.md` (or the
    `[resume] dir` from your config; it's your personal resume, so keep it
-   out of this repo). It needs a `## Highlights` section and a `## Career
-   Experience` section with each employer's bullets for tailoring to have
-   anything to work with. A section whose heading mentions skills,
-   technologies, or competencies is tailored too. Other sections and their
-   formatting are free-form and always passed through unchanged.
-2. Install [Typst](https://typst.app) (`brew install typst` or see the
-   [installation docs](https://github.com/typst/typst#installation)); it
-   renders the PDF.
+<<<<<<< HEAD
+   out of this repo). It needs a `## Highlights` section
+   and a `## Career Experience` section with each employer's bullets for
+   tailoring to have anything to work with. A section whose heading mentions
+   skills, technologies, or competencies is tailored too. Other sections and
+   their formatting are free-form and always passed through unchanged.
+2. Install [Typst](https://typst.app), used to render the PDF. The version
+   is pinned in `mise.toml` - with [mise](https://mise.jdx.dev) installed
+   run `mise install` from the repo. (or [get typst another way](https://github.com/typst/typst#installation)) and
 3. Install [Ollama](https://ollama.com) and pull a thinking-capable model
    (the default is `qwen3:8b`, a good fit for 16GB of RAM):
    ```bash
