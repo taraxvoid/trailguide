@@ -8,6 +8,8 @@ import {
   globalResumeDir,
   localConfigPath,
 } from "./paths.ts";
+import type { Board } from "./sources/boards.ts";
+import { defaultBoards } from "./sources/seed.ts";
 
 export type Flexibility = "remote" | "in-person" | "any";
 export const FLEXIBILITIES: readonly Flexibility[] = [
@@ -21,7 +23,16 @@ export interface LocationEntry {
   flexibility: Flexibility;
   /** Extra terms a remote listing may match; never used for onsite matching. */
   region: string[];
+  /** Other names for the same place ("La Vista" for Omaha); used everywhere. */
+  aliases?: string[];
 }
+
+export const BOARD_SYSTEMS: readonly Board["ats"][] = [
+  "greenhouse",
+  "lever",
+  "ashby",
+  "workday",
+];
 
 export interface KeywordEntry {
   role: string;
@@ -34,13 +45,20 @@ export const LANE_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
 /** What one config file (or a merge of several) says; everything optional. */
 export interface IgorConfig {
-  govmil?: boolean;
+  /** Drop listings that require a security clearance (default: keep them). */
+  clearance?: "include" | "exclude";
+  /** Extra terms: a listing mentioning any of them is dropped. */
+  excludeTerms?: string[];
   /** Absolute path (relative values are resolved against the file's dir). */
   db?: string;
   /** Absolute path to the resume masters (same resolution as `db`). */
   resumeDir?: string;
   locations?: LocationEntry[];
   keywords?: KeywordEntry[];
+  /** Company job boards searched in addition to the built-in ones. */
+  boards?: Board[];
+  /** false: search only `boards`, not the built-in set. */
+  builtinBoards?: boolean;
 }
 
 export class ConfigError extends Error {
@@ -116,12 +134,17 @@ function requireString(
   return value.trim();
 }
 
-function parseRegion(file: string, where: string, value: unknown): string[] {
+function parseStrings(
+  file: string,
+  where: string,
+  key: string,
+  value: unknown,
+): string[] {
   if (value === undefined) return [];
   const list = typeof value === "string" ? [value] : value;
   if (!Array.isArray(list) || !list.every((item) => typeof item === "string")) {
     throw new ConfigError(
-      `${file}: ${where} "region" must be a string or a list of strings`,
+      `${file}: ${where} "${key}" must be a string or a list of strings`,
     );
   }
   return (list as string[]).map((item) => item.trim()).filter(Boolean);
@@ -129,24 +152,45 @@ function parseRegion(file: string, where: string, value: unknown): string[] {
 
 export function parseConfig(text: string, file: string): IgorConfig {
   const raw = parseToml(text, file);
+  if (raw.job !== undefined) {
+    throw new ConfigError(
+      `${file}: [job] was replaced by [filter]: "govmil = true" is now the default; use [filter] clearance = "exclude" to drop clearance jobs`,
+    );
+  }
   rejectUnknown(file, "top level", raw, [
-    "job",
+    "filter",
     "db",
     "resume",
     "location",
     "keywords",
+    "board",
+    "sources",
   ]);
   const config: IgorConfig = {};
 
-  if (raw.job !== undefined) {
-    if (!isTable(raw.job))
-      throw new ConfigError(`${file}: [job] must be a table`);
-    rejectUnknown(file, "[job]", raw.job, ["govmil"]);
-    if (raw.job.govmil !== undefined) {
-      if (typeof raw.job.govmil !== "boolean") {
-        throw new ConfigError(`${file}: [job] "govmil" must be true or false`);
+  if (raw.filter !== undefined) {
+    if (!isTable(raw.filter))
+      throw new ConfigError(`${file}: [filter] must be a table`);
+    rejectUnknown(file, "[filter]", raw.filter, ["clearance", "exclude"]);
+    const { clearance, exclude } = raw.filter;
+    if (clearance !== undefined) {
+      if (clearance !== "include" && clearance !== "exclude") {
+        throw new ConfigError(
+          `${file}: [filter] "clearance" must be "include" or "exclude"`,
+        );
       }
-      config.govmil = raw.job.govmil;
+      config.clearance = clearance;
+    }
+    if (exclude !== undefined) {
+      if (
+        !Array.isArray(exclude) ||
+        !exclude.every((t) => typeof t === "string")
+      ) {
+        throw new ConfigError(
+          `${file}: [filter] "exclude" must be a list of strings`,
+        );
+      }
+      config.excludeTerms = exclude.map((t) => t.trim()).filter(Boolean);
     }
   }
 
@@ -170,7 +214,12 @@ export function parseConfig(text: string, file: string): IgorConfig {
     config.locations = tableArray(file, "location", raw.location).map(
       (entry, i) => {
         const where = `[[location]] entry ${i + 1}`;
-        rejectUnknown(file, where, entry, ["city", "flexibility", "region"]);
+        rejectUnknown(file, where, entry, [
+          "city",
+          "flexibility",
+          "region",
+          "aliases",
+        ]);
         const city = requireString(file, where, entry, "city");
         const flexibility = entry.flexibility ?? "any";
         if (
@@ -181,13 +230,65 @@ export function parseConfig(text: string, file: string): IgorConfig {
             `${file}: ${where} has invalid flexibility ${JSON.stringify(flexibility)} (use remote, in-person, or any)`,
           );
         }
+        const aliases = parseStrings(file, where, "aliases", entry.aliases);
         return {
           city,
           flexibility: flexibility as Flexibility,
-          region: parseRegion(file, where, entry.region),
+          region: parseStrings(file, where, "region", entry.region),
+          ...(aliases.length > 0 && { aliases }),
         };
       },
     );
+  }
+
+  if (raw.sources !== undefined) {
+    if (!isTable(raw.sources))
+      throw new ConfigError(`${file}: [sources] must be a table`);
+    rejectUnknown(file, "[sources]", raw.sources, ["builtin_boards"]);
+    if (raw.sources.builtin_boards !== undefined) {
+      if (typeof raw.sources.builtin_boards !== "boolean") {
+        throw new ConfigError(
+          `${file}: [sources] "builtin_boards" must be true or false`,
+        );
+      }
+      config.builtinBoards = raw.sources.builtin_boards;
+    }
+  }
+
+  if (raw.board !== undefined) {
+    config.boards = tableArray(file, "board", raw.board).map((entry, i) => {
+      const where = `[[board]] entry ${i + 1}`;
+      rejectUnknown(file, where, entry, [
+        "company",
+        "ats",
+        "slug",
+        "host",
+        "site",
+      ]);
+      const company = requireString(file, where, entry, "company");
+      const ats = requireString(file, where, entry, "ats");
+      if (!BOARD_SYSTEMS.includes(ats as Board["ats"])) {
+        throw new ConfigError(
+          `${file}: ${where} has invalid ats ${JSON.stringify(ats)} (use ${BOARD_SYSTEMS.join(", ")})`,
+        );
+      }
+      const slug = requireString(file, where, entry, "slug");
+      if (ats !== "workday") {
+        if (entry.host !== undefined || entry.site !== undefined) {
+          throw new ConfigError(
+            `${file}: ${where} "host" and "site" only apply to workday boards`,
+          );
+        }
+        return { company, ats: ats as Board["ats"], slug };
+      }
+      return {
+        company,
+        ats: "workday",
+        slug,
+        host: requireString(file, where, entry, "host"),
+        site: requireString(file, where, entry, "site"),
+      };
+    });
   }
 
   if (raw.keywords !== undefined) {
@@ -217,27 +318,56 @@ export function mergeConfigs(
   override: IgorConfig,
 ): IgorConfig {
   const merged: IgorConfig = { ...base };
-  if (override.govmil !== undefined) merged.govmil = override.govmil;
+  if (override.clearance !== undefined) merged.clearance = override.clearance;
+  if (override.excludeTerms !== undefined) {
+    merged.excludeTerms = override.excludeTerms;
+  }
   if (override.db !== undefined) merged.db = override.db;
   if (override.resumeDir !== undefined) merged.resumeDir = override.resumeDir;
   if (override.locations !== undefined) merged.locations = override.locations;
   if (override.keywords !== undefined) merged.keywords = override.keywords;
+  if (override.boards !== undefined) merged.boards = override.boards;
+  if (override.builtinBoards !== undefined) {
+    merged.builtinBoards = override.builtinBoards;
+  }
   return merged;
 }
 
 export function formatConfig(config: IgorConfig): string {
   const doc: Record<string, unknown> = {};
-  if (config.govmil !== undefined) doc.job = { govmil: config.govmil };
+  if (config.clearance !== undefined || config.excludeTerms !== undefined) {
+    doc.filter = {
+      ...(config.clearance !== undefined && { clearance: config.clearance }),
+      ...(config.excludeTerms !== undefined && {
+        exclude: config.excludeTerms,
+      }),
+    };
+  }
   if (config.db !== undefined) doc.db = { path: config.db };
   if (config.resumeDir !== undefined) doc.resume = { dir: config.resumeDir };
   if (config.locations) {
-    doc.location = config.locations.map(({ city, flexibility, region }) =>
-      region.length > 0 ? { city, flexibility, region } : { city, flexibility },
+    doc.location = config.locations.map(
+      ({ city, flexibility, region, aliases }) => ({
+        city,
+        flexibility,
+        ...(region.length > 0 && { region }),
+        ...(aliases?.length && { aliases }),
+      }),
     );
   }
   if (config.keywords) {
     doc.keywords = config.keywords.map(({ role, lane }) =>
       lane ? { role, lane } : { role },
+    );
+  }
+  if (config.builtinBoards !== undefined) {
+    doc.sources = { builtin_boards: config.builtinBoards };
+  }
+  if (config.boards) {
+    doc.board = config.boards.map(({ company, ats, slug, host, site }) =>
+      ats === "workday"
+        ? { company, ats, slug, host, site }
+        : { company, ats, slug },
     );
   }
   const text = stringify(doc);
@@ -306,6 +436,21 @@ export function resolveDbPath(
   return loadConfig(ctx).config.db ?? globalDbPath(env);
 }
 
+/**
+ * The company boards to search: the built-in set (unless
+ * `[sources] builtin_boards = false`) plus the config's `[[board]]` entries,
+ * a config entry replacing a built-in one for the same company board.
+ */
+export function resolveBoards(config: IgorConfig): Board[] {
+  const key = (b: Board) => `${b.ats}:${b.slug}`;
+  const boards = new Map<string, Board>();
+  if (config.builtinBoards !== false) {
+    for (const board of defaultBoards) boards.set(key(board), board);
+  }
+  for (const board of config.boards ?? []) boards.set(key(board), board);
+  return [...boards.values()];
+}
+
 /** Where resume masters live: `[resume] dir`, else ~/.config/igor/resumes. */
 export function resolveResumeDir(ctx: ConfigContext = {}): string {
   const env = ctx.env ?? process.env;
@@ -319,9 +464,15 @@ export function describeConfig(ctx: ConfigContext = {}): string {
     files.length > 0
       ? `config files (later entries override earlier):\n${files.map((f) => `  ${f}`).join("\n")}`
       : `config files: none (run "igor init" to create ${globalConfigPath(env)})`;
+  const boards = resolveBoards(config);
+  const extra = config.boards?.length ?? 0;
+  const boardsText = `company boards: ${boards.length} (${
+    config.builtinBoards === false ? "no built-in set" : "built-in set"
+  }${extra > 0 ? ` + ${extra} from config` : ""})`;
   return [
     filesText,
     `database: ${resolveDbPath(ctx)}`,
+    boardsText,
     "",
     formatConfig(config).trimEnd(),
   ].join("\n");
@@ -332,6 +483,7 @@ export interface SearchTarget {
   city: string | null;
   flexibility: Flexibility;
   region: string[];
+  aliases?: string[];
 }
 
 /** Every keyword is searched in every target. */
@@ -340,7 +492,12 @@ export interface SearchPlan {
   /** Keyword → resume lane, for the keywords that name one. */
   lanes: Record<string, string>;
   targets: SearchTarget[];
-  govmil: boolean;
+  filter: SearchFilter;
+}
+
+export interface SearchFilter {
+  excludeClearance: boolean;
+  excludeTerms: string[];
 }
 
 /** The `igor search` flags that shape a search. */
@@ -349,13 +506,15 @@ export interface SearchFlags {
   location?: string[];
   remote?: boolean;
   onsite?: boolean;
-  clearance?: boolean;
+  excludeClearance?: boolean;
+  includeClearance?: boolean;
 }
 
 /**
  * With --role, the flags describe the whole search and the config is not
  * read. Otherwise the config supplies keywords and locations, and
- * --location, --remote/--onsite and --clearance override pieces of it.
+ * --location, --remote/--onsite and --exclude/--include-clearance override
+ * pieces of it.
  */
 export function toSearchOptions(
   flags: SearchFlags,
@@ -363,6 +522,11 @@ export function toSearchOptions(
 ): SearchPlan {
   if (flags.remote && flags.onsite) {
     throw new ConfigError("--remote and --onsite are mutually exclusive");
+  }
+  if (flags.excludeClearance && flags.includeClearance) {
+    throw new ConfigError(
+      "--exclude-clearance and --include-clearance are mutually exclusive",
+    );
   }
   const flagFlexibility: Flexibility | null = flags.remote
     ? "remote"
@@ -384,7 +548,10 @@ export function toSearchOptions(
       targets: flagTargets ?? [
         { city: null, flexibility: flagFlexibility ?? "any", region: [] },
       ],
-      govmil: flags.clearance ?? false,
+      filter: {
+        excludeClearance: flags.excludeClearance ?? false,
+        excludeTerms: [],
+      },
     };
   }
 
@@ -407,6 +574,7 @@ export function toSearchOptions(
         city: entry.city,
         flexibility: flagFlexibility ?? entry.flexibility,
         region: entry.region,
+        ...(entry.aliases && { aliases: entry.aliases }),
       }),
     );
   if (!targets || targets.length === 0) {
@@ -420,6 +588,11 @@ export function toSearchOptions(
       config.keywords.flatMap((k) => (k.lane ? [[k.role, k.lane]] : [])),
     ),
     targets,
-    govmil: (flags.clearance ?? false) || (config.govmil ?? false),
+    filter: {
+      excludeClearance: flags.includeClearance
+        ? false
+        : (flags.excludeClearance ?? config.clearance === "exclude"),
+      excludeTerms: config.excludeTerms ?? [],
+    },
   };
 }

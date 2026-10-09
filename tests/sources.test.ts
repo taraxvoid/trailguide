@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { createAdzunaSource } from "../src/sources/adzuna.ts";
 import { createAshbySource } from "../src/sources/ashby.ts";
+import type { Board } from "../src/sources/boards.ts";
 import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
 import { createJobApsSource } from "../src/sources/jobaps.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
@@ -20,6 +21,12 @@ import remotiveFixture from "./fixtures/remotive-search.json";
 import weworkremotelyFixture from "./fixtures/weworkremotely-programming.rss" with {
   type: "text",
 };
+
+// No ashby board ships by default; the fixture stands in for these two.
+const ASHBY_BOARDS: Board[] = [
+  { company: "One", ats: "ashby", slug: "one" },
+  { company: "Two", ats: "ashby", slug: "two" },
+];
 
 const originalFetch = globalThis.fetch;
 
@@ -94,10 +101,10 @@ describe("ashby source", () => {
       async () => new Response(JSON.stringify(ashbyFixture)),
     ) as unknown as typeof fetch;
 
-    const source = createAshbySource();
+    const source = createAshbySource(ASHBY_BOARDS);
     const jobs = await source.search({ role: "engineer" });
 
-    expect(jobs).toHaveLength(companiesForAts("ashby").length);
+    expect(jobs).toHaveLength(ASHBY_BOARDS.length);
     expect(jobs[0]?.title).toBe("Senior Software Engineer, Infrastructure");
     expect(jobs[0]?.source).toBe("ashby");
     expect(jobs[0]?.remoteType).toBe("remote");
@@ -516,7 +523,7 @@ describe("source scoping", () => {
     const all = [
       createGreenhouseSource(),
       createLeverSource(),
-      createAshbySource(),
+      createAshbySource(ASHBY_BOARDS),
       createRemoteOkSource(),
       createRemotiveSource(),
       createWeWorkRemotelySource(),
@@ -536,7 +543,9 @@ describe("source scoping", () => {
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify(ashbyFixture)),
     ) as unknown as typeof fetch;
-    const jobs = await createAshbySource().search({ role: "engineer" });
+    const jobs = await createAshbySource(ASHBY_BOARDS).search({
+      role: "engineer",
+    });
     expect(jobs[0]?.location).toBe("New York, NY (HQ)");
     expect(jobs[0]?.otherLocations).toEqual(["Remote (US)"]);
   });

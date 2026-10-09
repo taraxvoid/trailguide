@@ -1,3 +1,4 @@
+import { httpFetch } from "../http.ts";
 import { matchesLocation } from "./location.ts";
 import { toArray } from "./params.ts";
 import type { NormalizedJob, SearchParams, Source } from "./types.ts";
@@ -88,7 +89,7 @@ export function createJobApsSource(): Source {
       const results: NormalizedJob[] = [];
 
       for (const agency of AGENCIES) {
-        const res = await fetch(
+        const res = await httpFetch(
           `https://www.jobapscloud.com/${agency.slug}/rss.asp`,
         );
         if (!res.ok) {

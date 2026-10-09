@@ -1,7 +1,7 @@
 {
   "name": "igor",
   "version": "0.1.0",
-  "description": "A minion to find software engineering jobs",
+  "description": "Job search and resume tailoring that only rearranges what you've already written",
   "type": "module",
   "keywords": [],
   "private": true,

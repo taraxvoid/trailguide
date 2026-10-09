@@ -50,10 +50,10 @@ describe("matchesLocation", () => {
     expect(matchesLocation("Hybrid - Pleasanton", "East Bay")).toBe(true);
   });
 
-  it("expands metro aliases for known metros", () => {
-    expect(matchesLocation("La Vista, NE", "omaha")).toBe(true);
-    expect(matchesLocation("Elkhorn, NE", "omaha")).toBe(true);
-    expect(matchesLocation("Ralston, NE", "omaha")).toBe(true);
+  it("matches a state spelled out when the query has a state code", () => {
+    expect(matchesLocation("Omaha, Nebraska", "Omaha, NE")).toBe(true);
+    expect(matchesLocation("Austin, Texas", "Austin, TX")).toBe(true);
+    expect(matchesLocation("Austin, Minnesota", "Austin, TX")).toBe(false);
   });
 
   it("does not expand aliases for unrelated queries", () => {
@@ -64,7 +64,7 @@ describe("matchesLocation", () => {
     expect(
       matchesLocation("San Francisco, CA", ["omaha", "san francisco"]),
     ).toBe(true);
-    expect(matchesLocation("La Vista, NE", ["chicago", "omaha"])).toBe(true);
+    expect(matchesLocation("La Vista, NE", ["chicago", "la vista"])).toBe(true);
     expect(matchesLocation("Austin, TX", ["omaha", "chicago"])).toBe(false);
   });
 });
@@ -156,10 +156,12 @@ describe("remoteEligible", () => {
     expect(us("Houston")).toBe(false);
   });
 
-  it("lets Omaha's metro alias and a region list add remote eligibility", () => {
-    expect(remoteEligible("Remote - Nebraska", "Omaha")).toBe(true);
-    expect(remoteEligible("Remote - Nebraska", "Lincoln")).toBe(false);
-    expect(remoteEligible("Remote - Nebraska", "Lincoln", ["Nebraska"])).toBe(
+  it("lets a region list and aliases add remote eligibility", () => {
+    expect(remoteEligible("Remote - Nebraska", "Omaha")).toBe(false);
+    expect(remoteEligible("Remote - Nebraska", "Omaha", ["Nebraska"])).toBe(
+      true,
+    );
+    expect(remoteEligible("Remote - La Vista", "Omaha", [], ["La Vista"])).toBe(
       true,
     );
     expect(remoteEligible("Remote - TX", "Austin", ["Texas", "TX"])).toBe(true);
@@ -224,7 +226,8 @@ describe("matches", () => {
   const omaha = (flexibility: Flexibility): SearchTarget => ({
     city: "Omaha",
     flexibility,
-    region: [],
+    region: ["Nebraska"],
+    aliases: ["La Vista", "Elkhorn", "Ralston"],
   });
 
   const table: [RemoteType, Flexibility, boolean][] = [
@@ -273,6 +276,23 @@ describe("matches", () => {
     ).toBe(true);
     expect(
       matches({ location: "Nebraska", remoteType: "onsite" }, lincoln),
+    ).toBe(false);
+  });
+
+  it("counts a configured alias as the city, onsite and remote", () => {
+    const target = omaha("any");
+    expect(
+      matches({ location: "La Vista, NE", remoteType: "onsite" }, target),
+    ).toBe(true);
+    expect(
+      matches({ location: "Remote - Elkhorn", remoteType: "remote" }, target),
+    ).toBe(true);
+    expect(
+      matches({ location: "Lincoln, NE", remoteType: "onsite" }, target),
+    ).toBe(false);
+    const bare: SearchTarget = { ...target, aliases: undefined };
+    expect(
+      matches({ location: "La Vista, NE", remoteType: "onsite" }, bare),
     ).toBe(false);
   });
 
@@ -355,19 +375,20 @@ describe("matches", () => {
 });
 
 describe("city normalization for aliases", () => {
-  it("treats 'Omaha, NE' as the Omaha metro in person", () => {
-    expect(matchesLocation("La Vista, NE", "Omaha, NE")).toBe(true);
+  it("treats 'Omaha, NE' as Omaha in person", () => {
     expect(matchesLocation("Omaha, Nebraska", "Omaha, NE")).toBe(true);
     expect(matchesLocation("Omaha, NE", "Omaha, NE")).toBe(true);
   });
 
   it("makes 'Remote - Nebraska' eligible for 'Omaha, NE' but only remotely", () => {
-    expect(remoteEligible("Remote - Nebraska", "Omaha, NE")).toBe(true);
+    expect(remoteEligible("Remote - Nebraska", "Omaha, NE", ["Nebraska"])).toBe(
+      true,
+    );
     expect(matchesLocation("Remote - Nebraska", "Omaha, NE")).toBe(false);
     const target: SearchTarget = {
       city: "Omaha, NE",
       flexibility: "in-person",
-      region: [],
+      region: ["Nebraska"],
     };
     expect(
       matches({ location: "Remote - Nebraska", remoteType: "onsite" }, target),

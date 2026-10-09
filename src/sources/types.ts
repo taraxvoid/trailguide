@@ -32,6 +32,8 @@ export interface SearchParams {
   location?: string | string[];
   remote?: boolean;
   onsite?: boolean;
+  /** Reports a problem that skipped part of the search (one board, say). */
+  warn?: (message: string) => void;
 }
 
 export interface Source {

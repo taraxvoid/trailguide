@@ -22,6 +22,8 @@ function job(overrides: Partial<NormalizedJob>): NormalizedJob {
   };
 }
 
+const NO_FILTER = { excludeClearance: false, excludeTerms: [] };
+
 function fake(
   name: NormalizedJob["source"],
   scoped: boolean,
@@ -32,7 +34,9 @@ function fake(
     name,
     scoped,
     async search(params) {
-      calls.push(params);
+      // The runner adds `warn`; tests only care about the query.
+      const { warn: _warn, ...query } = params;
+      calls.push(query);
       return respond(params);
     },
   };
@@ -56,9 +60,14 @@ function failing(
 const OMAHA_AND_US: SearchPlan = {
   keywords: ["swe"],
   lanes: {},
-  govmil: false,
+  filter: NO_FILTER,
   targets: [
-    { city: "Omaha", flexibility: "in-person", region: [] },
+    {
+      city: "Omaha",
+      flexibility: "in-person",
+      region: [],
+      aliases: ["La Vista"],
+    },
     { city: "United States", flexibility: "remote", region: [] },
   ],
 };
@@ -173,7 +182,7 @@ describe("collectJobs filtering", () => {
     const plan: SearchPlan = {
       keywords: ["swe"],
       lanes: {},
-      govmil: false,
+      filter: NO_FILTER,
       targets: [{ city: null, flexibility: "remote", region: [] }],
     };
     const loose = fake("greenhouse", false, () => [
@@ -188,7 +197,7 @@ describe("collectJobs filtering", () => {
     expect(ids((await collectJobs(plan, [loose.source])).jobs)).toEqual(["r"]);
   });
 
-  it("dedupes, drops internships, and drops clearance jobs unless govmil", async () => {
+  it("dedupes, drops internships, and drops clearance jobs only when asked", async () => {
     const respond = () => [
       job({ sourceId: "h" }),
       job({ sourceId: "h2" }), // same company/title/location as h
@@ -199,17 +208,50 @@ describe("collectJobs filtering", () => {
         url: "https://e.com/c",
       }),
     ];
-    const off = await collectJobs(OMAHA_AND_US, [
+    const kept = await collectJobs(OMAHA_AND_US, [
       fake("greenhouse", false, respond).source,
     ]);
-    expect(off.jobs).toHaveLength(1);
-    const on = await collectJobs({ ...OMAHA_AND_US, govmil: true }, [
-      fake("greenhouse", false, respond).source,
-    ]);
-    expect(on.jobs.map((j) => j.title).sort()).toEqual([
+    expect(kept.jobs.map((j) => j.title).sort()).toEqual([
       "SWE (Security Clearance)",
       "Software Engineer",
     ]);
+    const dropped = await collectJobs(
+      {
+        ...OMAHA_AND_US,
+        filter: { excludeClearance: true, excludeTerms: [] },
+      },
+      [fake("greenhouse", false, respond).source],
+    );
+    expect(dropped.jobs.map((j) => j.title)).toEqual(["Software Engineer"]);
+  });
+
+  it("drops listings that mention a configured term, as a whole word", async () => {
+    const respond = () => [
+      job({ sourceId: "a", title: "Backend Engineer", company: "Lockheed Co" }),
+      job({
+        sourceId: "b",
+        title: "SWE",
+        description: "Onsite at Offutt AFB",
+        url: "https://e.com/b",
+      }),
+      job({
+        sourceId: "c",
+        title: "SWE II",
+        description: "We love C++ and offuttish things",
+        url: "https://e.com/c",
+      }),
+    ];
+    const result = await collectJobs(
+      {
+        ...OMAHA_AND_US,
+        filter: {
+          excludeClearance: false,
+          excludeTerms: ["lockheed", "Offutt"],
+        },
+      },
+      [fake("greenhouse", false, respond).source],
+    );
+    expect(result.jobs.map((j) => j.sourceId)).toEqual(["c"]);
   });
 });
 
@@ -266,7 +308,7 @@ describe("lanes", () => {
   const plan: SearchPlan = {
     keywords: ["Platform Engineer", "Security Engineer"],
     lanes: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
-    govmil: false,
+    filter: NO_FILTER,
     targets: [{ city: null, flexibility: "any", region: [] }],
   };
 
