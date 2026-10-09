@@ -1,6 +1,6 @@
 import { dirname } from "node:path";
 
-// Which checkout of igor is actually running. The global `igor` is usually a
+// Which checkout of trailguide is actually running. The global `trailguide` is usually a
 // `bun link` to one checkout, so running it from inside a different worktree
 // still runs the linked code - this makes that visible in the TUI.
 

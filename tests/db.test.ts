@@ -1,3 +1,4 @@
+import { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,8 +12,8 @@ import {
   listingId,
   openDb,
   setJobApplied,
-  setJobLane,
   setJobState,
+  setJobTrail,
   upsertJobs,
 } from "../src/db.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
@@ -20,7 +21,7 @@ import type { NormalizedJob } from "../src/sources/types.ts";
 let counter = 0;
 
 function freshDb() {
-  const path = `/tmp/igor-db-test-${Date.now()}-${++counter}.db`;
+  const path = `/tmp/trailguide-db-test-${Date.now()}-${++counter}.db`;
   rmSync(path, { force: true });
   return openDb(path);
 }
@@ -323,29 +324,47 @@ describe("clearJobs", () => {
 
 describe("openDb paths", () => {
   it("creates missing parent directories", () => {
-    const dir = mkdtempSync(join(tmpdir(), "igor-open-"));
-    const path = join(dir, "a", "b", "igor.db");
+    const dir = mkdtempSync(join(tmpdir(), "trailguide-open-"));
+    const path = join(dir, "a", "b", "trailguide.db");
     openDb(path).close();
     expect(existsSync(path)).toBe(true);
     rmSync(dir, { recursive: true });
   });
 });
 
-describe("lane", () => {
-  it("stores the lane from search and keeps a manual change", () => {
+describe("trail", () => {
+  it("stores the trail from search and keeps a manual change", () => {
     const db = freshDb();
-    upsertJobs(db, [mockJob({ lane: "platform" })]);
-    expect(getJob(db, "jsearch:1")?.lane).toBe("platform");
+    upsertJobs(db, [mockJob({ trail: "platform" })]);
+    expect(getJob(db, "jsearch:1")?.trail).toBe("platform");
 
-    expect(setJobLane(db, "jsearch:1", "secplat")).toBe(true);
-    upsertJobs(db, [mockJob({ lane: "platform" })]);
-    expect(getJob(db, "jsearch:1")?.lane).toBe("secplat");
+    expect(setJobTrail(db, "jsearch:1", "secplat")).toBe(true);
+    upsertJobs(db, [mockJob({ trail: "platform" })]);
+    expect(getJob(db, "jsearch:1")?.trail).toBe("secplat");
 
-    setJobLane(db, "jsearch:1", null);
-    expect(getJob(db, "jsearch:1")?.lane).toBeUndefined();
+    setJobTrail(db, "jsearch:1", null);
+    expect(getJob(db, "jsearch:1")?.trail).toBeUndefined();
   });
 
   it("returns false for an unknown listing", () => {
-    expect(setJobLane(freshDb(), "jsearch:nope", "x")).toBe(false);
+    expect(setJobTrail(freshDb(), "jsearch:nope", "x")).toBe(false);
+  });
+});
+
+describe("openDb legacy lane column", () => {
+  it("renames jobs.lane to jobs.trail and keeps the data", () => {
+    const path = `/tmp/trailguide-db-test-legacy-${Date.now()}.db`;
+    rmSync(path, { force: true });
+    const legacy = new Database(path);
+    legacy.run(
+      "CREATE TABLE jobs (listing_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, source TEXT NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT, remote_type TEXT, url TEXT NOT NULL, posted_at TEXT, description TEXT, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, last_checked_at TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active', lane TEXT)",
+    );
+    legacy.run(
+      "INSERT INTO jobs (listing_id, source_id, source, title, company, url, first_seen_at, last_seen_at, last_checked_at, lane) VALUES ('a', '1', 's', 't', 'c', 'u', 'x', 'x', 'x', 'secplat')",
+    );
+    legacy.close();
+    const db = openDb(path);
+    expect(getJob(db, "a")?.trail).toBe("secplat");
+    rmSync(path, { force: true });
   });
 });

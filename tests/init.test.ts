@@ -18,8 +18,8 @@ let root: string;
 let env: Record<string, string>;
 let logs: string[];
 
-const configPath = () => join(root, "cfg", "igor", "config.toml");
-const dbPath = () => join(root, "data", "igor", "igor.db");
+const configPath = () => join(root, "cfg", "trailguide", "config.toml");
+const dbPath = () => join(root, "data", "trailguide", "trailguide.db");
 const readConfig = () =>
   parseConfig(readFileSync(configPath(), "utf8"), configPath());
 
@@ -43,7 +43,7 @@ function existingConfig(text = "# mine\n") {
 }
 
 beforeEach(() => {
-  root = mkdtempSync(join(tmpdir(), "igor-init-"));
+  root = mkdtempSync(join(tmpdir(), "trailguide-init-"));
   env = {
     XDG_CONFIG_HOME: join(root, "cfg"),
     XDG_DATA_HOME: join(root, "data"),
@@ -123,7 +123,7 @@ describe("runInit prompts", () => {
     const text = logs.join("\n");
     expect(text).toContain(configPath());
     expect(text).toContain(dbPath());
-    expect(text).toContain("igor tui");
+    expect(text).toContain("trailguide tui");
     expect(text).toContain("Ctrl+S");
   });
 });
@@ -222,8 +222,8 @@ describe("runInit never destroys anything", () => {
     expect(readConfig().locations?.[0]?.city).toBe("Omaha");
   });
 
-  it("ignores a local igor.toml when choosing the database", async () => {
-    writeFileSync(join(root, "igor.toml"), '[db]\npath = "sandbox.db"\n');
+  it("ignores a local trailguide.toml when choosing the database", async () => {
+    writeFileSync(join(root, "trailguide.toml"), '[db]\npath = "sandbox.db"\n');
     await runInit(flags, scripted([]));
     expect(existsSync(dbPath())).toBe(true);
     expect(existsSync(join(root, "sandbox.db"))).toBe(false);

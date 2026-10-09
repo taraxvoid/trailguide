@@ -24,7 +24,7 @@ import { renderResumePdf } from "./typst.ts";
 // Orchestrates the "tailor this resume to this job" action: find the
 // master resume, ask a local model how to reorder/select its bullets for
 // this job, apply that (sanitized) plan, and render both a tailored .md and
-// .pdf. Shared by the CLI (`igor tailor`) and the TUI's ctrl+T so both get
+// .pdf. Shared by the CLI (`trailguide tailor`) and the TUI's T key so both get
 // the same sanity checks and the same graceful fallbacks.
 //
 // The tailored .md is recorded against the listing and becomes the
@@ -38,10 +38,10 @@ import { renderResumePdf } from "./typst.ts";
 // which situations do that.
 
 export interface TailorOptions {
-  /** Resume masters (default ~/.config/igor/resumes; see resolveResumeDir). */
+  /** Resume masters (default ~/.config/trailguide/resumes; see resolveResumeDir). */
   resumeDir?: string;
   resumePath?: string;
-  /** Tailored output (default ~/.local/share/igor/resumes). */
+  /** Tailored output (default ~/.local/share/trailguide/resumes). */
   outputDir?: string;
   ollamaHost?: string;
   ollamaModel?: string;
@@ -69,26 +69,26 @@ function slugify(value: string): string {
   );
 }
 
-/** Used for jobs without a lane when the resume dir holds several masters. */
+/** Used for jobs without a trail when the resume dir holds several masters. */
 const DEFAULT_RESUME = "default.md";
 
 /**
  * Finds the resume master for a job. There's deliberately no hardcoded
  * personal filename in this codebase. In order: an explicit path, the job's
- * lane (`<dir>/<lane>.md`, which must exist), `<dir>/default.md`, or the one
+ * trail (`<dir>/<trail>.md`, which must exist), `<dir>/default.md`, or the one
  * `.md` in the dir.
  */
 async function resolveResumePath(
   options: TailorOptions,
-  job: Pick<StoredJob, "lane">,
+  job: Pick<StoredJob, "trail">,
 ): Promise<string> {
   if (options.resumePath) return options.resumePath;
   const dir = options.resumeDir ?? globalResumeDir();
-  if (job.lane) {
-    const path = join(dir, `${job.lane}.md`);
+  if (job.trail) {
+    const path = join(dir, `${job.trail}.md`);
     if (!existsSync(path)) {
       throw new Error(
-        `no resume for lane "${job.lane}": expected ${path} (or pass --resume <path>)`,
+        `no resume for trail "${job.trail}": expected ${path} (or pass --resume <path>)`,
       );
     }
     return path;
@@ -110,7 +110,7 @@ async function resolveResumePath(
   }
   if (candidates.length > 1) {
     throw new Error(
-      `multiple resumes in ${dir} (${candidates.join(", ")}) and this job has no lane: add ${DEFAULT_RESUME}, set a lane, or pass --resume <path>.`,
+      `multiple resumes in ${dir} (${candidates.join(", ")}) and this job has no trail: add ${DEFAULT_RESUME}, set a trail, or pass --resume <path>.`,
     );
   }
   return join(dir, candidates[0] as string);
@@ -294,7 +294,7 @@ function collapse(markdown: string): string {
 }
 
 /**
- * The ctrl+T / `igor tailor` action: regenerates the PDF from the job's
+ * The T key / `trailguide tailor` action: regenerates the PDF from the job's
  * tailored .md if one exists, otherwise tailors a new one from the master.
  * A tracked .md that has since been deleted counts as not existing.
  */

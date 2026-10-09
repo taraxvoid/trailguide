@@ -1,4 +1,4 @@
 self-hosted-runner:
-  # Self-hosted runners provisioned via ~/projects/flock (the igor runner image).
+  # Self-hosted runners provisioned via ~/projects/flock (the trailguide runner image).
   labels:
-    - igor
+    - trailguide

@@ -36,15 +36,15 @@ export const BOARD_SYSTEMS: readonly Board["ats"][] = [
 
 export interface KeywordEntry {
   role: string;
-  /** Resume lane: jobs found by this keyword tailor from `<resume dir>/<lane>.md`. */
-  lane?: string;
+  /** Resume trail: jobs found by this keyword tailor from `<resume dir>/<trail>.md`. */
+  trail?: string;
 }
 
-/** Lane names double as file names, so they stay simple. */
-export const LANE_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
+/** Trail names double as file names, so they stay simple. */
+export const TRAIL_PATTERN = /^[a-z0-9][a-z0-9_-]*$/;
 
 /** What one config file (or a merge of several) says; everything optional. */
-export interface IgorConfig {
+export interface TrailguideConfig {
   /** Drop listings that require a security clearance (default: keep them). */
   clearance?: "include" | "exclude";
   /** Extra terms: a listing mentioning any of them is dropped. */
@@ -150,7 +150,7 @@ function parseStrings(
   return (list as string[]).map((item) => item.trim()).filter(Boolean);
 }
 
-export function parseConfig(text: string, file: string): IgorConfig {
+export function parseConfig(text: string, file: string): TrailguideConfig {
   const raw = parseToml(text, file);
   if (raw.job !== undefined) {
     throw new ConfigError(
@@ -166,7 +166,7 @@ export function parseConfig(text: string, file: string): IgorConfig {
     "board",
     "sources",
   ]);
-  const config: IgorConfig = {};
+  const config: TrailguideConfig = {};
 
   if (raw.filter !== undefined) {
     if (!isTable(raw.filter))
@@ -295,16 +295,16 @@ export function parseConfig(text: string, file: string): IgorConfig {
     config.keywords = tableArray(file, "keywords", raw.keywords).map(
       (entry, i) => {
         const where = `[[keywords]] entry ${i + 1}`;
-        rejectUnknown(file, where, entry, ["role", "lane"]);
+        rejectUnknown(file, where, entry, ["role", "trail"]);
         const role = requireString(file, where, entry, "role");
-        if (entry.lane === undefined) return { role };
-        const lane = requireString(file, where, entry, "lane");
-        if (!LANE_PATTERN.test(lane)) {
+        if (entry.trail === undefined) return { role };
+        const trail = requireString(file, where, entry, "trail");
+        if (!TRAIL_PATTERN.test(trail)) {
           throw new ConfigError(
-            `${file}: ${where} lane ${JSON.stringify(lane)} must be lowercase letters, digits, - or _ (it names <lane>.md)`,
+            `${file}: ${where} trail ${JSON.stringify(trail)} must be lowercase letters, digits, - or _ (it names <trail>.md)`,
           );
         }
-        return { role, lane };
+        return { role, trail };
       },
     );
   }
@@ -314,10 +314,10 @@ export function parseConfig(text: string, file: string): IgorConfig {
 
 /** Scalars override per key; lists are replaced wholesale, never joined. */
 export function mergeConfigs(
-  base: IgorConfig,
-  override: IgorConfig,
-): IgorConfig {
-  const merged: IgorConfig = { ...base };
+  base: TrailguideConfig,
+  override: TrailguideConfig,
+): TrailguideConfig {
+  const merged: TrailguideConfig = { ...base };
   if (override.clearance !== undefined) merged.clearance = override.clearance;
   if (override.excludeTerms !== undefined) {
     merged.excludeTerms = override.excludeTerms;
@@ -333,7 +333,7 @@ export function mergeConfigs(
   return merged;
 }
 
-export function formatConfig(config: IgorConfig): string {
+export function formatConfig(config: TrailguideConfig): string {
   const doc: Record<string, unknown> = {};
   if (config.clearance !== undefined || config.excludeTerms !== undefined) {
     doc.filter = {
@@ -356,8 +356,8 @@ export function formatConfig(config: IgorConfig): string {
     );
   }
   if (config.keywords) {
-    doc.keywords = config.keywords.map(({ role, lane }) =>
-      lane ? { role, lane } : { role },
+    doc.keywords = config.keywords.map(({ role, trail }) =>
+      trail ? { role, trail } : { role },
     );
   }
   if (config.builtinBoards !== undefined) {
@@ -374,7 +374,7 @@ export function formatConfig(config: IgorConfig): string {
   return text.endsWith("\n") || text === "" ? text : `${text}\n`;
 }
 
-export function writeConfig(path: string, config: IgorConfig): void {
+export function writeConfig(path: string, config: TrailguideConfig): void {
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, formatConfig(config));
 }
@@ -387,12 +387,12 @@ export interface ConfigContext {
 }
 
 export interface LoadedConfig {
-  config: IgorConfig;
+  config: TrailguideConfig;
   /** Files that were read, lowest precedence first. */
   files: string[];
 }
 
-function readConfigFile(path: string): IgorConfig {
+function readConfigFile(path: string): TrailguideConfig {
   return parseConfig(readFileSync(path, "utf8"), path);
 }
 
@@ -401,7 +401,7 @@ export function loadConfig(ctx: ConfigContext = {}): LoadedConfig {
   const cwd = ctx.cwd ?? process.cwd();
   const env = ctx.env ?? process.env;
 
-  const explicit = ctx.config ?? (env.IGOR_CONFIG || undefined);
+  const explicit = ctx.config ?? (env.TRAILGUIDE_CONFIG || undefined);
   if (explicit) {
     const path = resolve(cwd, explicit);
     if (!existsSync(path)) {
@@ -410,7 +410,7 @@ export function loadConfig(ctx: ConfigContext = {}): LoadedConfig {
     return { config: readConfigFile(path), files: [path] };
   }
 
-  let config: IgorConfig = {};
+  let config: TrailguideConfig = {};
   const files: string[] = [];
   for (const path of [globalConfigPath(env), localConfigPath(cwd)]) {
     if (!existsSync(path)) continue;
@@ -421,7 +421,7 @@ export function loadConfig(ctx: ConfigContext = {}): LoadedConfig {
 }
 
 /**
- * The shared DB resolver for every command: --db, then IGOR_DB, then
+ * The shared DB resolver for every command: --db, then TRAILGUIDE_DB, then
  * `[db] path` from the config chain, then the global default. Always
  * absolute, so it can be handed to child processes as is.
  */
@@ -432,7 +432,7 @@ export function resolveDbPath(
   const env = ctx.env ?? process.env;
   // Higher-precedence sources decide without reading (or failing on) config.
   if (ctx.db) return resolve(cwd, ctx.db);
-  if (env.IGOR_DB) return resolve(cwd, env.IGOR_DB);
+  if (env.TRAILGUIDE_DB) return resolve(cwd, env.TRAILGUIDE_DB);
   return loadConfig(ctx).config.db ?? globalDbPath(env);
 }
 
@@ -441,7 +441,7 @@ export function resolveDbPath(
  * `[sources] builtin_boards = false`) plus the config's `[[board]]` entries,
  * a config entry replacing a built-in one for the same company board.
  */
-export function resolveBoards(config: IgorConfig): Board[] {
+export function resolveBoards(config: TrailguideConfig): Board[] {
   const key = (b: Board) => `${b.ats}:${b.slug}`;
   const boards = new Map<string, Board>();
   if (config.builtinBoards !== false) {
@@ -451,7 +451,7 @@ export function resolveBoards(config: IgorConfig): Board[] {
   return [...boards.values()];
 }
 
-/** Where resume masters live: `[resume] dir`, else ~/.config/igor/resumes. */
+/** Where resume masters live: `[resume] dir`, else ~/.config/trailguide/resumes. */
 export function resolveResumeDir(ctx: ConfigContext = {}): string {
   const env = ctx.env ?? process.env;
   return loadConfig(ctx).config.resumeDir ?? globalResumeDir(env);
@@ -463,7 +463,7 @@ export function describeConfig(ctx: ConfigContext = {}): string {
   const filesText =
     files.length > 0
       ? `config files (later entries override earlier):\n${files.map((f) => `  ${f}`).join("\n")}`
-      : `config files: none (run "igor init" to create ${globalConfigPath(env)})`;
+      : `config files: none (run "trailguide init" to create ${globalConfigPath(env)})`;
   const boards = resolveBoards(config);
   const extra = config.boards?.length ?? 0;
   const boardsText = `company boards: ${boards.length} (${
@@ -489,8 +489,8 @@ export interface SearchTarget {
 /** Every keyword is searched in every target. */
 export interface SearchPlan {
   keywords: string[];
-  /** Keyword → resume lane, for the keywords that name one. */
-  lanes: Record<string, string>;
+  /** Keyword → resume trail, for the keywords that name one. */
+  trails: Record<string, string>;
   targets: SearchTarget[];
   filter: SearchFilter;
 }
@@ -500,7 +500,7 @@ export interface SearchFilter {
   excludeTerms: string[];
 }
 
-/** The `igor search` flags that shape a search. */
+/** The `trailguide search` flags that shape a search. */
 export interface SearchFlags {
   role?: string[];
   location?: string[];
@@ -544,7 +544,7 @@ export function toSearchOptions(
   if (flags.role && flags.role.length > 0) {
     return {
       keywords: flags.role,
-      lanes: {},
+      trails: {},
       targets: flagTargets ?? [
         { city: null, flexibility: flagFlexibility ?? "any", region: [] },
       ],
@@ -558,7 +558,7 @@ export function toSearchOptions(
   const { config, files } = load();
   if (files.length === 0) {
     throw new ConfigError(
-      'no config file found. Run "igor init" to create one, or pass --role.',
+      'no config file found. Run "trailguide init" to create one, or pass --role.',
     );
   }
   const where = files.join(", ");
@@ -584,8 +584,8 @@ export function toSearchOptions(
   }
   return {
     keywords: config.keywords.map((k) => k.role),
-    lanes: Object.fromEntries(
-      config.keywords.flatMap((k) => (k.lane ? [[k.role, k.lane]] : [])),
+    trails: Object.fromEntries(
+      config.keywords.flatMap((k) => (k.trail ? [[k.role, k.trail]] : [])),
     ),
     targets,
     filter: {

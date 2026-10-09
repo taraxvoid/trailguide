@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "igor",
+      "name": "trailguide",
       "dependencies": {
         "commander": "^15.0.0",
         "ink": "^7.1.1",

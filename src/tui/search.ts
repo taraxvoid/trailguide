@@ -9,7 +9,7 @@ import {
   SEARCH_RUN_KEY,
   startRun,
 } from "../db.ts";
-import { IGOR_DISABLE_FLAG } from "../igorArt.ts";
+import { TRAILGUIDE_DISABLE_FLAG } from "../trailguideArt.ts";
 
 export interface SpawnRequest {
   cmd: string[];
@@ -33,13 +33,13 @@ const defaultSpawn: SpawnFn = (request) =>
 
 /** The detached search's stdout and stderr, next to the db. */
 export function searchLogPath(dbPath: string): string {
-  return join(dirname(dbPath), "igor-search.log");
+  return join(dirname(dbPath), "trailguide-search.log");
 }
 
 export interface BackgroundSearchOptions {
   db: Database;
   dbPath: string;
-  /** Only an explicit config (--config or IGOR_CONFIG) is forwarded. */
+  /** Only an explicit config (--config or TRAILGUIDE_CONFIG) is forwarded. */
   configPath?: string;
   cwd?: string;
   spawn?: SpawnFn;
@@ -50,7 +50,7 @@ function errorText(error: unknown): string {
 }
 
 /**
- * Starts a detached `igor search` that outlives the TUI. The TUI only
+ * Starts a detached `trailguide search` that outlives the TUI. The TUI only
  * resolves paths; the child reads the search settings and reports any
  * problem through its run row. Never throws: failures come back as a
  * refusal, with no orphaned child and no claimed run row.
@@ -75,13 +75,13 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
     const log = openSync(logPath, "w");
     let child: SpawnedProcess;
     try {
-      // IGOR_NO_DELEGATE keeps the recorded pid the real worker rather than a
+      // TRAILGUIDE_NO_DELEGATE keeps the recorded pid the real worker rather than a
       // checkout-delegating wrapper.
       child = spawn({
         cmd: [
           process.execPath,
           `${import.meta.dir}/../cli.ts`,
-          IGOR_DISABLE_FLAG,
+          TRAILGUIDE_DISABLE_FLAG,
           "search",
           "--db",
           dbPath,

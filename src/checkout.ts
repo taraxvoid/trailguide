@@ -1,29 +1,29 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-// The global `igor` is a `bun link` to one checkout, which would otherwise
+// The global `trailguide` is a `bun link` to one checkout, which would otherwise
 // run that checkout's code even from inside a different branch's worktree.
-// Instead, when the current directory is inside some other igor checkout,
+// Instead, when the current directory is inside some other trailguide checkout,
 // hand off to that checkout's CLI; anywhere else, the linked one runs.
 
 /** Set on the handed-off process (and settable by hand) to stop delegating. */
-export const NO_DELEGATE_ENV = "IGOR_NO_DELEGATE";
+export const NO_DELEGATE_ENV = "TRAILGUIDE_NO_DELEGATE";
 
-function isIgorCheckout(dir: string): boolean {
+function isTrailguideCheckout(dir: string): boolean {
   if (!existsSync(join(dir, "src", "cli.ts"))) return false;
   try {
     const pkg = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-    return pkg.name === "igor";
+    return pkg.name === "trailguide";
   } catch {
     return false;
   }
 }
 
-/** The nearest igor checkout containing `startDir`, if any. */
+/** The nearest trailguide checkout containing `startDir`, if any. */
 export function findCheckout(startDir: string): string | null {
   let dir = resolve(startDir);
   while (true) {
-    if (isIgorCheckout(dir)) return dir;
+    if (isTrailguideCheckout(dir)) return dir;
     const parent = dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -32,7 +32,7 @@ export function findCheckout(startDir: string): string | null {
 
 /**
  * The `cli.ts` to hand off to, or null to keep running this one: when the
- * current directory is inside an igor checkout other than `selfCheckout`.
+ * current directory is inside an trailguide checkout other than `selfCheckout`.
  */
 export function delegateTarget(
   cwd: string,

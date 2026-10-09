@@ -1,6 +1,6 @@
 import pkg from "../package.json" with { type: "json" };
 
-export const USER_AGENT = `igor/${pkg.version} (+https://github.com/taraxvoid/igor)`;
+export const USER_AGENT = `trailguide/${pkg.version} (+https://github.com/taraxvoid/trailguide)`;
 
 /** Per request; a hung job board must not stall a whole search. */
 const TIMEOUT_MS = 20_000;
@@ -10,7 +10,7 @@ export type HttpInit = Omit<RequestInit, "headers"> & {
 };
 
 /**
- * `fetch` for third-party job boards: identifies igor in the User-Agent
+ * `fetch` for third-party job boards: identifies trailguide in the User-Agent
  * (callers may override it) and gives up after 20 seconds.
  */
 export function httpFetch(

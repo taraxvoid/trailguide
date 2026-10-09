@@ -207,7 +207,7 @@ export async function runInit(
     keywords: roles.map((role) => ({ role })),
   });
 
-  // Only the global config just written: a local ./igor.toml (a sandbox, say)
+  // Only the global config just written: a local ./trailguide.toml (a sandbox, say)
   // must not redirect or break init's own database.
   const dbPath = resolveDbPath({
     db: options.db,
@@ -222,10 +222,10 @@ export async function runInit(
   io.log(`Wrote ${configPath}`);
   io.log(`${existed ? "Using existing" : "Created"} database ${dbPath}`);
   io.log(
-    `Company boards: ${resolveBoards({}).length} built in. Add your own with [[board]] entries (see igor.example.toml).`,
+    `Company boards: ${resolveBoards({}).length} built in. Add your own with [[board]] entries (see trailguide.example.toml).`,
   );
   io.log(
-    'Next: run "igor tui" and press Ctrl+S to search, or run "igor search".',
+    'Next: run "trailguide tui" and press Ctrl+S to search, or run "trailguide search".',
   );
   return true;
 }

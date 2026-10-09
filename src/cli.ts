@@ -7,11 +7,11 @@ import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
   describeConfig,
-  LANE_PATTERN,
   loadConfig,
   resolveBoards,
   resolveDbPath,
   resolveResumeDir,
+  TRAIL_PATTERN,
   toSearchOptions,
 } from "./config.ts";
 import {
@@ -33,14 +33,13 @@ import {
   openDb,
   SEARCH_RUN_KEY,
   type StoredJob,
-  setJobLane,
   setJobState,
+  setJobTrail,
   startRun,
   startTailorRun,
   upsertJobs,
 } from "./db.ts";
 import { httpFetch } from "./http.ts";
-import { displayIgor, IGOR_DISABLE_FLAG, shouldShowIgor } from "./igorArt.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
 import type { Env } from "./paths.ts";
@@ -65,6 +64,11 @@ import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { createWorkdaySource } from "./sources/workday.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
+import {
+  displayTrailguide,
+  shouldShowTrailguide,
+  TRAILGUIDE_DISABLE_FLAG,
+} from "./trailguideArt.ts";
 import { runTui } from "./tui/index.ts";
 
 // Re-exported so existing importers (tests/cli.test.ts) keep working.
@@ -303,21 +307,21 @@ export async function refreshListings(db: Database): Promise<{
   return { checked, skipped, activated, archived };
 }
 
-export interface LaneCliOptions {
+export interface TrailCliOptions {
   listingId: string;
-  lane?: string;
+  trail?: string;
   clear?: boolean;
   db?: string;
   config?: string;
 }
 
-export function runLane(options: LaneCliOptions): void {
-  if (options.lane && options.clear) {
-    throw new ConfigError("pass a lane or --clear, not both");
+export function runTrail(options: TrailCliOptions): void {
+  if (options.trail && options.clear) {
+    throw new ConfigError("pass a trail or --clear, not both");
   }
-  if (options.lane && !LANE_PATTERN.test(options.lane)) {
+  if (options.trail && !TRAIL_PATTERN.test(options.trail)) {
     throw new ConfigError(
-      `lane ${JSON.stringify(options.lane)} must be lowercase letters, digits, - or _`,
+      `trail ${JSON.stringify(options.trail)} must be lowercase letters, digits, - or _`,
     );
   }
   const db = openDb(resolveDbPath({ db: options.db, config: options.config }));
@@ -328,16 +332,16 @@ export function runLane(options: LaneCliOptions): void {
       process.exitCode = 1;
       return;
     }
-    if (!options.lane && !options.clear) {
-      console.log(job.lane ?? "(no lane)");
+    if (!options.trail && !options.clear) {
+      console.log(job.trail ?? "(no trail)");
       return;
     }
-    const lane = options.clear ? null : (options.lane ?? null);
-    setJobLane(db, options.listingId, lane);
+    const trail = options.clear ? null : (options.trail ?? null);
+    setJobTrail(db, options.listingId, trail);
     console.log(
-      lane
-        ? `${options.listingId}: lane ${lane}`
-        : `${options.listingId}: lane cleared`,
+      trail
+        ? `${options.listingId}: trail ${trail}`
+        : `${options.listingId}: trail cleared`,
     );
   } finally {
     db.close();
@@ -473,9 +477,9 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
 }
 
 const DB_HELP =
-  "path to sqlite db (default: [db] path from the config, else the global db; see `igor config`)";
+  "path to sqlite db (default: [db] path from the config, else the global db; see `trailguide config`)";
 const CONFIG_HELP =
-  "config file to use instead of the global config plus ./igor.toml";
+  "config file to use instead of the global config plus ./trailguide.toml";
 
 /** Commander reducer for repeatable options. */
 function collect(value: string, previous: string[] = []): string[] {
@@ -491,12 +495,15 @@ export function createProgram(
   const program = new Command();
 
   program
-    .name("igor")
+    .name("trailguide")
     .description(
       "Job search and resume tailoring that only rearranges what you've already written",
     )
     .version(pkg.version)
-    .option(IGOR_DISABLE_FLAG, "Hide the banner shown by init and --version");
+    .option(
+      TRAILGUIDE_DISABLE_FLAG,
+      "Hide the banner shown by init and --version",
+    );
 
   program
     .command("search")
@@ -536,7 +543,8 @@ export function createProgram(
     .option("--config <path>", CONFIG_HELP)
     .action(async (options: { db?: string; config?: string }) => {
       // The TUI resolves paths only; the spawned search reads the settings.
-      const config = options.config ?? (process.env.IGOR_CONFIG || undefined);
+      const config =
+        options.config ?? (process.env.TRAILGUIDE_CONFIG || undefined);
       await runTui({
         db: resolveDbPath({ db: options.db, config }),
         config: config ? resolve(config) : undefined,
@@ -590,18 +598,18 @@ export function createProgram(
   program
     .command("tailor")
     .description(
-      "Tailor your resume (<lane>.md from the resume dir) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
+      "Tailor your resume (<trail>.md from the resume dir) to a stored job listing and render a PDF; if the job already has a tailored .md, re-render the PDF from it instead",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
     .option(
       "--resume <path>",
-      "resume master path (default: the job's <lane>.md, else default.md or the one .md in the resume dir)",
+      "resume master path (default: the job's <trail>.md, else default.md or the one .md in the resume dir)",
     )
     .option(
       "--output-dir <path>",
-      "where to write the tailored .md/.pdf (default: ~/.local/share/igor/resumes)",
+      "where to write the tailored .md/.pdf (default: ~/.local/share/trailguide/resumes)",
     )
     .option(
       "--ollama-host <host>",
@@ -634,22 +642,22 @@ export function createProgram(
     );
 
   program
-    .command("lane")
+    .command("trail")
     .description(
-      "Show a job's resume lane, set it, or clear it with --clear (tailor uses <lane>.md)",
+      "Show a job's resume trail, set it, or clear it with --clear (tailor uses <trail>.md)",
     )
     .argument("<listingId>", "listing id, e.g. greenhouse:1234 (see --json)")
-    .argument("[lane]", "lane to set")
-    .option("--clear", "remove the job's lane", false)
+    .argument("[trail]", "trail to set")
+    .option("--clear", "remove the job's trail", false)
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
     .action(
       (
         listingIdArg: string,
-        lane: string | undefined,
+        trail: string | undefined,
         options: { clear?: boolean; db?: string; config?: string },
       ) => {
-        runLane({ ...options, listingId: listingIdArg, lane });
+        runTrail({ ...options, listingId: listingIdArg, trail });
       },
     );
 
@@ -698,8 +706,8 @@ export function createProgram(
 }
 
 async function main() {
-  if (shouldShowIgor(Bun.argv)) {
-    displayIgor();
+  if (shouldShowTrailguide(Bun.argv)) {
+    displayTrailguide();
   }
   await createProgram().parseAsync(Bun.argv);
 }

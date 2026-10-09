@@ -7,7 +7,7 @@ import JobBrowser from "./App.tsx";
 export interface TuiOptions {
   /** Absolute db path (from resolveDbPath). */
   db: string;
-  /** Explicit config file, forwarded to detached `igor search` children. */
+  /** Explicit config file, forwarded to detached `trailguide search` children. */
   config?: string;
 }
 
