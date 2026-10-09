@@ -41,7 +41,7 @@ const FAIL_ON = [
   // modifying/statically linking the library, not on depending on it as-is.
 ].join(";");
 
-const BIN = join(ROOT, "node_modules", ".bin", "license-checker");
+const BIN = join(ROOT, "node_modules", ".bin", "license-checker-rseidelsohn");
 
 const result = spawnSync(BIN, ["--summary", "--failOn", FAIL_ON], {
   cwd: ROOT,
