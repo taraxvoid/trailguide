@@ -14,8 +14,9 @@ remotes:
     configs:
       - lefthook/site.yml
 
+# Not `parallel: true`: it would apply to the merged hook and run the remote's
+# commands at once, and the SQLite-backed tests time out under that load.
 pre-commit:
-  parallel: true
   commands:
     biome-check:
       run: bunx @biomejs/biome check --no-errors-on-unmatched {staged_files}
