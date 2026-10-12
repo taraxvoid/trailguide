@@ -10,7 +10,7 @@
 
 remotes:
   - git_url: https://github.com/taraxvoid/voidflow
-    ref: v0.12.2 # a release tag, not a SHA; lefthook passes it to `git clone --branch`
+    ref: v0.12.3 # a release tag, not a SHA; lefthook passes it to `git clone --branch`
     configs:
       - lefthook/site.yml
 

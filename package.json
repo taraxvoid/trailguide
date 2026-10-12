@@ -24,7 +24,7 @@
     "validate": "bun run lint && bun run check && bun run test",
     "smoke-live": "bun run tests/smoke-live.ts",
     "prepare": "lefthook install || echo 'lefthook not installed (run mise install); git hooks skipped'",
-    "check:licenses": "bun scripts/check-licenses.ts",
+    "check:licenses": "check-licenses",
     "tui": "bun run src/cli.ts tui"
   },
   "engines": {
@@ -40,9 +40,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@socketsecurity/bun-security-scanner": "^1.1.3",
+    "@taraxvoid/voidflow": "^0.12.3",
     "@types/bun": "^1.1.14",
     "@types/react": "^19.3.0",
-    "license-checker-rseidelsohn": "^5.0.1",
     "typescript": "^7.0.2"
   }
 }
