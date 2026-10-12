@@ -61,21 +61,20 @@ jobs:
       - name: Install NPM packages
         run: bun install --frozen-lockfile
 
+      # actionlint comes from mise.toml via mise-action above.
       - name: Lint CI workflows
         if: steps.changes.outputs.workflows == 'true'
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/011a6d15e749bb3f2d771eed9c7aa0e7e3e10ee7/scripts/download-actionlint.bash \
-            | bash -s -- 1.7.12 "$RUNNER_TEMP"
-          "$RUNNER_TEMP/actionlint" -color
-        shell: bash
-
-      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # 4.0.0
+        run: bun run lint:actions
 
       - name: Lint
-        run: just lint
+        run: bun run lint
 
       - name: Typecheck
-        run: just typecheck
+        run: bun run check
+
+      - name: Licenses
+        if: steps.changes.outputs.lockfile == 'true' || steps.changes.outputs.scripts == 'true'
+        run: bun run check:licenses
 
       - name: Test
-        run: just test
+        run: bun run test

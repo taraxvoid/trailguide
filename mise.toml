@@ -1,3 +1,7 @@
 [tools]
 # Renders tailored resume PDFs; bump deliberately, Typst output changes between minors.
 typst = "0.15.1"
+# Git hooks (lefthook.yml) and the checks they run.
+lefthook = "2.2.1"
+gitleaks = "8.30.1"
+actionlint = "1.7.12"
