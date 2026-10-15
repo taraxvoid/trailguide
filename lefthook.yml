@@ -4,8 +4,8 @@
 # changes, and `test:push` (the full suite) on pre-push. Commands below are
 # added on top; a remote's commands can't be overridden from here.
 #
-# Tool versions are pinned in mise.toml (lefthook, gitleaks, actionlint) and
-# package.json/bun.lock (biome). Install: `mise install && bun install` (the
+# Tool versions are pinned in mise.toml (lefthook, gitleaks, jactionlint,
+# shellcheck) and package.json/bun.lock (biome). Install: `mise install && bun install` (the
 # `prepare` script runs `lefthook install`).
 
 remotes:
