@@ -14,12 +14,17 @@
     "lint": "biome check .",
     "lint:migrate": "biome migrate --write",
     "lint:fix": "biome check --write .",
+    "lint:secrets": "gitleaks git --redact --no-banner .",
+    "lint:actions": "jactionlint --color",
     "format": "biome format --write .",
-    "typecheck": "tsc --noEmit",
+    "check": "tsc --noEmit",
     "test": "bun test",
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "test:unit:precommit": "env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX bun test --path-ignore-patterns='tests/{tailor,tailorRuns,runSearch,db}.test.ts'",
+    "test:push": "env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX bun test",
+    "validate": "bun run lint && bun run check && bun run test",
     "smoke-live": "bun run tests/smoke-live.ts",
-    "check:licenses": "bun scripts/check-licenses.ts",
+    "prepare": "lefthook install || echo 'lefthook not installed (run mise install); git hooks skipped'",
+    "check:licenses": "check-licenses",
     "tui": "bun run src/cli.ts tui"
   },
   "engines": {
@@ -35,9 +40,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.15",
     "@socketsecurity/bun-security-scanner": "^1.1.3",
+    "@taraxvoid/voidflow": "^0.12.3",
     "@types/bun": "^1.1.14",
     "@types/react": "^19.3.0",
-    "license-checker-rseidelsohn": "^5.0.1",
     "typescript": "^7.0.2"
   }
 }

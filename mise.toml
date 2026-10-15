@@ -3,6 +3,14 @@
 [tools]
 bun = "1.4.2"
 just = "1.58.0"
-lefthook = "2.1.17"
 gitleaks = "8.30.1"
-actionlint = "1.7.12"
+
+# Renders tailored resume PDFs; bump deliberately, Typst output changes between minors.
+typst = "0.15.1"
+
+# Git hooks (lefthook.yml) and the checks they run.
+lefthook = "2.2.1"
+jactionlint = "2.1.0"
+
+# Used by jactionlint to check `run:` scripts.
+shellcheck = "0.11.0"

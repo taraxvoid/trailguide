@@ -1,4 +1,0 @@
-self-hosted-runner:
-  # Self-hosted runners provisioned via ~/projects/flock (the trailguide runner image).
-  labels:
-    - trailguide

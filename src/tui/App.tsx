@@ -123,7 +123,7 @@ function footerItems(
     { before: "cycle trai", key: "L" },
     { key: "Tab", after: ` → ${otherView}` },
     { key: "S", after: "earch" },
-    { key: "R", after: "efresh (auto-archives dead jobs)" },
+    { key: "R", after: "efresh (auto-archives)" },
   ];
 }
 
