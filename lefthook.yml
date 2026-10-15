@@ -1,28 +1,25 @@
-# Local git hooks. Every command below shells out to a binary already on
-# PATH — lefthook doesn't manage tool versions itself. Pin those yourself:
-#   - biome: pinned in package.json/bun.lock, run via `bunx`
-#   - gitleaks: installed locally (see `just doctor`), not version-pinned here
+# Local git hooks. The shared voidflow hook set (lefthook/site.yml) runs the
+# package.json scripts: `check` (tsc) and `test:unit:precommit` (the suite
+# minus the slow files) on pre-commit, `check:licenses` when the lockfile
+# changes, and `test:push` (the full suite) on pre-push. Commands below are
+# added on top; a remote's commands can't be overridden from here.
 #
-# Install: `mise install && lefthook install` (lefthook is pinned in mise.toml)
+# Tool versions are pinned in mise.toml (lefthook, gitleaks, actionlint) and
+# package.json/bun.lock (biome). Install: `mise install && bun install` (the
+# `prepare` script runs `lefthook install`).
 
+remotes:
+  - git_url: https://github.com/taraxvoid/voidflow
+    ref: v0.12.3 # a release tag, not a SHA; lefthook passes it to `git clone --branch`
+    configs:
+      - lefthook/site.yml
+
+# Not `parallel: true`: it would apply to the merged hook and run the remote's
+# commands at once, and the SQLite-backed tests time out under that load.
 pre-commit:
-  parallel: true
   commands:
     biome-check:
       run: bunx @biomejs/biome check --no-errors-on-unmatched {staged_files}
       glob: "*.{ts,tsx,js,json}"
-    typecheck:
-      glob: "*.{ts,tsx}"
-      run: bun run typecheck
     gitleaks:
       run: gitleaks protect --staged --redact -v --no-banner
-    licenses:
-      glob: "{package.json,bun.lock,scripts/check-licenses.ts}"
-      run: bun run check:licenses
-
-pre-push:
-  commands:
-    test:
-      # git exports GIT_DIR etc. to hooks; tests that spawn `git -C <tmpdir>`
-      # would otherwise operate on this repo (and commit into it).
-      run: env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_PREFIX bun run test

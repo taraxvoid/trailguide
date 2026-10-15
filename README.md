@@ -277,12 +277,21 @@ if you script it.
 ## Development
 
 ```bash
-just lint      # biome + gitleaks
-just typecheck # tsc --noEmit
-just test      # bun test
-just check     # lint + typecheck + test
-just smoke-live  # hits real third-party APIs; skips sources with no credentials set
+mise install          # typst, lefthook, gitleaks, actionlint (pinned in mise.toml)
+bun install           # also installs the git hooks (lefthook.yml)
+
+bun run lint          # biome
+bun run lint:secrets  # gitleaks over the git history
+bun run check         # tsc --noEmit
+bun run test          # bun test
+bun run validate      # lint + check + test
+bun run smoke-live    # hits real third-party APIs; skips sources with no credentials set
 ```
+
+Pre-commit runs typecheck and the test suite minus the slow files
+(`test:unit:precommit`); pre-push runs the full suite. The hooks come from
+[voidflow](https://github.com/taraxvoid/voidflow)'s shared lefthook set plus
+`lefthook.yml`.
 
 [docs/architecture.md](docs/architecture.md) explains how the pieces fit.
 

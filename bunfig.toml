@@ -2,4 +2,4 @@
 minimumReleaseAge = 259200 # 3 days
 
 # Packages that bypass the gate
-minimumReleaseAgeExcludes = ["@types/bun", "bun-types", "typescript"]
+minimumReleaseAgeExcludes = ["@types/bun", "bun-types", "typescript", "@taraxvoid/voidflow"]
