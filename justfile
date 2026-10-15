@@ -6,7 +6,7 @@ default:
 # confirms local tooling is on PATH
 doctor:
     @command -v bun >/dev/null || (echo "missing: bun" && exit 1)
-    @command -v lefthook >/dev/null || (echo "missing: lefthook" && exit 1)
+    @command -v lefthook >/dev/null || (echo "missing: lefthook (run: mise install)" && exit 1)
     @command -v gitleaks >/dev/null || (echo "missing: gitleaks" && exit 1)
     @command -v typst >/dev/null || (echo "missing: typst (run: mise install)" && exit 1)
     @echo "bun:      $(bun --version)"
