@@ -277,7 +277,7 @@ if you script it.
 ## Development
 
 ```bash
-mise install          # typst, lefthook, gitleaks, actionlint (pinned in mise.toml)
+mise install          # typst, lefthook, gitleaks, jactionlint, shellcheck (pinned in mise.toml)
 bun install           # also installs the git hooks (lefthook.yml)
 
 bun run lint          # biome

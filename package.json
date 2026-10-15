@@ -15,7 +15,7 @@
     "lint:migrate": "biome migrate --write",
     "lint:fix": "biome check --write .",
     "lint:secrets": "gitleaks git --redact --no-banner .",
-    "lint:actions": "actionlint -color",
+    "lint:actions": "jactionlint --color",
     "format": "biome format --write .",
     "check": "tsc --noEmit",
     "test": "bun test",
