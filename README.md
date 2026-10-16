@@ -60,7 +60,9 @@ trailguide init --location "Austin, TX" --keywords "software engineer" --work in
 ```
 
 (each flag is repeatable; `--work "Austin, TX:in-person"` sets one location).
-[`trailguide.example.toml`](trailguide.example.toml) shows every section.
+[`trailguide.example.toml`](trailguide.example.toml) shows every section;
+[`examples/bay-area.toml`](examples/bay-area.toml) is a complete Bay Area search
+to copy and adapt.
 
 Every keyword is searched in every location, so at least one `[[location]]`
 and one `[[keywords]]` entry are required.

@@ -1,0 +1,126 @@
+# Example: a Bay Area search from an East Bay home base,
+# commuting to Oakland/SF by BART and to the Tri-Valley, Fremont and North
+# San Jose by car. The Peninsula and the rest of the South Bay (San Mateo,
+# Sunnyvale, Mountain View, ...) are deliberately left out.
+#
+#   cp examples/bay-area.toml ~/.config/trailguide/config.toml
+#   trailguide search          # or: trailguide tui, then Ctrl+S
+
+# Onsite or hybrid. The built-in "East Bay" region covers Oakland, Berkeley,
+# Emeryville, Alameda, San Leandro, Castro Valley, Hayward, Union City,
+# Fremont, Newark, Dublin, Pleasanton, Livermore, San Ramon, Danville, Walnut
+# Creek and Concord, and only matches listings that name California or give a
+# bare town name, so "Dublin, Ireland" and "Fremont, NE" stay out.
+[[location]]
+city = "East Bay"
+flexibility = "in-person"
+
+# Also matches "San Francisco Bay Area" listings, and South San Francisco
+# (there is no location exclude yet), so triage those by hand.
+[[location]]
+city = "San Francisco"
+flexibility = "in-person"
+
+# Can't tell North San Jose from the rest of the city: check the address.
+# The state code keeps San Jose, Costa Rica out.
+[[location]]
+city = "San Jose, CA"
+flexibility = "in-person"
+aliases = ["Milpitas, CA"]
+
+# Remote US roles are still worth seeing.
+[[location]]
+city = "United States"
+flexibility = "remote"
+
+# Each trail names a resume master in [resume] dir (platform.md, secplat.md,
+# ai-infra.md). Every keyword is searched in every location, so 8 keywords x
+# 4 locations = 32 searches per source; trim if you hit rate limits.
+[[keywords]]
+role = "Platform Engineer"
+trail = "platform"
+
+[[keywords]]
+role = "Developer Experience Engineer"
+trail = "platform"
+
+[[keywords]]
+role = "DevOps Engineer"
+trail = "platform"
+
+[[keywords]]
+role = "Security Engineer"
+trail = "secplat"
+
+[[keywords]]
+role = "Product Security Engineer"
+trail = "secplat"
+
+[[keywords]]
+role = "Security Platform Engineer"
+trail = "secplat"
+
+[[keywords]]
+role = "AI Infrastructure Engineer"
+trail = "ai-infra"
+
+[[keywords]]
+role = "AI Security Engineer"
+trail = "ai-infra"
+
+[filter]
+clearance = "include"   # "exclude" drops listings that require a clearance
+# exclude = ["Some Staffing Co"]
+
+# Bay Area company boards, on top of the built-in set (which already has
+# Anthropic, Workday, PayPal, Adobe, Zscaler, Figma, Notion and Reddit).
+# Slugs come from each board's URL; see trailguide.example.toml.
+
+# Oakland / San Francisco
+[[board]]
+company = "OpenAI"
+ats = "ashby"
+slug = "openai"
+
+[[board]]
+company = "Cloudflare"
+ats = "greenhouse"
+slug = "cloudflare"
+
+[[board]]
+company = "Datadog"
+ats = "greenhouse"
+slug = "datadog"
+
+[[board]]
+company = "Block"
+ats = "greenhouse"
+slug = "block"
+
+[[board]]
+company = "Vercel"
+ats = "greenhouse"
+slug = "vercel"
+
+[[board]]
+company = "Semgrep"
+ats = "ashby"
+slug = "semgrep"
+
+# Tri-Valley
+[[board]]
+company = "Veeva Systems"
+ats = "lever"
+slug = "veeva"
+
+# North San Jose / Milpitas
+[[board]]
+company = "Cisco"
+ats = "workday"
+slug = "cisco"
+host = "wd5"
+site = "Cisco_Careers"
+
+# Resume masters. Relative paths resolve against this file; ~ is not expanded.
+# [resume]
+# dir = "/home/you/src/resumes/bay"
