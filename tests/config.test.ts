@@ -167,7 +167,9 @@ describe("parseConfig", () => {
       parseConfig(`[[board]]\n${lines.join("\n")}\n`, "trailguide.toml");
     expect(() =>
       board(['company = "A"', 'ats = "taleo"', 'slug = "a"']),
-    ).toThrow('invalid ats "taleo" (use greenhouse, lever, ashby, workday)');
+    ).toThrow(
+      'invalid ats "taleo" (use greenhouse, lever, ashby, workday, workable)',
+    );
     expect(() =>
       board(['company = "A"', 'ats = "workday"', 'slug = "a"']),
     ).toThrow('is missing "host"');

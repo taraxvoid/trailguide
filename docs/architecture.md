@@ -21,7 +21,7 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
   `toSearchOptions` turns it into a `SearchPlan` (keywords, locations, filters).
 - **Sources** (`src/sources/*`) implement one interface:
   `search(params) → NormalizedJob[]`. Company-board sources (Greenhouse,
-  Lever, Ashby, Workday) take their boards from the built-in seed list plus
+  Lever, Ashby, Workday, Workable) take their boards from the built-in seed list plus
   `[[board]]` entries and run four boards at a time; a board that fails is
   reported and skipped. Aggregators (JSearch, Adzuna) are scoped by location
   inside their query; the rest are called once with every keyword.
