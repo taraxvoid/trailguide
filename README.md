@@ -2,7 +2,7 @@
 
 Job search and resume tailoring that only rearranges what you've already written.
 
-trailguide searches company job boards (Greenhouse, Lever, Ashby, Workday) and
+trailguide searches company job boards (Greenhouse, Lever, Ashby, Workday, Workable) and
 aggregators for the roles and places you configure, keeps what it finds in a
 local SQLite database, and lets you browse, triage and apply from a terminal
 UI. For each job it can also tailor your resume: a local model picks and
@@ -102,7 +102,7 @@ remote label are missed, and hybrid is not told apart from onsite.
 
 ### Company job boards
 
-The Greenhouse, Lever, Ashby and Workday boards of a built-in set of companies
+The Greenhouse, Lever, Ashby, Workday and Workable boards of a built-in set of companies
 are searched (see `seed/ats-companies.json`). Add your own with `[[board]]`
 entries, taking the slug from the board's URL:
 
@@ -118,7 +118,15 @@ site = "External_Careers"
 company = "10x Genomics"
 ats = "greenhouse"
 slug = "10xgenomics"  # https://boards.greenhouse.io/10xgenomics
+
+[[board]]
+company = "Mission Bit"
+ats = "workable"
+slug = "missionbit"   # https://apply.workable.com/missionbit
 ```
+
+[`examples/nonprofits.toml`](examples/nonprofits.toml) lists mission-driven
+nonprofits whose boards trailguide can read.
 
 `[sources] builtin_boards = false` searches only your own. A board that fails
 (wrong slug, outage) is listed in the run summary and skipped; the rest are

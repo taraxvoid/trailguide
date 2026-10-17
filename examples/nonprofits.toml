@@ -1,0 +1,34 @@
+# Mission-driven nonprofits with public job boards trailguide can search.
+# Use it as a local trailguide.toml (merged over your global config), or copy
+# the [[board]] entries into your own. Defining [[board]] here replaces the
+# global list; the built-in boards are still searched unless you set
+# [sources] builtin_boards = false.
+#
+# Many nonprofits post through systems trailguide can't read (Paycom, TriNet
+# Hire, Jobvite, NEOGOV); for those, Fast Forward's tech-nonprofit board
+# (https://jobs.ffwd.org) and Idealist are the practical fallback.
+
+[[board]]
+company = "Code for America"
+ats = "greenhouse"
+slug = "codeforamerica"  # https://job-boards.greenhouse.io/codeforamerica
+
+[[board]]
+company = "Wikimedia Foundation"
+ats = "greenhouse"
+slug = "wikimedia"       # https://job-boards.greenhouse.io/wikimedia
+
+[[board]]
+company = "Mozilla"
+ats = "greenhouse"
+slug = "mozilla"         # https://job-boards.greenhouse.io/mozilla
+
+[[board]]
+company = "Mission Bit"
+ats = "workable"
+slug = "missionbit"      # https://apply.workable.com/missionbit
+
+[[board]]
+company = "Kapor Center"
+ats = "workable"
+slug = "kaporcenter"     # https://apply.workable.com/kaporcenter

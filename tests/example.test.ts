@@ -27,3 +27,22 @@ describe("trailguide.example.toml", () => {
     expect(resolveBoards(config).length).toBe(resolveBoards({}).length + 2);
   });
 });
+
+describe("examples/nonprofits.toml", () => {
+  const path = join(import.meta.dir, "..", "examples", "nonprofits.toml");
+  const config = parseConfig(readFileSync(path, "utf8"), path);
+
+  it("parses and lists only board systems trailguide reads", () => {
+    expect(config.boards?.map((b) => b.ats)).toEqual([
+      "greenhouse",
+      "greenhouse",
+      "greenhouse",
+      "workable",
+      "workable",
+    ]);
+  });
+
+  it("adds its boards to the built-in set", () => {
+    expect(resolveBoards(config).length).toBe(resolveBoards({}).length + 5);
+  });
+});
