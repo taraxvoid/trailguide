@@ -32,6 +32,7 @@ export const BOARD_SYSTEMS: readonly Board["ats"][] = [
   "lever",
   "ashby",
   "workday",
+  "workable",
 ];
 
 export interface KeywordEntry {

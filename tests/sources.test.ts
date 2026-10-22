@@ -10,6 +10,7 @@ import { createRemoteOkSource } from "../src/sources/remoteok.ts";
 import { createRemotiveSource } from "../src/sources/remotive.ts";
 import { companiesForAts } from "../src/sources/seed.ts";
 import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
+import { createWorkableSource } from "../src/sources/workable.ts";
 import adzunaFixture from "./fixtures/adzuna-search.json";
 import ashbyFixture from "./fixtures/ashby-ramp.json";
 import greenhouseFixture from "./fixtures/greenhouse-figma.json";
@@ -21,6 +22,7 @@ import remotiveFixture from "./fixtures/remotive-search.json";
 import weworkremotelyFixture from "./fixtures/weworkremotely-programming.rss" with {
   type: "text",
 };
+import workableFixture from "./fixtures/workable-example.json";
 
 // No ashby board ships by default; the fixture stands in for these two.
 const ASHBY_BOARDS: Board[] = [
@@ -548,5 +550,71 @@ describe("source scoping", () => {
     });
     expect(jobs[0]?.location).toBe("New York, NY (HQ)");
     expect(jobs[0]?.otherLocations).toEqual(["Remote (US)"]);
+  });
+});
+
+describe("workable source", () => {
+  const BOARDS: Board[] = [
+    { company: "Example Org", ats: "workable", slug: "example" },
+  ];
+
+  it("normalizes jobs, filters by role and requests descriptions", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = mock(async (url: string | URL) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify(workableFixture));
+    }) as unknown as typeof fetch;
+
+    const jobs = await createWorkableSource(BOARDS).search({
+      role: "instructor",
+    });
+
+    expect(urls).toEqual([
+      "https://apply.workable.com/api/v1/widget/accounts/example?details=true",
+    ]);
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).toMatchObject({
+      sourceId: "AAA111",
+      source: "workable",
+      company: "Example Org",
+      location: "San Francisco, California, United States",
+      otherLocations: ["Oakland, California, United States"],
+      remoteType: "unknown",
+      url: "https://apply.workable.com/j/AAA111",
+      postedAt: "2026-08-28",
+    });
+    expect(jobs[0]?.description).toContain("Teach Python.");
+    expect(jobs[0]?.description).not.toContain("<");
+  });
+
+  it("marks telecommuting jobs remote and skips hidden locations", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(workableFixture)),
+    ) as unknown as typeof fetch;
+
+    const jobs = await createWorkableSource(BOARDS).search({
+      role: "engineer",
+    });
+    expect(jobs[0]?.remoteType).toBe("remote");
+    expect(jobs[0]?.location).toBe("United States");
+
+    const all = await createWorkableSource(BOARDS).search({
+      role: ["instructor", "engineer", "director"],
+    });
+    expect(all.flatMap((j) => j.otherLocations ?? [])).not.toContain(
+      "Secret, California, United States",
+    );
+  });
+
+  it("filters by any listed location", async () => {
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify(workableFixture)),
+    ) as unknown as typeof fetch;
+
+    const oakland = await createWorkableSource(BOARDS).search({
+      role: ["instructor", "director"],
+      location: "Oakland",
+    });
+    expect(oakland.map((j) => j.sourceId)).toEqual(["AAA111"]);
   });
 });

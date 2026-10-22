@@ -13,7 +13,8 @@ export interface NormalizedJob {
     | "remotive"
     | "jobaps"
     | "weworkremotely"
-    | "workday";
+    | "workday"
+    | "workable";
   title: string;
   company: string;
   location: string;

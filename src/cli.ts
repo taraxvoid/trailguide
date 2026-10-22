@@ -62,6 +62,7 @@ import { createRemotiveSource } from "./sources/remotive.ts";
 import { companiesForAts, defaultBoards } from "./sources/seed.ts";
 import type { NormalizedJob, Source } from "./sources/types.ts";
 import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
+import { createWorkableSource } from "./sources/workable.ts";
 import { createWorkdaySource } from "./sources/workday.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
 import {
@@ -84,6 +85,7 @@ export function buildSources(boards: Board[] = defaultBoards): Source[] {
     createWeWorkRemotelySource(),
     createJobApsSource(),
     createWorkdaySource(companiesForAts("workday", boards)),
+    createWorkableSource(companiesForAts("workable", boards)),
   ];
 
   if (process.env.JSEARCH_API_KEY) {
