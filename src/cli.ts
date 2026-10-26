@@ -65,11 +65,6 @@ import { createWeWorkRemotelySource } from "./sources/weworkremotely.ts";
 import { createWorkableSource } from "./sources/workable.ts";
 import { createWorkdaySource } from "./sources/workday.ts";
 import { tailorOrRegenerate } from "./tailor/index.ts";
-import {
-  displayTrailguide,
-  shouldShowTrailguide,
-  TRAILGUIDE_DISABLE_FLAG,
-} from "./trailguideArt.ts";
 import { runTui } from "./tui/index.ts";
 
 // Re-exported so existing importers (tests/cli.test.ts) keep working.
@@ -501,11 +496,7 @@ export function createProgram(
     .description(
       "Job search and resume tailoring that only rearranges what you've already written",
     )
-    .version(pkg.version)
-    .option(
-      TRAILGUIDE_DISABLE_FLAG,
-      "Hide the banner shown by init and --version",
-    );
+    .version(pkg.version);
 
   program
     .command("search")
@@ -708,9 +699,6 @@ export function createProgram(
 }
 
 async function main() {
-  if (shouldShowTrailguide(Bun.argv)) {
-    displayTrailguide();
-  }
   await createProgram().parseAsync(Bun.argv);
 }
 

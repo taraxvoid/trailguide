@@ -59,7 +59,6 @@ describe("startBackgroundSearch", () => {
     expect(h.requests).toHaveLength(1);
     const request = h.requests[0] as SpawnRequest;
     expect(request.cmd).toContain("search");
-    expect(request.cmd).toContain("--no-banner");
     expect(argAfter(request.cmd, "--db")).toBe(join(h.dir, "trailguide.db"));
     expect(argAfter(request.cmd, "--config")).toBe(join(h.dir, "my.toml"));
     expect(request.cwd).toBe(h.dir);
