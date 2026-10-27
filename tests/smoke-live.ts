@@ -9,7 +9,7 @@ import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
 
 /**
  * Hits real, live third-party APIs. Not run in CI on every PR (would burn
- * paid quota / hit undocumented rate limits) — run manually or from a
+ * paid quota / hit undocumented rate limits) - run manually or from a
  * separate scheduled job. Skips any source whose credentials aren't set.
  */
 async function main() {

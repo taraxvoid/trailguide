@@ -332,9 +332,9 @@ export default function JobBrowser({
   const companyLine = selectedJob
     ? `${selectedJob.company}${
         formatRemote(selectedJob.remoteType)
-          ? ` · ${formatRemote(selectedJob.remoteType)}`
+          ? ` - ${formatRemote(selectedJob.remoteType)}`
           : ""
-      } · ${selectedJob.location}`
+      } - ${selectedJob.location}`
     : "";
 
   const detailContentLines = selectedJob
@@ -762,9 +762,9 @@ export default function JobBrowser({
             <Text>
               {selectedJob.company}
               {formatRemote(selectedJob.remoteType)
-                ? ` · ${formatRemote(selectedJob.remoteType)}`
+                ? ` - ${formatRemote(selectedJob.remoteType)}`
                 : ""}{" "}
-              · {selectedJob.location}
+              - {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
             {description && (
@@ -858,7 +858,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
         <Box marginLeft={isSelected ? 3 : 0}>
           <Text dimColor>
             {formatRemote(job.remoteType)
-              ? `${formatRemote(job.remoteType)} · `
+              ? `${formatRemote(job.remoteType)} - `
               : ""}
             {job.location}
           </Text>
