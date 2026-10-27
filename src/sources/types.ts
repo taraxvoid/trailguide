@@ -14,7 +14,9 @@ export interface NormalizedJob {
     | "jobaps"
     | "weworkremotely"
     | "workday"
-    | "workable";
+    | "workable"
+    /** A non-board page read through its schema.org JobPosting (`trailguide add`). */
+    | "web";
   title: string;
   company: string;
   location: string;
