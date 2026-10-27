@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, mock } from "bun:test";
 import { companiesForAts } from "../src/sources/seed.ts";
 import {
   createWorkdaySource,
+  fetchWorkdayJob,
   workdayRemoteType,
 } from "../src/sources/workday.ts";
 
@@ -108,6 +109,52 @@ describe("workday source", () => {
       role: ["platform", "staff"],
     });
     expect(jobs).toHaveLength(boards.length);
+  });
+});
+
+describe("fetchWorkdayJob", () => {
+  const board = {
+    company: "Workday",
+    ats: "workday" as const,
+    slug: "workday",
+    host: "wd5",
+    site: "Workday",
+  };
+  const path = "/job/USA-CA-Pleasanton/Staff-Platform-Engineer_JR-1";
+
+  it("reads one posting from the detail endpoint", async () => {
+    const calls = fakeWorkday(
+      () =>
+        new Response(
+          JSON.stringify({
+            jobPostingInfo: {
+              title: "Staff Platform Engineer",
+              jobReqId: "JR-1",
+              location: "Pleasanton, CA",
+              remoteType: "Hybrid",
+              jobDescription: "<p>Build the <b>platform</b>.</p>",
+            },
+          }),
+        ),
+    );
+    const job = await fetchWorkdayJob(board, path);
+    expect(calls.map((c) => c.url)).toEqual([
+      `https://workday.wd5.myworkdayjobs.com/wday/cxs/workday/Workday${path}`,
+    ]);
+    expect(job).toMatchObject({
+      source: "workday",
+      sourceId: "workday:JR-1",
+      title: "Staff Platform Engineer",
+      company: "Workday",
+      location: "Pleasanton, CA",
+      remoteType: "hybrid",
+      url: `https://workday.wd5.myworkdayjobs.com/Workday${path}`,
+    });
+  });
+
+  it("rejects when the detail request fails", async () => {
+    fakeWorkday(() => new Response("nope", { status: 500 }));
+    await expect(fetchWorkdayJob(board, path)).rejects.toThrow("HTTP 500");
   });
 });
 

@@ -56,6 +56,21 @@ function toRemoteType(job: AshbyJob): RemoteType {
   }
 }
 
+function toNormalized(job: AshbyJob, company: string): NormalizedJob {
+  return {
+    sourceId: job.id,
+    source: "ashby",
+    title: job.title,
+    company,
+    location: job.location,
+    otherLocations: (job.secondaryLocations ?? []).map((l) => l.location),
+    remoteType: toRemoteType(job),
+    url: job.jobUrl,
+    postedAt: job.publishedAt,
+    description: job.descriptionPlain,
+  };
+}
+
 export function createAshbySource(
   boards: Board[] = companiesForAts("ashby"),
 ): Source {
@@ -79,23 +94,24 @@ export function createAshbySource(
           ) {
             continue;
           }
-          results.push({
-            sourceId: job.id,
-            source: "ashby",
-            title: job.title,
-            company,
-            location: job.location,
-            otherLocations: (job.secondaryLocations ?? []).map(
-              (l) => l.location,
-            ),
-            remoteType: toRemoteType(job),
-            url: job.jobUrl,
-            postedAt: job.publishedAt,
-            description: job.descriptionPlain,
-          });
+          results.push(toNormalized(job, company));
         }
         return results;
       });
     },
   };
+}
+
+/** One posting by id (`trailguide add`); Ashby has no single-job endpoint. */
+export async function fetchAshbyJob(
+  slug: string,
+  id: string,
+  company?: string,
+): Promise<NormalizedJob> {
+  const body = await getJson<AshbyResponse>(
+    `https://api.ashbyhq.com/posting-api/job-board/${slug}`,
+  );
+  const job = body.jobs.find((j) => j.id === id);
+  if (!job) throw new Error("no longer listed on the board");
+  return toNormalized(job, company ?? slug);
 }

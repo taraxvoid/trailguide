@@ -38,6 +38,20 @@ function toRemoteType(workplaceType: string | null): RemoteType {
   }
 }
 
+function toNormalized(job: LeverJob, company: string): NormalizedJob {
+  return {
+    sourceId: job.id,
+    source: "lever",
+    title: job.text,
+    company,
+    location: job.categories.location,
+    remoteType: toRemoteType(job.workplaceType),
+    url: job.hostedUrl,
+    postedAt: new Date(job.createdAt).toISOString(),
+    description: job.descriptionPlain,
+  };
+}
+
 export function createLeverSource(
   boards: Board[] = companiesForAts("lever"),
 ): Source {
@@ -58,20 +72,22 @@ export function createLeverSource(
           ) {
             continue;
           }
-          results.push({
-            sourceId: job.id,
-            source: "lever",
-            title: job.text,
-            company,
-            location: job.categories.location,
-            remoteType: toRemoteType(job.workplaceType),
-            url: job.hostedUrl,
-            postedAt: new Date(job.createdAt).toISOString(),
-            description: job.descriptionPlain,
-          });
+          results.push(toNormalized(job, company));
         }
         return results;
       });
     },
   };
+}
+
+/** One posting by id (`trailguide add`). */
+export async function fetchLeverJob(
+  slug: string,
+  id: string,
+  company?: string,
+): Promise<NormalizedJob> {
+  const job = await getJson<LeverJob>(
+    `https://api.lever.co/v0/postings/${slug}/${id}`,
+  );
+  return toNormalized(job, company ?? slug);
 }

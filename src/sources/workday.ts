@@ -29,6 +29,7 @@ interface WorkdaySearchResponse {
 
 interface WorkdayDetailResponse {
   jobPostingInfo?: {
+    title?: string;
     jobDescription?: string;
     location?: string;
     additionalLocations?: string[];
@@ -43,7 +44,7 @@ const PAGE_SIZE = 20;
 const MAX_PAGES = 3;
 const DETAIL_CONCURRENCY = 4;
 
-type WorkdayCompany = Board & { host: string; site: string };
+export type WorkdayCompany = Board & { host: string; site: string };
 
 function boardBase({ slug, host }: WorkdayCompany): string {
   return `https://${slug}.${host}.myworkdayjobs.com`;
@@ -106,6 +107,14 @@ async function toJob(
   } catch {
     // Keep the search-level fields; the listing is still worth showing.
   }
+  return toNormalized(company, posting, info);
+}
+
+function toNormalized(
+  company: WorkdayCompany,
+  posting: WorkdayPosting,
+  info: WorkdayDetailResponse["jobPostingInfo"],
+): NormalizedJob {
   const reqId =
     info?.jobReqId ?? posting.bulletFields?.[0] ?? posting.externalPath;
   return {
@@ -116,10 +125,28 @@ async function toJob(
     location: info?.location ?? posting.locationsText ?? "",
     otherLocations: info?.additionalLocations,
     remoteType: workdayRemoteType(info?.remoteType),
-    url: `${base}/${company.site}${posting.externalPath}`,
+    url: `${boardBase(company)}/${company.site}${posting.externalPath}`,
     postedAt: info?.startDate ?? null,
     description: info?.jobDescription ? stripHtml(info.jobDescription) : null,
   };
+}
+
+/**
+ * One posting by its path on the board (`/job/<location>/<title>_<req>`),
+ * for `trailguide add`. Unlike search, a failed detail request is an error:
+ * it's the only source of the posting's fields.
+ */
+export async function fetchWorkdayJob(
+  company: WorkdayCompany,
+  externalPath: string,
+): Promise<NormalizedJob> {
+  const body = await getJson<WorkdayDetailResponse>(
+    `${boardBase(company)}/wday/cxs/${company.slug}/${company.site}${externalPath}`,
+    { headers: { Accept: "application/json" } },
+  );
+  const info = body.jobPostingInfo;
+  if (!info?.title) throw new Error("no job posting at that address");
+  return toNormalized(company, { title: info.title, externalPath }, info);
 }
 
 export function createWorkdaySource(
