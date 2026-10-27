@@ -18,7 +18,7 @@ import React, {
 } from "react";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
-import { loadConfig } from "../config.ts";
+import { configuredTrails, loadConfig } from "../config.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
@@ -280,8 +280,7 @@ export default function JobBrowser({
   // config just means no trails to cycle through.
   const trails = useMemo(() => {
     try {
-      const { keywords = [] } = loadConfig({ config: configPath }).config;
-      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
+      return configuredTrails(loadConfig({ config: configPath }).config);
     } catch {
       return [];
     }

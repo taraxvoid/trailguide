@@ -34,7 +34,7 @@ const WORKDAY_HOST = /^([^.]+)\.(wd\d+)\.myworkdayjobs\.com$/;
 
 function notSingleJob(url: string, board: string): ImportError {
   return new ImportError(
-    `${url} is a ${board} board page, not a single job; open the job and copy its link`,
+    `${url} lists a company's ${board} jobs; link to a single job instead (open it and copy its link)`,
   );
 }
 

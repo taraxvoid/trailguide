@@ -62,6 +62,15 @@ export interface TrailguideConfig {
   builtinBoards?: boolean;
 }
 
+/** The `[[keywords]] trail` values, each once, in config order. */
+export function configuredTrails(config: TrailguideConfig): string[] {
+  return [
+    ...new Set(
+      (config.keywords ?? []).flatMap((k) => (k.trail ? [k.trail] : [])),
+    ),
+  ];
+}
+
 export class ConfigError extends Error {
   constructor(message: string) {
     super(message);

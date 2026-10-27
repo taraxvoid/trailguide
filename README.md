@@ -162,7 +162,7 @@ trailguide search [--role <query...>] [--location <place...>] [--remote|--onsite
 - `--db`: path to the sqlite db (default: the precedence chain above)
 - `--config`: config file to use instead of the global plus local chain
 
-Other commands: `trailguide tui`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
+Other commands: `trailguide tui`, `trailguide add`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
 `trailguide trail`, `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
 
 Every `trailguide search`, including one started by hand, registers itself as the
@@ -196,6 +196,7 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - E: archive
 - A: mark applied
 - L: cycle the job's resume trail (none, then each trail in the config)
+- I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
 - q / esc: quit
 
@@ -273,10 +274,32 @@ the job's `<trail>.md` (an error if missing), `default.md`, or the only `.md`
 in the dir. It never guesses between masters. Change a job's trail with `L`
 in the TUI or `trailguide trail <listingId> [trail] [--clear]`.
 
+### Importing a job from a link
+
+A job that search wouldn't find (a link someone sent, a board you don't
+watch, a title your keywords don't match) can be added by hand:
+
+```bash
+trailguide add https://job-boards.greenhouse.io/codeorg/jobs/4727981005 --trail platform
+```
+
+or `I` in the TUI. Search filters don't apply: the job goes in because you
+picked it. Greenhouse, Lever, Ashby, Workable and Workday links are read
+through the board's API, and get the same listing id search would give
+them, so a later search finds the same row. Any other link is read from the
+schema.org `JobPosting` data most careers pages embed; a page without it
+can't be imported.
+
+`--trail` takes a configured trail or `none`. In a terminal, leaving it out
+asks; in a script it's required. Adding a job that's already tracked
+refreshes its details and sets the trail you chose, keeping its state and
+applied date.
+
 ## Network use
 
-trailguide only talks to the public job-board APIs of the sources it searches, and
-tries to be a polite client: every request sends `User-Agent: trailguide/<version>
+trailguide only talks to the public job-board APIs of the sources it searches
+(and, for `trailguide add` with a link that isn't a job board's, that one
+page), and tries to be a polite client: every request sends `User-Agent: trailguide/<version>
 (+https://github.com/taraxvoid/trailguide)`, times out after 20 seconds, and runs
 under small concurrency limits (4 boards at a time per source, 8 link checks).
 Searches run when you ask for them, not on a timer. Please keep it that way

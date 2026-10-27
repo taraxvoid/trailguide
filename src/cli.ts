@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 import type { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
+  configuredTrails,
   describeConfig,
   loadConfig,
   resolveBoards,
@@ -40,7 +42,7 @@ import {
   upsertJobs,
 } from "./db.ts";
 import { httpFetch } from "./http.ts";
-import { ImportError } from "./importUrl.ts";
+import { ImportError, importJob } from "./importUrl.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
 import type { Env } from "./paths.ts";
@@ -318,6 +320,95 @@ export interface TrailCliOptions {
   config?: string;
 }
 
+/** The value `--trail` takes for "import with no trail". */
+const NO_TRAIL = "none";
+
+/**
+ * Turns `--trail` (or, in a terminal, an answer to `ask`) into a trail, or
+ * null for `none`. Settled before anything is fetched.
+ */
+export async function resolveTrailChoice(
+  value: string | undefined,
+  trails: string[],
+  ask?: (choices: string[]) => Promise<string>,
+): Promise<string | null> {
+  const choices = [...trails, NO_TRAIL];
+  const pick = (v: string) => (v === NO_TRAIL ? null : v);
+  if (value !== undefined) {
+    if (!choices.includes(value)) {
+      throw new ConfigError(
+        `trail ${JSON.stringify(value)} isn't configured; use one of: ${choices.join(", ")}`,
+      );
+    }
+    return pick(value);
+  }
+  if (!ask) {
+    throw new ConfigError(
+      `--trail is required when not running in a terminal; use one of: ${choices.join(", ")}`,
+    );
+  }
+  for (;;) {
+    const answer = (await ask(choices)).trim();
+    const byNumber = choices[Number(answer) - 1];
+    if (/^\d+$/.test(answer) && byNumber) return pick(byNumber);
+    if (choices.includes(answer)) return pick(answer);
+  }
+}
+
+/** Numbered trail prompt on the terminal, for `trailguide add` without `--trail`. */
+async function askTrail(choices: string[]): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const list = choices.map((c, i) => `  ${i + 1}) ${c}`).join("\n");
+    return await rl.question(`Trail for this job:\n${list}\n> `);
+  } finally {
+    rl.close();
+  }
+}
+
+export interface AddCliOptions {
+  url: string;
+  trail?: string;
+  db?: string;
+  config?: string;
+}
+
+export async function runAdd(
+  options: AddCliOptions,
+  deps: {
+    ask?: (choices: string[]) => Promise<string>;
+    importJob?: typeof importJob;
+  } = { ask: process.stdin.isTTY ? askTrail : undefined },
+): Promise<void> {
+  const ctx = { db: options.db, config: options.config };
+  try {
+    const { config } = loadConfig(ctx);
+    const trail = await resolveTrailChoice(
+      options.trail,
+      configuredTrails(config),
+      deps.ask,
+    );
+    const db = openDb(resolveDbPath(ctx));
+    try {
+      const { job, added } = await (deps.importJob ?? importJob)(
+        db,
+        options.url,
+        trail,
+        resolveBoards(config),
+      );
+      console.log(
+        `${added ? "Added" : "Already tracked"} ${job.listingId}: ${job.title} @ ${job.company} (${job.location}), ${job.trail ? `trail ${job.trail}` : "no trail"}`,
+      );
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    if (!(err instanceof ConfigError || err instanceof ImportError)) throw err;
+    console.error(`error: ${err.message}`);
+    process.exitCode = 1;
+  }
+}
+
 export function runTrail(options: TrailCliOptions): void {
   if (options.trail && options.clear) {
     throw new ConfigError("pass a trail or --clear, not both");
@@ -494,6 +585,7 @@ export function createProgram(
   clearAction: (options: { db?: string }) => Promise<void> = runClear,
   refreshAction: (options: { db?: string }) => Promise<void> = runRefresh,
   tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
+  addAction: (options: AddCliOptions) => Promise<void> = runAdd,
 ): Command {
   const program = new Command();
 
@@ -641,6 +733,27 @@ export function createProgram(
         },
       ) => {
         await tailorAction({ ...options, listingId: listingIdArg });
+      },
+    );
+
+  program
+    .command("add")
+    .description(
+      "Import one job from a link (a job board posting or any page with schema.org JobPosting data), skipping search filters",
+    )
+    .argument("<url>", "link to a single job posting")
+    .option(
+      "--trail <trail>",
+      'resume trail for the job, or "none" (asked in a terminal; required otherwise)',
+    )
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(
+      async (
+        url: string,
+        options: { trail?: string; db?: string; config?: string },
+      ) => {
+        await addAction({ ...options, url });
       },
     );
 
