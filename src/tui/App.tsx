@@ -57,7 +57,7 @@ interface AppProps {
 // Chrome heights below are line counts for the JSX blocks they mirror -
 // keep them in sync when the layout changes, since visibleCount depends on
 // knowing exactly how many non-list rows are on screen in each state.
-const HEADER_LINES = 3; // paddingY 1 (top+bottom) + 1 content line
+const HEADER_LINES = 3; // fixed height: the cairn's 3 rows, greeting centered beside it
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
@@ -72,6 +72,14 @@ const SAGE = "#8fbf9f";
 const SKY = "#7aa7d9";
 const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
+
+// A small cairn of offset stones for the header's top-right corner. Each
+// stone is a row of lower-3/4 blocks so a sliver of gap separates them.
+const CAIRN = [
+  { stone: "   ▆▆▆", color: SAND },
+  { stone: " ▆▆▆▆▆", color: TERRACOTTA },
+  { stone: "▆▆▆▆▆▆▆▆", color: SAGE },
+];
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
@@ -672,7 +680,11 @@ export default function JobBrowser({
 
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
-      <Box paddingY={1} justifyContent="space-between" alignItems="center">
+      <Box
+        height={HEADER_LINES}
+        justifyContent="space-between"
+        alignItems="center"
+      >
         <Box flexShrink={1} marginRight={2}>
           <Text bold color={SAGE}>
             Hi! I'll be your guide through the forested trails of job
@@ -689,6 +701,13 @@ export default function JobBrowser({
               {"  Searching..."}
             </Text>
           )}
+        </Box>
+        <Box flexDirection="column" flexShrink={0}>
+          {CAIRN.map(({ stone, color }) => (
+            <Text key={color} color={color}>
+              {stone}
+            </Text>
+          ))}
         </Box>
       </Box>
 
