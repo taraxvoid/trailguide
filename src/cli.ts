@@ -40,6 +40,7 @@ import {
   upsertJobs,
 } from "./db.ts";
 import { httpFetch } from "./http.ts";
+import { ImportError } from "./importUrl.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
 import type { Env } from "./paths.ts";
@@ -720,8 +721,12 @@ if (import.meta.main) {
     process.exit(await runDelegate(delegate, Bun.argv.slice(2)));
   }
   main().catch((err) => {
-    // Config problems are user errors: print the message, not a stack.
-    console.error(err instanceof ConfigError ? `error: ${err.message}` : err);
+    // Config and link problems are user errors: print the message, not a stack.
+    console.error(
+      err instanceof ConfigError || err instanceof ImportError
+        ? `error: ${err.message}`
+        : err,
+    );
     process.exit(1);
   });
 }
