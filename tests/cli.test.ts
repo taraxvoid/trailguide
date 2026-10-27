@@ -430,6 +430,23 @@ describe("resolveTrailChoice", () => {
     expect(await resolveTrailChoice(undefined, trails, ask)).toBe("platform");
     expect(offered).toEqual(["secplat", "platform", "none"]);
   });
+
+  it("says why it asks again after a bad answer", async () => {
+    const answers = ["9", "secplat"];
+    const hints: string[] = [];
+    const ask = async (_choices: string[], hint?: string) => {
+      if (hint) hints.push(hint);
+      return answers.shift() ?? "";
+    };
+    expect(await resolveTrailChoice(undefined, trails, ask)).toBe("secplat");
+    expect(hints).toEqual(["pick 1-3 or a trail name"]);
+  });
+
+  it("gives up on an empty answer (Enter or end of input)", async () => {
+    await expect(
+      resolveTrailChoice(undefined, trails, async () => ""),
+    ).rejects.toThrow(new ConfigError("no trail chosen; nothing imported"));
+  });
 });
 
 describe("add command", () => {

@@ -117,9 +117,24 @@ describe("parseJobPosting", () => {
     expect(parseJobPosting(page(posting), base)?.sourceId).toBe(
       `example.org:${hash}`,
     );
+    expect(parseJobPosting(page(posting), `${base}/`)?.sourceId).toBe(
+      `example.org:${hash}`,
+    );
     const noisy = parseJobPosting(page(posting), `${base}?utm_source=x#apply`);
     expect(noisy?.sourceId).toBe(`example.org:${hash}`);
     expect(noisy?.url).toBe(base);
+  });
+
+  it("ignores an identifier that only names the company", () => {
+    const base = "https://example.org/jobs/platform";
+    const hash = createHash("sha256").update(base).digest("hex").slice(0, 16);
+    const named = {
+      ...posting,
+      identifier: { "@type": "PropertyValue", name: "Example Co" },
+    };
+    expect(parseJobPosting(page(named), base)?.sourceId).toBe(
+      `example.org:${hash}`,
+    );
   });
 
   it("returns null without a title, a company, or any JobPosting", () => {

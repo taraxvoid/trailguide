@@ -700,7 +700,7 @@ describe("single-job fetchers", () => {
       company: "Ramp",
     });
     await expect(fetchAshbyJob("ramp", "missing")).rejects.toThrow(
-      "no longer listed",
+      "not on its public board",
     );
   });
 
@@ -717,7 +717,7 @@ describe("single-job fetchers", () => {
       company: "example",
     });
     await expect(fetchWorkableJob("example", "NOPE")).rejects.toThrow(
-      "no longer listed",
+      "not on its public board",
     );
   });
 });

@@ -55,7 +55,13 @@ function placeName(place: unknown): string {
 }
 
 function identifierValue(value: unknown): string | undefined {
-  if (isNode(value)) return text(value.value) ?? text(value.name);
+  // A PropertyValue's `name` is usually the company, not an id: same on
+  // every posting from the site, so only `value` counts.
+  if (isNode(value)) {
+    return typeof value.value === "number"
+      ? String(value.value)
+      : text(value.value);
+  }
   return typeof value === "number" ? String(value) : text(value);
 }
 
@@ -102,7 +108,8 @@ export function parseJobPosting(
   const id =
     identifierValue(posting.identifier) ??
     createHash("sha256")
-      .update(`${parsed.origin}${parsed.pathname}`)
+      // A trailing slash is the same page, so it must be the same job.
+      .update(`${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`)
       .digest("hex")
       .slice(0, 16);
   const description = text(posting.description);

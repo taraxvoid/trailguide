@@ -112,6 +112,8 @@ export async function fetchAshbyJob(
     `https://api.ashbyhq.com/posting-api/job-board/${slug}`,
   );
   const job = body.jobs.find((j) => j.id === id);
-  if (!job) throw new Error("no longer listed on the board");
+  if (!job) {
+    throw new Error(`not on its public board (removed, or unlisted)`);
+  }
   return toNormalized(job, company ?? slug);
 }

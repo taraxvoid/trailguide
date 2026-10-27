@@ -330,7 +330,7 @@ const NO_TRAIL = "none";
 export async function resolveTrailChoice(
   value: string | undefined,
   trails: string[],
-  ask?: (choices: string[]) => Promise<string>,
+  ask?: (choices: string[], hint?: string) => Promise<string>,
 ): Promise<string | null> {
   const choices = [...trails, NO_TRAIL];
   const pick = (v: string) => (v === NO_TRAIL ? null : v);
@@ -347,20 +347,33 @@ export async function resolveTrailChoice(
       `--trail is required when not running in a terminal; use one of: ${choices.join(", ")}`,
     );
   }
+  let hint: string | undefined;
   for (;;) {
-    const answer = (await ask(choices)).trim();
+    const answer = (await ask(choices, hint)).trim();
+    // Enter alone, or end of input (Ctrl+D), backs out.
+    if (answer === "") {
+      throw new ConfigError("no trail chosen; nothing imported");
+    }
     const byNumber = choices[Number(answer) - 1];
     if (/^\d+$/.test(answer) && byNumber) return pick(byNumber);
     if (choices.includes(answer)) return pick(answer);
+    hint = `pick 1-${choices.length} or a trail name`;
   }
 }
 
-/** Numbered trail prompt on the terminal, for `trailguide add` without `--trail`. */
-async function askTrail(choices: string[]): Promise<string> {
+/**
+ * Numbered trail prompt on the terminal, for `trailguide add` without
+ * `--trail`. End of input answers "".
+ */
+async function askTrail(choices: string[], hint?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const closed = new Promise<string>((resolve) =>
+    rl.once("close", () => resolve("")),
+  );
   try {
     const list = choices.map((c, i) => `  ${i + 1}) ${c}`).join("\n");
-    return await rl.question(`Trail for this job:\n${list}\n> `);
+    const question = hint ? `${hint}\n> ` : `Trail for this job:\n${list}\n> `;
+    return await Promise.race([rl.question(question), closed]);
   } finally {
     rl.close();
   }

@@ -114,6 +114,8 @@ export async function fetchWorkableJob(
     `https://apply.workable.com/api/v1/widget/accounts/${slug}?details=true`,
   );
   const job = (body.jobs ?? []).find((j) => j.shortcode === shortcode);
-  if (!job) throw new Error("no longer listed on the board");
+  if (!job) {
+    throw new Error(`not on its public board (removed, or unlisted)`);
+  }
   return toNormalized(job, company ?? slug, workableLocations(job));
 }

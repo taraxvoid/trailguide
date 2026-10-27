@@ -63,6 +63,14 @@ describe("parseJobUrl", () => {
       WORKDAY,
     ],
     [
+      "https://cisco.wd5.myworkdayjobs.com/Cisco_Careers/job/San-Jose/Engineer_2001234/apply",
+      WORKDAY,
+    ],
+    [
+      "https://cisco.wd5.myworkdayjobs.com/en-US/Cisco_Careers/job/San-Jose/Engineer_2001234/apply/applyManually",
+      WORKDAY,
+    ],
+    [
       "https://openaifoundation.org/careers/x",
       { kind: "web", url: "https://openaifoundation.org/careers/x" },
     ],

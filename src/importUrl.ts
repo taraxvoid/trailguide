@@ -95,7 +95,8 @@ export function parseJobUrl(url: string): JobRef {
       slug: workday[1] as string,
       host: workday[2] as string,
       site,
-      externalPath: `/${parts.slice(jobAt).join("/")}`,
+      // job/<location>/<title>_<req>; drop /apply and anything after it.
+      externalPath: `/${parts.slice(jobAt, jobAt + 3).join("/")}`,
     };
   }
   return { kind: "web", url };
