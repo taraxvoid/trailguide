@@ -112,6 +112,30 @@ describe("collectJobs source calls", () => {
       "swe|United States|true",
     ]);
   });
+
+  it("keeps at most two calls per scoped source in flight", async () => {
+    const wide: SearchPlan = {
+      ...plan,
+      keywords: ["a", "b", "c", "d", "e", "f"],
+    };
+    const peaks = new Map<string, number>();
+    const tracked = (name: NormalizedJob["source"]): Source => {
+      let inFlight = 0;
+      return {
+        name,
+        scoped: true,
+        async search() {
+          inFlight++;
+          peaks.set(name, Math.max(peaks.get(name) ?? 0, inFlight));
+          await Bun.sleep(2);
+          inFlight--;
+          return [];
+        },
+      };
+    };
+    await collectJobs(wide, [tracked("jsearch"), tracked("adzuna")]);
+    expect(Object.fromEntries(peaks)).toEqual({ jsearch: 2, adzuna: 2 });
+  });
 });
 
 describe("collectJobs filtering", () => {
