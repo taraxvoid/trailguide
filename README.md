@@ -198,7 +198,8 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - L: cycle the job's resume trail (none, then each trail in the config)
 - I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
-- q / esc: quit
+- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across both views), Esc clears it
+- q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so
 repeated searches only flag what's `NEW`.
