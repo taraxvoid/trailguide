@@ -9,7 +9,6 @@ import {
   SEARCH_RUN_KEY,
   startRun,
 } from "../db.ts";
-import { TRAILGUIDE_DISABLE_FLAG } from "../trailguideArt.ts";
 
 export interface SpawnRequest {
   cmd: string[];
@@ -81,7 +80,6 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
         cmd: [
           process.execPath,
           `${import.meta.dir}/../cli.ts`,
-          TRAILGUIDE_DISABLE_FLAG,
           "search",
           "--db",
           dbPath,

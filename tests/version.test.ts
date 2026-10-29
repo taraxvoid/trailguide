@@ -1,8 +1,9 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { cleanGitEnv, formatGitVersion, gitVersion } from "../src/version.ts";
 
-const repo = `/tmp/trailguide-version-test-${Date.now()}`;
+const repo = `${tmpdir()}/trailguide-version-test-${Date.now()}`;
 
 function git(...args: string[]) {
   Bun.spawnSync({

@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import { describe, expect, it, spyOn } from "bun:test";
 import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   finishRun,
   finishTailorRun,
@@ -17,7 +18,7 @@ import {
 let counter = 0;
 
 function freshDb() {
-  const path = `/tmp/trailguide-runs-test-${Date.now()}-${++counter}.db`;
+  const path = `${tmpdir()}/trailguide-runs-test-${Date.now()}-${++counter}.db`;
   rmSync(path, { force: true });
   return openDb(path);
 }
@@ -113,7 +114,7 @@ describe("runs", () => {
   });
 
   it("claims atomically: a racing claim from another connection cannot also win", async () => {
-    const path = `/tmp/trailguide-runs-race-${Date.now()}-${++counter}.db`;
+    const path = `${tmpdir()}/trailguide-runs-race-${Date.now()}-${++counter}.db`;
     rmSync(path, { force: true });
     const a = openDb(path);
     const b = openDb(path);
@@ -150,7 +151,7 @@ describe("runs", () => {
   });
 
   it("does not close out a run that another process re-claimed after the read", async () => {
-    const path = `/tmp/trailguide-runs-reclaim-${Date.now()}-${++counter}.db`;
+    const path = `${tmpdir()}/trailguide-runs-reclaim-${Date.now()}-${++counter}.db`;
     rmSync(path, { force: true });
     const a = openDb(path);
     const b = openDb(path);
@@ -201,7 +202,7 @@ describe("runs", () => {
 
 describe("tailor_runs migration", () => {
   function legacyDb(): string {
-    const path = `/tmp/trailguide-legacy-test-${Date.now()}-${++counter}.db`;
+    const path = `${tmpdir()}/trailguide-legacy-test-${Date.now()}-${++counter}.db`;
     rmSync(path, { force: true });
     const legacy = new Database(path);
     legacy.run(`CREATE TABLE tailor_runs (

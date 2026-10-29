@@ -12,6 +12,13 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A new push cancels older runs of the same PR or branch. "-caller" keeps this
+# group distinct from any group the called tool-ci.yml builds from
+# github.workflow, which there is still this workflow's name.
+concurrency:
+  group: ${{ github.workflow }}-caller-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read
