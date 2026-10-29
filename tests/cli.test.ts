@@ -1,11 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   buildSources,
   createProgram,
   isInternship,
   requiresClearance,
+  resolveTrailChoice,
+  runAdd,
   type SearchOptions,
 } from "../src/cli.ts";
+import { ConfigError, configuredTrails } from "../src/config.ts";
+import { ImportError, type importJob } from "../src/importUrl.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
 
 function job(overrides: Partial<NormalizedJob>): NormalizedJob {
@@ -366,6 +373,175 @@ describe("init command", () => {
         "--db",
         "--yes",
       ]),
+    );
+  });
+});
+
+describe("configuredTrails", () => {
+  it("lists each keyword trail once, in config order", () => {
+    expect(
+      configuredTrails({
+        keywords: [
+          { role: "a", trail: "secplat" },
+          { role: "b" },
+          { role: "c", trail: "platform" },
+          { role: "d", trail: "secplat" },
+        ],
+      }),
+    ).toEqual(["secplat", "platform"]);
+    expect(configuredTrails({})).toEqual([]);
+  });
+});
+
+describe("resolveTrailChoice", () => {
+  const trails = ["secplat", "platform"];
+
+  it("accepts a configured trail, or none for no trail", async () => {
+    expect(await resolveTrailChoice("platform", trails)).toBe("platform");
+    expect(await resolveTrailChoice("none", trails)).toBeNull();
+    expect(await resolveTrailChoice("none", [])).toBeNull();
+  });
+
+  it("rejects an unknown trail and lists the valid ones", async () => {
+    await expect(resolveTrailChoice("nope", ["secplat"])).rejects.toThrow(
+      new ConfigError(
+        `trail "nope" isn't configured; use one of: secplat, none`,
+      ),
+    );
+  });
+
+  it("requires --trail when it can't ask", async () => {
+    await expect(resolveTrailChoice(undefined, trails)).rejects.toThrow(
+      new ConfigError(
+        "--trail is required when not running in a terminal; use one of: secplat, platform, none",
+      ),
+    );
+    await expect(resolveTrailChoice(undefined, [])).rejects.toThrow(
+      "use one of: none",
+    );
+  });
+
+  it("asks with none as the last choice", async () => {
+    let offered: string[] = [];
+    const ask = async (choices: string[]) => {
+      offered = choices;
+      return "2";
+    };
+    expect(await resolveTrailChoice(undefined, trails, ask)).toBe("platform");
+    expect(offered).toEqual(["secplat", "platform", "none"]);
+  });
+
+  it("says why it asks again after a bad answer", async () => {
+    const answers = ["9", "secplat"];
+    const hints: string[] = [];
+    const ask = async (_choices: string[], hint?: string) => {
+      if (hint) hints.push(hint);
+      return answers.shift() ?? "";
+    };
+    expect(await resolveTrailChoice(undefined, trails, ask)).toBe("secplat");
+    expect(hints).toEqual(["pick 1-3 or a trail name"]);
+  });
+
+  it("gives up on an empty answer (Enter or end of input)", async () => {
+    await expect(
+      resolveTrailChoice(undefined, trails, async () => ""),
+    ).rejects.toThrow(new ConfigError("no trail chosen; nothing imported"));
+  });
+});
+
+describe("add command", () => {
+  const LINK = "https://job-boards.greenhouse.io/codeorg/jobs/4727981005";
+  let dir = "";
+  let logs: string[] = [];
+  let errors: string[] = [];
+  const originalLog = console.log;
+  const originalError = console.error;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "trailguide-add-"));
+    writeFileSync(
+      join(dir, "config.toml"),
+      '[[location]]\ncity = "Remote"\nflexibility = "remote"\n\n[[keywords]]\nrole = "Platform Engineer"\ntrail = "platform"\n',
+    );
+    logs = [];
+    errors = [];
+    console.log = (msg: string) => logs.push(msg);
+    console.error = (msg: string) => errors.push(msg);
+    process.exitCode = 0;
+  });
+
+  afterEach(() => {
+    console.log = originalLog;
+    console.error = originalError;
+    process.exitCode = 0;
+  });
+
+  const options = (trail?: string) => ({
+    url: LINK,
+    trail,
+    db: join(dir, "t.db"),
+    config: join(dir, "config.toml"),
+  });
+
+  function fakeImport(added: boolean, trail?: string) {
+    const calls: unknown[][] = [];
+    const fn = (async (...args: unknown[]) => {
+      calls.push(args);
+      return {
+        added,
+        job: {
+          listingId: "greenhouse:4727981005",
+          title: "Software Engineer, Teacher Experience",
+          company: "CodeAI",
+          location: "Remote or Seattle, WA",
+          ...(trail ? { trail } : {}),
+        },
+      };
+    }) as unknown as typeof importJob;
+    return { fn, calls };
+  }
+
+  it("fails before importing when --trail is missing outside a terminal", async () => {
+    const { fn, calls } = fakeImport(true);
+    await runAdd(options(), { importJob: fn });
+    expect(calls).toHaveLength(0);
+    expect(process.exitCode).toBe(1);
+    expect(errors.join("\n")).toContain("use one of: platform, none");
+  });
+
+  it("reports an added job with its trail", async () => {
+    const { fn, calls } = fakeImport(true, "platform");
+    await runAdd(options("platform"), { importJob: fn });
+    expect(calls[0]?.[1]).toBe(LINK);
+    expect(calls[0]?.[2]).toBe("platform");
+    expect(logs).toEqual([
+      "Added greenhouse:4727981005: Software Engineer, Teacher Experience @ CodeAI (Remote or Seattle, WA), trail platform",
+    ]);
+  });
+
+  it("reports a job it already tracks, and no trail", async () => {
+    const { fn, calls } = fakeImport(false);
+    await runAdd(options("none"), { importJob: fn });
+    expect(calls[0]?.[2]).toBeNull();
+    expect(logs).toEqual([
+      "Already tracked greenhouse:4727981005: Software Engineer, Teacher Experience @ CodeAI (Remote or Seattle, WA), no trail",
+    ]);
+  });
+
+  it("prints an import error and exits 1", async () => {
+    const fn = (async () => {
+      throw new ImportError("could not fetch x: HTTP 404");
+    }) as unknown as typeof importJob;
+    await runAdd(options("platform"), { importJob: fn });
+    expect(errors).toEqual(["error: could not fetch x: HTTP 404"]);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("is registered with --trail, --db and --config", () => {
+    const cmd = createProgram().commands.find((c) => c.name() === "add");
+    expect(cmd?.registeredArguments.map((a) => a.name())).toEqual(["url"]);
+    expect(cmd?.options.map((o) => o.long)).toEqual(
+      expect.arrayContaining(["--trail", "--db", "--config"]),
     );
   });
 });

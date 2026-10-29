@@ -24,6 +24,22 @@ function matchesRole(title: string, role: string | string[]): boolean {
   return toArray(role).some((r) => lowerTitle.includes(r.toLowerCase()));
 }
 
+function toNormalized(job: GreenhouseJob, company: string): NormalizedJob {
+  return {
+    sourceId: String(job.id),
+    source: "greenhouse",
+    title: job.title,
+    company,
+    location: job.location.name,
+    remoteType: job.location.name.toLowerCase().includes("remote")
+      ? "remote"
+      : "unknown",
+    url: job.absolute_url,
+    postedAt: job.updated_at,
+    description: stripHtml(job.content),
+  };
+}
+
 export function createGreenhouseSource(
   boards: Board[] = companiesForAts("greenhouse"),
 ): Source {
@@ -44,22 +60,25 @@ export function createGreenhouseSource(
           ) {
             continue;
           }
-          results.push({
-            sourceId: String(job.id),
-            source: "greenhouse",
-            title: job.title,
-            company,
-            location: job.location.name,
-            remoteType: job.location.name.toLowerCase().includes("remote")
-              ? "remote"
-              : "unknown",
-            url: job.absolute_url,
-            postedAt: job.updated_at,
-            description: stripHtml(job.content),
-          });
+          results.push(toNormalized(job, company));
         }
         return results;
       });
     },
   };
+}
+
+/**
+ * One posting by id (`trailguide add`). `company` is the board's name when
+ * trailguide knows the board; otherwise Greenhouse's own name for it.
+ */
+export async function fetchGreenhouseJob(
+  slug: string,
+  id: string,
+  company?: string,
+): Promise<NormalizedJob> {
+  const job = await getJson<GreenhouseJob & { company_name?: string }>(
+    `https://boards-api.greenhouse.io/v1/boards/${slug}/jobs/${id}`,
+  );
+  return toNormalized(job, company ?? job.company_name ?? slug);
 }

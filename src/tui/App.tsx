@@ -18,7 +18,7 @@ import React, {
 } from "react";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
-import { loadConfig } from "../config.ts";
+import { configuredTrails, loadConfig, resolveBoards } from "../config.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
@@ -34,6 +34,8 @@ import {
   startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
+import { ImportError, importJob } from "../importUrl.ts";
+import { type ImportPrompt, stepImportPrompt } from "./importPrompt.ts";
 import { linkifyPdfPath, openTarget } from "./open.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 import {
@@ -131,6 +133,7 @@ function footerItems(
     { before: "cycle trai", key: "L" },
     { key: "Tab", after: ` → ${otherView}` },
     { key: "S", after: "earch" },
+    { key: "I", after: "mport link" },
     { key: "R", after: "efresh (auto-archives)" },
   ];
 }
@@ -288,12 +291,25 @@ export default function JobBrowser({
   // config just means no trails to cycle through.
   const trails = useMemo(() => {
     try {
-      const { keywords = [] } = loadConfig({ config: configPath }).config;
-      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
+      return configuredTrails(loadConfig({ config: configPath }).config);
     } catch {
       return [];
     }
   }, [configPath]);
+  // Boards for naming imported jobs (I); a broken config means built-ins only.
+  const boards = useMemo(() => {
+    try {
+      return resolveBoards(loadConfig({ config: configPath }).config);
+    } catch {
+      return resolveBoards({});
+    }
+  }, [configPath]);
+
+  // The I prompt (link, then trail) while it's open, and the job to select
+  // once an import lands in the list.
+  const [importPrompt, setImportPrompt] = useState<ImportPrompt | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const pendingSelect = useRef<string | null>(null);
 
   const visibleJobs = useMemo(
     () => orderJobs(jobs, viewTab, trails, tailoredIds),
@@ -310,6 +326,22 @@ export default function JobBrowser({
   // paddingX 2 + border 1 on each side), so their wrappable text sees the
   // same content width.
   const contentWidth = Math.max(20, columns - 6);
+
+  // The I prompt takes the status line's place. Kept to one line (a long
+  // link shows its end) so the list height math below still holds.
+  const promptLine = (() => {
+    if (!importPrompt) return null;
+    if (importPrompt.step === "url") {
+      const label = "Import link: ";
+      const room = Math.max(1, contentWidth - label.length - 1);
+      return `${label}${importPrompt.text.slice(-room)}▏`;
+    }
+    const choices = [...trails, "none"].map((t, i) =>
+      i === importPrompt.index ? `[${t}]` : t,
+    );
+    return `Trail: ${choices.join(" ")}   ←/→ choose, ↵ import, Esc cancel`;
+  })();
+  const bottomLine = promptLine ?? statusMessage;
 
   const selectedIsTailored = selectedJob
     ? tailoredIds.has(selectedJob.listingId)
@@ -357,7 +389,7 @@ export default function JobBrowser({
   // very different heights (an ~8-11 line bordered box vs. a single line),
   // so the number of rows available to the scrollable list has to be
   // recomputed for whichever one is actually on screen right now.
-  const bottomSectionLines = statusMessage
+  const bottomSectionLines = bottomLine
     ? STATUS_LINES
     : selectedJob
       ? DETAIL_FIXED_LINES +
@@ -453,6 +485,37 @@ export default function JobBrowser({
           : 'no trails configured (add trail = "..." to a [[keywords]] entry)',
     );
   }, [db, trails, visibleJobs, selectedIndex, showStatus]);
+
+  const handleImport = useCallback(
+    async (url: string, trail: string | null) => {
+      setIsImporting(true);
+      setStatusMessage("Importing…");
+      try {
+        const { job, added } = await importJob(db, url, trail, boards);
+        pendingSelect.current = job.listingId;
+        setJobs(allJobs(db));
+        setViewTab(job.state === "archived" ? "archived" : "active");
+        showStatus(
+          `${added ? "Added" : "Already tracked"} ${job.title} @ ${job.company}`,
+        );
+      } catch (err) {
+        showStatus(err instanceof ImportError ? err.message : String(err));
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [db, boards, showStatus],
+  );
+
+  // Select an imported job once it shows up in the (re-sorted) list.
+  useEffect(() => {
+    const id = pendingSelect.current;
+    if (!id) return;
+    const index = visibleJobs.findIndex((j) => j.listingId === id);
+    if (index === -1) return;
+    pendingSelect.current = null;
+    setSelectedIndex(index);
+  }, [visibleJobs]);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
@@ -578,6 +641,21 @@ export default function JobBrowser({
 
   const handleInput = useCallback(
     (input: string, key: Key) => {
+      // While the I prompt is open it gets every key (so q and Esc don't quit).
+      if (importPrompt) {
+        const result = stepImportPrompt(importPrompt, input, key, trails);
+        if ("prompt" in result) {
+          setImportPrompt(result.prompt);
+          return;
+        }
+        setImportPrompt(null);
+        if ("done" in result) handleImport(result.done.url, result.done.trail);
+        return;
+      }
+      if (input === "I") {
+        if (!isImporting) setImportPrompt({ step: "url", text: "" });
+        return;
+      }
       if (key.escape || input === "q") {
         exit();
         return;
@@ -646,6 +724,10 @@ export default function JobBrowser({
       }
     },
     [
+      importPrompt,
+      isImporting,
+      trails,
+      handleImport,
       exit,
       visibleJobs.length,
       visibleCount,
@@ -759,13 +841,19 @@ export default function JobBrowser({
         )}
       </Box>
 
-      {statusMessage && (
+      {promptLine && (
+        <Box marginTop={1}>
+          <Text wrap="truncate-end">{promptLine}</Text>
+        </Box>
+      )}
+
+      {!promptLine && statusMessage && (
         <Box marginTop={1}>
           <Text dimColor>{linkifyPdfPath(statusMessage)}</Text>
         </Box>
       )}
 
-      {selectedJob && !statusMessage && (
+      {selectedJob && !bottomLine && (
         <>
           <Box height={GAP_LINE} />
           <Box

@@ -2,6 +2,7 @@
   { "company": "Figma", "ats": "greenhouse", "slug": "figma" },
   { "company": "Notion", "ats": "greenhouse", "slug": "notion" },
   { "company": "Anthropic", "ats": "greenhouse", "slug": "anthropic" },
+  { "company": "CodeAI", "ats": "greenhouse", "slug": "codeorg" },
   { "company": "Spotify", "ats": "lever", "slug": "spotify" },
   {
     "company": "Workday",

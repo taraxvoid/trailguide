@@ -1,18 +1,25 @@
 import { afterEach, describe, expect, it, mock } from "bun:test";
 import { createAdzunaSource } from "../src/sources/adzuna.ts";
-import { createAshbySource } from "../src/sources/ashby.ts";
+import { createAshbySource, fetchAshbyJob } from "../src/sources/ashby.ts";
 import type { Board } from "../src/sources/boards.ts";
-import { createGreenhouseSource } from "../src/sources/greenhouse.ts";
+import {
+  createGreenhouseSource,
+  fetchGreenhouseJob,
+} from "../src/sources/greenhouse.ts";
 import { createJobApsSource } from "../src/sources/jobaps.ts";
 import { createJSearchSource } from "../src/sources/jsearch.ts";
-import { createLeverSource } from "../src/sources/lever.ts";
+import { createLeverSource, fetchLeverJob } from "../src/sources/lever.ts";
 import { createRemoteOkSource } from "../src/sources/remoteok.ts";
 import { createRemotiveSource } from "../src/sources/remotive.ts";
 import { companiesForAts } from "../src/sources/seed.ts";
 import { createWeWorkRemotelySource } from "../src/sources/weworkremotely.ts";
-import { createWorkableSource } from "../src/sources/workable.ts";
+import {
+  createWorkableSource,
+  fetchWorkableJob,
+} from "../src/sources/workable.ts";
 import adzunaFixture from "./fixtures/adzuna-search.json";
 import ashbyFixture from "./fixtures/ashby-ramp.json";
+import greenhouseCodeorgFixture from "./fixtures/greenhouse-codeorg-job.json";
 import greenhouseFixture from "./fixtures/greenhouse-figma.json";
 import jobApsFixture from "./fixtures/jobaps-alameda.rss" with { type: "text" };
 import jsearchFixture from "./fixtures/jsearch-search.json";
@@ -616,5 +623,101 @@ describe("workable source", () => {
       location: "Oakland",
     });
     expect(oakland.map((j) => j.sourceId)).toEqual(["AAA111"]);
+  });
+});
+
+describe("single-job fetchers", () => {
+  function serve(body: unknown, status = 200) {
+    const urls: string[] = [];
+    globalThis.fetch = mock(async (input: string | URL) => {
+      urls.push(String(input));
+      return new Response(JSON.stringify(body), { status });
+    }) as unknown as typeof fetch;
+    return urls;
+  }
+
+  it("fetches one greenhouse job, preferring the board's company name", async () => {
+    const urls = serve(greenhouseCodeorgFixture);
+    const job = await fetchGreenhouseJob(
+      "codeorg",
+      "4727981005",
+      "Code Org Board",
+    );
+    expect(urls).toEqual([
+      "https://boards-api.greenhouse.io/v1/boards/codeorg/jobs/4727981005",
+    ]);
+    expect(job).toMatchObject({
+      source: "greenhouse",
+      sourceId: "4727981005",
+      title: "Software Engineer, Teacher Experience",
+      company: "Code Org Board",
+      location: "Remote or Seattle, WA",
+      remoteType: "remote",
+      url: "https://job-boards.greenhouse.io/codeorg/jobs/4727981005",
+    });
+    const unnamed = await fetchGreenhouseJob("codeorg", "4727981005");
+    expect(unnamed.company).toBe("CodeAI");
+  });
+
+  it("rejects a removed greenhouse job", async () => {
+    serve({ status: 404 }, 404);
+    await expect(fetchGreenhouseJob("codeorg", "1")).rejects.toThrow(
+      "HTTP 404",
+    );
+  });
+
+  it("includes CodeAI in the built-in greenhouse boards", () => {
+    expect(companiesForAts("greenhouse")).toContainEqual({
+      company: "CodeAI",
+      ats: "greenhouse",
+      slug: "codeorg",
+    });
+  });
+
+  it("fetches one lever job with the same fields as search", async () => {
+    const urls = serve(leverFixture[0]);
+    const job = await fetchLeverJob("netflix", "abc-123", "Netflix");
+    expect(urls).toEqual(["https://api.lever.co/v0/postings/netflix/abc-123"]);
+    serve(leverFixture);
+    const searched = await createLeverSource([
+      { company: "Netflix", ats: "lever", slug: "netflix" },
+    ]).search({ role: "streaming" });
+    expect(searched[0]).toEqual(job);
+    serve(leverFixture[0]);
+    expect((await fetchLeverJob("netflix", "abc-123")).company).toBe("netflix");
+  });
+
+  it("fetches one ashby job from its board", async () => {
+    const urls = serve(ashbyFixture);
+    const job = await fetchAshbyJob("ramp", "2001", "Ramp");
+    expect(urls).toEqual([
+      "https://api.ashbyhq.com/posting-api/job-board/ramp",
+    ]);
+    expect(job).toMatchObject({
+      source: "ashby",
+      sourceId: "2001",
+      title: "Senior Software Engineer, Infrastructure",
+      company: "Ramp",
+    });
+    await expect(fetchAshbyJob("ramp", "missing")).rejects.toThrow(
+      "not on its public board",
+    );
+  });
+
+  it("fetches one workable job from its account", async () => {
+    const urls = serve(workableFixture);
+    const job = await fetchWorkableJob("example", "AAA111");
+    expect(urls).toEqual([
+      "https://apply.workable.com/api/v1/widget/accounts/example?details=true",
+    ]);
+    expect(job).toMatchObject({
+      source: "workable",
+      sourceId: "AAA111",
+      title: "Lead Instructor",
+      company: "example",
+    });
+    await expect(fetchWorkableJob("example", "NOPE")).rejects.toThrow(
+      "not on its public board",
+    );
   });
 });

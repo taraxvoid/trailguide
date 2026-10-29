@@ -52,6 +52,27 @@ export function workableLocations(job: WorkableJob): string[] {
   return [...new Set(names.filter((n) => n !== ""))];
 }
 
+function toNormalized(
+  job: WorkableJob,
+  company: string,
+  locations: string[],
+): NormalizedJob {
+  return {
+    sourceId: job.shortcode,
+    source: "workable",
+    title: job.title,
+    company,
+    location: locations[0] ?? (job.telecommuting ? "Remote" : ""),
+    otherLocations: locations.slice(1),
+    // The widget only flags fully remote jobs; onsite and hybrid
+    // look the same, so anything else stays unknown.
+    remoteType: job.telecommuting ? "remote" : "unknown",
+    url: job.url,
+    postedAt: job.published_on ?? null,
+    description: job.description ? stripHtml(job.description) : null,
+  };
+}
+
 export function createWorkableSource(
   boards: Board[] = companiesForAts("workable"),
 ): Source {
@@ -75,23 +96,26 @@ export function createWorkableSource(
           ) {
             continue;
           }
-          results.push({
-            sourceId: job.shortcode,
-            source: "workable",
-            title: job.title,
-            company,
-            location: locations[0] ?? (job.telecommuting ? "Remote" : ""),
-            otherLocations: locations.slice(1),
-            // The widget only flags fully remote jobs; onsite and hybrid
-            // look the same, so anything else stays unknown.
-            remoteType: job.telecommuting ? "remote" : "unknown",
-            url: job.url,
-            postedAt: job.published_on ?? null,
-            description: job.description ? stripHtml(job.description) : null,
-          });
+          results.push(toNormalized(job, company, locations));
         }
         return results;
       });
     },
   };
+}
+
+/** One posting by shortcode (`trailguide add`), read from the account's widget. */
+export async function fetchWorkableJob(
+  slug: string,
+  shortcode: string,
+  company?: string,
+): Promise<NormalizedJob> {
+  const body = await getJson<WorkableResponse>(
+    `https://apply.workable.com/api/v1/widget/accounts/${slug}?details=true`,
+  );
+  const job = (body.jobs ?? []).find((j) => j.shortcode === shortcode);
+  if (!job) {
+    throw new Error(`not on its public board (removed, or unlisted)`);
+  }
+  return toNormalized(job, company ?? slug, workableLocations(job));
 }

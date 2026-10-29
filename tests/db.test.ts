@@ -11,6 +11,7 @@ import {
   type ListingState,
   listingId,
   openDb,
+  saveImportedJob,
   setJobApplied,
   setJobState,
   setJobTrail,
@@ -366,5 +367,76 @@ describe("openDb legacy lane column", () => {
     const db = openDb(path);
     expect(getJob(db, "a")?.trail).toBe("secplat");
     rmSync(path, { force: true });
+  });
+});
+
+describe("saveImportedJob", () => {
+  function tmpDbPath() {
+    return join(mkdtempSync(join(tmpdir(), "trailguide-import-")), "t.db");
+  }
+  const imported = (overrides: Partial<NormalizedJob> = {}) =>
+    mockJob({ source: "greenhouse", sourceId: "1", ...overrides });
+
+  it("adds a new job with trail and imported_at", () => {
+    const db = openDb(tmpDbPath());
+    expect(saveImportedJob(db, imported(), "platform")).toEqual({
+      listingId: "greenhouse:1",
+      added: true,
+    });
+    const job = getJob(db, "greenhouse:1");
+    expect(job?.trail).toBe("platform");
+    expect(job?.state).toBe("active");
+    expect(job?.importedAt).not.toBeNull();
+  });
+
+  it("updates an existing searched job without touching state", () => {
+    const db = openDb(tmpDbPath());
+    upsertJobs(db, [imported()]);
+    setJobState(db, "greenhouse:1", "applied", "2026-01-01T00:00:00.000Z");
+    const appliedAt = getJob(db, "greenhouse:1")?.appliedAt;
+    expect(appliedAt).not.toBeNull();
+    const result = saveImportedJob(
+      db,
+      imported({ title: "Renamed Engineer" }),
+      "ai-infra",
+    );
+    expect(result.added).toBe(false);
+    const job = getJob(db, "greenhouse:1");
+    expect(job?.title).toBe("Renamed Engineer");
+    expect(job?.state).toBe("applied");
+    expect(job?.appliedAt).toBe(appliedAt ?? null);
+    expect(job?.trail).toBe("ai-infra");
+    expect(job?.importedAt).not.toBeNull();
+  });
+
+  it("null trail clears an existing trail", () => {
+    const db = openDb(tmpDbPath());
+    saveImportedJob(db, imported(), "platform");
+    saveImportedJob(db, imported(), null);
+    expect(getJob(db, "greenhouse:1")?.trail).toBeUndefined();
+  });
+
+  it("keeps the first imported_at on re-import", async () => {
+    const db = openDb(tmpDbPath());
+    saveImportedJob(db, imported(), null);
+    const firstAt = getJob(db, "greenhouse:1")?.importedAt;
+    await Bun.sleep(5);
+    saveImportedJob(db, imported(), null);
+    expect(getJob(db, "greenhouse:1")?.importedAt).toBe(firstAt ?? null);
+  });
+
+  it("openDb migrates a db without imported_at", () => {
+    const path = tmpDbPath();
+    const legacy = new Database(path);
+    legacy.run(
+      "CREATE TABLE jobs (listing_id TEXT PRIMARY KEY, source_id TEXT NOT NULL, source TEXT NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT NOT NULL, remote_type TEXT NOT NULL, url TEXT NOT NULL, posted_at TEXT, description TEXT, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL, last_checked_at TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'active')",
+    );
+    legacy.close();
+    openDb(path).close();
+    const db = openDb(path);
+    const cols = db.query("PRAGMA table_info(jobs)").all() as {
+      name: string;
+    }[];
+    expect(cols.some((c) => c.name === "imported_at")).toBe(true);
   });
 });
