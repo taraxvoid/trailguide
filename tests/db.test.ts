@@ -21,7 +21,7 @@ import type { NormalizedJob } from "../src/sources/types.ts";
 let counter = 0;
 
 function freshDb() {
-  const path = `/tmp/trailguide-db-test-${Date.now()}-${++counter}.db`;
+  const path = `${tmpdir()}/trailguide-db-test-${Date.now()}-${++counter}.db`;
   rmSync(path, { force: true });
   return openDb(path);
 }
@@ -353,7 +353,7 @@ describe("trail", () => {
 
 describe("openDb legacy lane column", () => {
   it("renames jobs.lane to jobs.trail and keeps the data", () => {
-    const path = `/tmp/trailguide-db-test-legacy-${Date.now()}.db`;
+    const path = `${tmpdir()}/trailguide-db-test-legacy-${Date.now()}.db`;
     rmSync(path, { force: true });
     const legacy = new Database(path);
     legacy.run(

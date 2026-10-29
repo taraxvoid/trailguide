@@ -2,8 +2,7 @@
   { "company": "Figma", "ats": "greenhouse", "slug": "figma" },
   { "company": "Notion", "ats": "greenhouse", "slug": "notion" },
   { "company": "Anthropic", "ats": "greenhouse", "slug": "anthropic" },
-  { "company": "Netflix", "ats": "lever", "slug": "netflix" },
-  { "company": "Reddit", "ats": "lever", "slug": "reddit" },
+  { "company": "Spotify", "ats": "lever", "slug": "spotify" },
   {
     "company": "Workday",
     "ats": "workday",

@@ -1,5 +1,6 @@
 import type { SearchPlan, SearchTarget } from "./config.ts";
 import { dedupe } from "./dedupe.ts";
+import { createLimiter } from "./limit.ts";
 import { matches, normalizeRemoteType } from "./sources/location.ts";
 import type { NormalizedJob, SearchParams, Source } from "./sources/types.ts";
 import { stripTrackingParams } from "./url.ts";
@@ -88,6 +89,13 @@ function withTrail(
   return trail ? { ...job, trail } : job;
 }
 
+/**
+ * Scoped sources are paid search APIs (adzuna, jsearch) called once per
+ * (keyword, target); firing them all at once trips their rate limits (nginx
+ * 429s from adzuna, queued-until-timeout requests on jsearch).
+ */
+const SCOPED_CONCURRENCY = 2;
+
 function scopedParams(role: string, target: SearchTarget): SearchParams {
   return {
     role,
@@ -140,7 +148,9 @@ export async function collectJobs(
   };
 
   const unscoped = sources.filter((s) => !s.scoped);
-  const scoped = sources.filter((s) => s.scoped);
+  const scoped = sources
+    .filter((s) => s.scoped)
+    .map((source) => ({ source, limit: createLimiter(SCOPED_CONCURRENCY) }));
 
   const [loose, perTarget] = await Promise.all([
     Promise.all(unscoped.map((s) => call(s, { role: plan.keywords }))),
@@ -148,10 +158,13 @@ export async function collectJobs(
       plan.keywords.flatMap((role) =>
         plan.targets.map(async (target) => {
           const usable = scoped.filter(
-            (s) => s.labelsRemote !== false || target.flexibility !== "remote",
+            ({ source }) =>
+              source.labelsRemote !== false || target.flexibility !== "remote",
           );
           const found = await Promise.all(
-            usable.map((s) => call(s, scopedParams(role, target))),
+            usable.map(({ source, limit }) =>
+              limit(() => call(source, scopedParams(role, target))),
+            ),
           );
           return found
             .flat()
