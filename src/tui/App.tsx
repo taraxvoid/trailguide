@@ -78,9 +78,9 @@ const TERRACOTTA = "#c98f6b";
 // A small cairn of offset stones for the header's top-right corner. Each
 // stone is a row of lower-3/4 blocks so a sliver of gap separates them.
 const CAIRN = [
-  { stone: "   ▆▆▆", color: SAND },
-  { stone: " ▆▆▆▆▆", color: TERRACOTTA },
-  { stone: "▆▆▆▆▆▆▆▆", color: SAGE },
+  { stone: " ▆  ", color: SAND },
+  { stone: " ▆▆ ", color: TERRACOTTA },
+  { stone: "▆▆▆▆", color: SAGE },
 ];
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
@@ -768,16 +768,6 @@ export default function JobBrowser({
         alignItems="center"
       >
         <Box flexShrink={1} marginRight={2}>
-          <Text bold color={SAGE}>
-            Hi! I'll be your guide through the forested trails of job
-            applications. 🌲🏕️🥾🎒⛰️~
-          </Text>
-          {version && (
-            <Text dimColor wrap="truncate-end">
-              {"  "}
-              {version}
-            </Text>
-          )}
           {isSearching && (
             <Text color={pulseColor(pulseTick)} wrap="truncate-end">
               {"  Searching..."}
