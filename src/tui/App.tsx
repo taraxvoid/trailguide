@@ -52,14 +52,14 @@ interface AppProps {
   dbPath: string;
   /** Explicit config file (--config or TRAILGUIDE_CONFIG), forwarded to `trailguide search`. */
   configPath?: string;
-  /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
+  /** The running checkout's last commit, e.g. "main@abc1234*". */
   version?: string | null;
 }
 
 // Chrome heights below are line counts for the JSX blocks they mirror -
 // keep them in sync when the layout changes, since visibleCount depends on
 // knowing exactly how many non-list rows are on screen in each state.
-const HEADER_LINES = 3; // fixed height: the cairn's 3 rows, greeting centered beside it
+const HEADER_LINES = 1; // one row: search status left, version + cairn logo right
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
@@ -75,12 +75,14 @@ const SKY = "#7aa7d9";
 const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
 
-// A small cairn of offset stones for the header's top-right corner. Each
-// stone is a row of lower-3/4 blocks so a sliver of gap separates them.
+// A one-row cairn logo for the header's top-right corner: a pile of
+// partial-height blocks peaking in the middle.
 const CAIRN = [
-  { stone: " ▆  ", color: SAND },
-  { stone: " ▆▆ ", color: TERRACOTTA },
-  { stone: "▆▆▆▆", color: SAGE },
+  { stone: "▂", color: SAGE },
+  { stone: "▄", color: TERRACOTTA },
+  { stone: "▆", color: SAND },
+  { stone: "▄", color: TERRACOTTA },
+  { stone: "▂", color: SAGE },
 ];
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
@@ -762,24 +764,26 @@ export default function JobBrowser({
 
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
-      <Box
-        height={HEADER_LINES}
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <Box flexShrink={1} marginRight={2}>
+      <Box height={HEADER_LINES} justifyContent="space-between">
+        <Box flexShrink={0} marginRight={2}>
           {isSearching && (
-            <Text color={pulseColor(pulseTick)} wrap="truncate-end">
-              {"  Searching..."}
-            </Text>
+            <Text color={pulseColor(pulseTick)}>Searching...</Text>
           )}
         </Box>
-        <Box flexDirection="column" flexShrink={0}>
-          {CAIRN.map(({ stone, color }) => (
-            <Text key={color} color={color}>
-              {stone}
+        <Box flexShrink={1}>
+          {version && (
+            <Text dimColor wrap="truncate-start">
+              {`${version} `}
             </Text>
-          ))}
+          )}
+          <Box flexShrink={0}>
+            {CAIRN.map(({ stone, color }, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static list
+              <Text key={i} color={color}>
+                {stone}
+              </Text>
+            ))}
+          </Box>
         </Box>
       </Box>
 

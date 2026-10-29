@@ -49,7 +49,7 @@ describe("gitVersion", () => {
 });
 
 describe("formatGitVersion", () => {
-  it("shows branch, hash, dirty marker, and subject", () => {
+  it("shows branch, hash, and dirty marker, but not the subject", () => {
     expect(
       formatGitVersion({
         hash: "abc1234",
@@ -57,7 +57,7 @@ describe("formatGitVersion", () => {
         branch: "main",
         dirty: true,
       }),
-    ).toBe("main@abc1234* fix things");
+    ).toBe("main@abc1234*");
   });
 
   it("omits the branch when HEAD is detached", () => {
@@ -68,6 +68,6 @@ describe("formatGitVersion", () => {
         branch: null,
         dirty: false,
       }),
-    ).toBe("abc1234 fix things");
+    ).toBe("abc1234");
   });
 });
