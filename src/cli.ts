@@ -16,12 +16,7 @@ import {
   TRAIL_PATTERN,
   toSearchOptions,
 } from "./config.ts";
-import {
-  parseBoundary,
-  parseRange,
-  truncateWords,
-  weekRange,
-} from "./dateRange.ts";
+import { parseBoundary, parseRange, truncateWords } from "./dateRange.ts";
 import type { ListingState } from "./db.ts";
 import {
   allJobs,
@@ -490,9 +485,6 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
   } else if (options.since || options.until) {
     if (options.since) from = parseBoundary(options.since, now);
     if (options.until) to = parseBoundary(options.until, now);
-  } else if (state === "applied") {
-    // Default for applied: the last full Sunday-to-Saturday week.
-    ({ from, to } = weekRange(now, -1));
   }
 
   const db = openDb(resolveDbPath({ db: options.db }));
@@ -669,7 +661,7 @@ export function createProgram(
   program
     .command("jobs")
     .description(
-      "Emit stored jobs in a state as JSON, filtered by when they entered that state (applied defaults to last Sunday-Saturday week)",
+      "Emit stored jobs in a state as JSON, optionally filtered by when they entered that state",
     )
     .argument("[state]", `one of: ${LISTING_STATES.join(", ")}`, "applied")
     .option(
