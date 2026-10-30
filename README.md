@@ -190,6 +190,7 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
+- Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
 - S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
 - T: tailor your resume to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
 - V: view the job's tailored resume PDF

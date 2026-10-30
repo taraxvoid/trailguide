@@ -37,7 +37,7 @@ import {
 import { ImportError, importJob } from "../importUrl.ts";
 import { filterJobs, stepFilterPrompt } from "./filter.ts";
 import { type ImportPrompt, stepImportPrompt } from "./importPrompt.ts";
-import { linkifyPdfPath, openTarget } from "./open.ts";
+import { copyToClipboard, linkifyPdfPath, openTarget } from "./open.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 import {
   orderJobs,
@@ -65,7 +65,7 @@ const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
 const STATUS_LINES = 2; // marginTop 1 + content 1
-const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url wrap, measured below)
+const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url/id wrap, measured below)
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
@@ -121,6 +121,7 @@ function footerItems(
 ): FooterItem[] {
   return [
     { before: "", key: "O", after: "pen link" },
+    { key: "Y", after: "ank id" },
     {
       before: tailored ? "(re)" : "",
       key: "T",
@@ -393,7 +394,8 @@ export default function JobBrowser({
   const detailContentLines = selectedJob
     ? wrapText(titleLine, contentWidth).length +
       wrapText(companyLine, contentWidth).length +
-      wrapText(selectedJob.url, contentWidth).length
+      wrapText(selectedJob.url, contentWidth).length +
+      wrapText(selectedJob.listingId, contentWidth).length
     : 0;
 
   const footerLines = wrapText(FOOTER_TEXT, contentWidth).length;
@@ -654,6 +656,16 @@ export default function JobBrowser({
     showStatus(`Opened ${pdfPath}`);
   }, [db, visibleJobs, selectedIndex, showStatus]);
 
+  const handleCopyId = useCallback(async () => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    showStatus(
+      (await copyToClipboard(job.listingId))
+        ? `Copied ${job.listingId}`
+        : `No clipboard tool found (id: ${job.listingId})`,
+    );
+  }, [visibleJobs, selectedIndex, showStatus]);
+
   const handleInput = useCallback(
     (input: string, key: Key) => {
       // While the I prompt is open it gets every key (so q and Esc don't quit).
@@ -747,6 +759,10 @@ export default function JobBrowser({
         openTarget(selectedJob.url);
         return;
       }
+      if (input === "Y" && selectedJob) {
+        handleCopyId();
+        return;
+      }
       if (input === "V" && selectedJob) {
         handleOpenResume();
         return;
@@ -788,6 +804,7 @@ export default function JobBrowser({
       handleTailor,
       handleSearch,
       handleOpenResume,
+      handleCopyId,
     ],
   );
 
@@ -936,6 +953,7 @@ export default function JobBrowser({
               - {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
+            <Text dimColor>{selectedJob.listingId}</Text>
             {description && (
               <>
                 <Box height={GAP_LINE} />
