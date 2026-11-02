@@ -557,6 +557,25 @@ export function chooseTailorRegion(
   return regions.find((r) => jobRegions.includes(r.name))?.name;
 }
 
+/**
+ * Where a tailor run reads its master from. `--resume` is used as is: no
+ * config is read and no region is recorded, since the file may be any
+ * resume. Otherwise the region's folder (see chooseTailorRegion).
+ */
+export function tailorSource(
+  options: { resume?: string; region?: string },
+  jobRegions: string[],
+  load: () => {
+    regions: RegionEntry[];
+    resumeDir: (region?: string) => string;
+  },
+): { resumePath?: string; resumeDir?: string; region?: string } {
+  if (options.resume) return { resumePath: options.resume };
+  const { regions, resumeDir } = load();
+  const region = chooseTailorRegion(jobRegions, regions, options.region);
+  return { resumeDir: resumeDir(region), ...(region && { region }) };
+}
+
 export interface TailorCliOptions {
   db?: string;
   config?: string;
@@ -583,19 +602,20 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
   let result: Awaited<ReturnType<typeof tailorOrRegenerate>>;
   try {
     const ctx = { config: options.config };
-    const region = chooseTailorRegion(
+    const source = tailorSource(
+      options,
       getJob(db, options.listingId)?.regions ?? [],
-      configuredRegions(loadConfig(ctx).config),
-      options.region,
+      () => ({
+        regions: configuredRegions(loadConfig(ctx).config),
+        resumeDir: (region) => resolveResumeDir(ctx, region),
+      }),
     );
     result = await tailorOrRegenerate(db, options.listingId, {
       fresh: options.fresh,
-      resumePath: options.resume,
-      resumeDir: options.resume ? undefined : resolveResumeDir(ctx, region),
+      ...source,
       outputDir: options.outputDir,
       ollamaHost: options.ollamaHost,
       ollamaModel: options.ollamaModel,
-      region,
     });
   } catch (err) {
     finishTailorRun(db, options.listingId, false, (err as Error).message);

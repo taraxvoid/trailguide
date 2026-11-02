@@ -11,6 +11,7 @@ import {
   resolveTrailChoice,
   runAdd,
   type SearchOptions,
+  tailorSource,
 } from "../src/cli.ts";
 
 describe("chooseTailorRegion", () => {
@@ -38,6 +39,28 @@ describe("chooseTailorRegion", () => {
     expect(() => chooseTailorRegion([], regions, "mars")).toThrow(
       'unknown region "mars" (configured: bay, omaha)',
     );
+  });
+});
+
+describe("tailorSource", () => {
+  it("uses --resume as is, without reading the config or naming a region", () => {
+    const never = () => {
+      throw new Error("config must not be read");
+    };
+    expect(tailorSource({ resume: "/x/me.md" }, ["bay"], never)).toEqual({
+      resumePath: "/x/me.md",
+    });
+  });
+
+  it("otherwise picks the region and its folder", () => {
+    const source = tailorSource({}, ["omaha"], () => ({
+      regions: [
+        { name: "bay", work: "in-person", places: ["East Bay"] },
+        { name: "omaha", work: "in-person", places: ["Omaha metro"] },
+      ],
+      resumeDir: (region) => `/r/${region ?? ""}`,
+    }));
+    expect(source).toEqual({ resumeDir: "/r/omaha", region: "omaha" });
   });
 });
 

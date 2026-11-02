@@ -133,14 +133,24 @@ describe("toSearchOptions with regions", () => {
     ).toThrow("no [region.<name>] configured");
   });
 
-  it("--remote overrides region work", () => {
+  it("--remote overrides region work and untags regions of another work type", () => {
     const targets = toSearchOptions({ remote: true }, () => LOADED).targets;
     expect(targets.map((t) => t.flexibility)).toEqual([
       "remote",
       "remote",
       "remote",
     ]);
-    expect(targets.map((t) => t.region)).toEqual(["bay", "bay", "remote"]);
+    // A remote job found through a bay place is not a bay (in-person) job.
+    expect(targets.map((t) => t.region)).toEqual([
+      undefined,
+      undefined,
+      "remote",
+    ]);
+  });
+
+  it("--onsite never tags the remote region", () => {
+    const targets = toSearchOptions({ onsite: true }, () => LOADED).targets;
+    expect(targets.map((t) => t.region)).toEqual(["bay", "bay", undefined]);
   });
 });
 

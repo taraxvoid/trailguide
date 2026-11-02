@@ -33,6 +33,12 @@ describe("regionsFor", () => {
     ).toEqual(["bay", "omaha"]);
   });
 
+  it("treats an unlabeled job whose location says remote as remote", () => {
+    expect(
+      regionsFor(at("Remote - San Francisco, CA", "unknown"), REGIONS),
+    ).toEqual(["remote"]);
+  });
+
   it("puts a job elsewhere in none", () => {
     expect(regionsFor(at("Berlin, Germany", "onsite"), REGIONS)).toEqual([]);
   });

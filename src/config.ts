@@ -629,7 +629,11 @@ export function toSearchOptions(
         (city): SearchTarget => ({
           city,
           flexibility: flagFlexibility ?? region.work,
-          region: region.name,
+          // A flag that changes the work type finds jobs this region does
+          // not want; they get regions from their place afterwards instead.
+          ...((flagFlexibility === null || flagFlexibility === region.work) && {
+            region: region.name,
+          }),
         }),
       ),
     );

@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { RegionEntry } from "./config.ts";
 import { addJobRegions, allJobs } from "./db.ts";
-import { matches } from "./sources/location.ts";
+import { matches, normalizeRemoteType } from "./sources/location.ts";
 import type { NormalizedJob } from "./sources/types.ts";
 
 /** The TUI bucket for jobs that match no configured region. */
@@ -15,10 +15,12 @@ export function regionsFor(
   job: Pick<NormalizedJob, "location" | "remoteType" | "otherLocations">,
   regions: RegionEntry[],
 ): string[] {
+  // Same remote inference search applies, for imported and stored jobs.
+  const normalized = normalizeRemoteType(job);
   return regions
     .filter((region) =>
       region.places.some((city) =>
-        matches(job, { city, flexibility: region.work }),
+        matches(normalized, { city, flexibility: region.work }),
       ),
     )
     .map((region) => region.name);
@@ -27,7 +29,8 @@ export function regionsFor(
 /**
  * Gives every job that has no region yet the regions its stored location
  * matches. Covers jobs from before regions existed, `--role`/`--location`
- * searches, and regions added to the config later. Returns how many jobs
+ * searches, and jobs nothing matched before a region was added. Jobs
+ * that already have a region are left alone. Returns how many jobs
  * got at least one region. Stored jobs keep no other locations, so only
  * the main location counts here.
  */
