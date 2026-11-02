@@ -18,11 +18,18 @@ import React, {
 } from "react";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
-import { configuredTrails, loadConfig, resolveBoards } from "../config.ts";
+import {
+  configuredRegions,
+  configuredTrails,
+  loadConfig,
+  type RegionEntry,
+  resolveBoards,
+} from "../config.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
   getRun,
+  getSetting,
   getTailoredResume,
   getTailorRun,
   runningRuns,
@@ -31,21 +38,36 @@ import {
   setJobApplied,
   setJobState,
   setJobTrail,
+  setSetting,
   startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
 import { ImportError, importJob } from "../importUrl.ts";
+import { UNASSIGNED } from "../regions.ts";
 import { filterJobs, stepFilterPrompt } from "./filter.ts";
+import { HeaderStrip } from "./HeaderStrip.tsx";
 import { type ImportPrompt, stepImportPrompt } from "./importPrompt.ts";
 import { copyToClipboard, linkifyPdfPath, openTarget } from "./open.ts";
+import {
+  initialRegion,
+  nextRegion,
+  nextView,
+  regionByKey,
+  stripRegions,
+} from "./regions.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 import {
+  inRegion,
   orderJobs,
   type SectionTone,
   sectionCounts,
   sectionOf,
   type ViewTab,
+  viewCounts,
 } from "./sections.ts";
+
+/** Settings key for the region the TUI reopens on. */
+const REGION_SETTING = "tui.region";
 
 interface AppProps {
   db: Database;
@@ -115,13 +137,25 @@ interface FooterItem {
 const FOOTER_NAV = "Nav: ↑↓/k/j | ←→/h/l/pgup/pgdn | ↵ expand";
 const FOOTER_QUIT = "quit (q/Ctrl+C)";
 
+interface FooterRegions {
+  /** Regions in the header strip; the region keys show only with two or more. */
+  count: number;
+  /** The current region, named on the search item. */
+  current: string | null;
+}
+
 function footerItems(
   tailored: boolean | null,
   archived: boolean,
   applied: boolean,
-  otherView: string,
+  regions: FooterRegions,
 ): FooterItem[] {
+  const regionKeys: FooterItem[] =
+    regions.count > 1
+      ? [{ key: "G", after: `/1-${Math.min(9, regions.count)} region` }]
+      : [];
   return [
+    ...regionKeys,
     { before: "", key: "O", after: "pen link" },
     { key: "Y", after: "ank id" },
     {
@@ -135,22 +169,29 @@ function footerItems(
     { before: "archiv", key: "E", accent: TERRACOTTA, active: archived },
     { key: "A", after: "pplied", accent: SKY, active: applied },
     { before: "cycle trai", key: "L" },
-    { key: "Tab", after: ` → ${otherView}` },
-    { key: "S", after: "earch" },
+    { key: "Tab", after: " Active/Applied" },
+    { key: "Ctrl+E", after: " archived" },
+    {
+      key: "S",
+      after:
+        regions.current && regions.current !== UNASSIGNED
+          ? `earch ${regions.current}`
+          : "earch",
+    },
     { key: "I", after: "mport link" },
     { key: "/", after: " filter" },
     { key: "R", after: "efresh (auto-archives)" },
   ];
 }
 
-function footerPlainText(): string {
-  const items = footerItems(true, false, false, "Archived (999)").map(
+/** The footer flattened, for the wrap-height measurement. */
+function footerPlainText(regions: FooterRegions): string {
+  // The longest tailor label, so the height doesn't jump with the selection.
+  const items = footerItems(true, false, false, regions).map(
     (i) => `${i.before ?? ""}${i.key}${i.after ?? ""}`,
   );
   return [FOOTER_NAV, ...items, FOOTER_QUIT].join(" | ");
 }
-
-const FOOTER_TEXT = footerPlainText();
 
 const TONE_COLORS: Record<SectionTone, string | undefined> = {
   applied: SKY,
@@ -309,6 +350,40 @@ export default function JobBrowser({
       return resolveBoards({});
     }
   }, [configPath]);
+  // Regions from the config; a broken config means one unnamed list.
+  const regionEntries = useMemo((): RegionEntry[] => {
+    try {
+      return configuredRegions(loadConfig({ config: configPath }).config);
+    } catch {
+      return [];
+    }
+  }, [configPath]);
+  const regionNames = useMemo(
+    () => regionEntries.map((r) => r.name),
+    [regionEntries],
+  );
+  // The header strip's regions, and the one being shown (null: no regions).
+  const strip = useMemo(
+    () => stripRegions(regionNames, jobs),
+    [regionNames, jobs],
+  );
+  const [region, setRegion] = useState<string | null>(() =>
+    initialRegion(
+      stripRegions(regionNames, jobs),
+      getSetting(db, REGION_SETTING),
+    ),
+  );
+  // The view Ctrl+E returns to when leaving Archived.
+  const viewBeforeArchive = useRef<ViewTab>("active");
+  // A region can leave the strip (unassigned emptied, config changed).
+  useEffect(() => {
+    if (region === null ? strip.length > 0 : !strip.includes(region)) {
+      setRegion(strip[0] ?? null);
+    }
+  }, [strip, region]);
+  useEffect(() => {
+    if (region !== null) setSetting(db, REGION_SETTING, region);
+  }, [db, region]);
 
   // The I prompt (link, then trail) while it's open, and the job to select
   // once an import lands in the list.
@@ -321,10 +396,19 @@ export default function JobBrowser({
   const [filterQuery, setFilterQuery] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
+  const regionJobs = useMemo(
+    () => jobs.filter((job) => inRegion(job, region)),
+    [jobs, region],
+  );
   const visibleJobs = useMemo(
     () =>
-      orderJobs(filterJobs(jobs, filterQuery), viewTab, trails, tailoredIds),
-    [jobs, filterQuery, viewTab, trails, tailoredIds],
+      orderJobs(
+        filterJobs(regionJobs, filterQuery),
+        viewTab,
+        trails,
+        tailoredIds,
+      ),
+    [regionJobs, filterQuery, viewTab, trails, tailoredIds],
   );
   const counts = useMemo(
     () => sectionCounts(visibleJobs, viewTab, trails),
@@ -393,14 +477,30 @@ export default function JobBrowser({
       } - ${selectedJob.location}`
     : "";
 
+  // Which region's master the tailored resume came from, next to the id.
+  const resumeRegion = useMemo(
+    () =>
+      selectedJob && tailoredIds.has(selectedJob.listingId)
+        ? (getTailoredResume(db, selectedJob.listingId)?.region ?? null)
+        : null,
+    [db, selectedJob, tailoredIds],
+  );
+  const idLine = selectedJob
+    ? `${selectedJob.listingId}${resumeRegion ? `   resume: ${resumeRegion}` : ""}`
+    : "";
+
   const detailContentLines = selectedJob
     ? wrapText(titleLine, contentWidth).length +
       wrapText(companyLine, contentWidth).length +
       wrapText(selectedJob.url, contentWidth).length +
-      wrapText(selectedJob.listingId, contentWidth).length
+      wrapText(idLine, contentWidth).length
     : 0;
 
-  const footerLines = wrapText(FOOTER_TEXT, contentWidth).length;
+  const footerRegions: FooterRegions = { count: strip.length, current: region };
+  const footerLines = wrapText(
+    footerPlainText(footerRegions),
+    contentWidth,
+  ).length;
 
   // The detail panel and status message are mutually exclusive and occupy
   // very different heights (an ~8-11 line bordered box vs. a single line),
@@ -439,10 +539,10 @@ export default function JobBrowser({
     );
   }, [visibleJobs.length]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab or filter changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the region, tab or filter changes
   useEffect(() => {
     setSelectedIndex(0);
-  }, [viewTab, filterQuery]);
+  }, [region, viewTab, filterQuery]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the selection changes
   useEffect(() => {
@@ -508,12 +608,27 @@ export default function JobBrowser({
       setIsImporting(true);
       setStatusMessage("Importing…");
       try {
-        const { job, added } = await importJob(db, url, trail, boards);
+        const { job, added } = await importJob(
+          db,
+          url,
+          trail,
+          boards,
+          regionEntries,
+          region && region !== UNASSIGNED ? region : undefined,
+        );
         pendingSelect.current = job.listingId;
         // A filter could hide the job we're about to select.
         setFilterQuery("");
         setJobs(allJobs(db));
-        setViewTab(job.state === "archived" ? "archived" : "active");
+        setViewTab(
+          job.state === "archived" || job.state === "applied"
+            ? job.state
+            : "active",
+        );
+        // Show it in a region it belongs to.
+        if (region !== null && !inRegion(job, region)) {
+          setRegion(job.regions[0] ?? UNASSIGNED);
+        }
         showStatus(
           `${added ? "Added" : "Already tracked"} ${job.title} @ ${job.company}`,
         );
@@ -523,7 +638,7 @@ export default function JobBrowser({
         setIsImporting(false);
       }
     },
-    [db, boards, showStatus],
+    [db, boards, regionEntries, region, showStatus],
   );
 
   // Select an imported job once it shows up in the (re-sorted) list.
@@ -616,6 +731,8 @@ export default function JobBrowser({
         "--db",
         dbPath,
         ...(configPath ? ["--config", resolve(configPath)] : []),
+        // Tailor with the resume of the region being looked at.
+        ...(region && region !== UNASSIGNED ? ["--region", region] : []),
       ],
       stdio: ["ignore", "ignore", "ignore"],
       env: { ...process.env, [NO_DELEGATE_ENV]: "1" },
@@ -632,10 +749,27 @@ export default function JobBrowser({
     setStatusMessage(
       `Tailoring ${job.title} @ ${job.company} in the background (survives quitting)…`,
     );
-  }, [db, dbPath, configPath, visibleJobs, selectedIndex, tailoringIds]);
+  }, [
+    db,
+    dbPath,
+    configPath,
+    region,
+    visibleJobs,
+    selectedIndex,
+    tailoringIds,
+  ]);
 
   const handleSearch = useCallback(() => {
-    const result = startBackgroundSearch({ db, dbPath, configPath });
+    if (region === UNASSIGNED) {
+      showStatus("Unassigned is not a region to search: press G to pick one");
+      return;
+    }
+    const result = startBackgroundSearch({
+      db,
+      dbPath,
+      configPath,
+      ...(region !== null && { region }),
+    });
     if (!result.started) {
       showStatus(result.message);
       return;
@@ -643,7 +777,7 @@ export default function JobBrowser({
     prevSearching.current = true;
     setIsSearching(true);
     setStatusMessage(result.message);
-  }, [db, dbPath, configPath, showStatus]);
+  }, [db, dbPath, configPath, region, showStatus]);
 
   const handleOpenResume = useCallback(async () => {
     const job = visibleJobs[selectedIndex];
@@ -748,7 +882,23 @@ export default function JobBrowser({
         return;
       }
       if (key.tab) {
-        setViewTab((prev) => (prev === "active" ? "archived" : "active"));
+        setViewTab((prev) => nextView(prev, "tab", viewBeforeArchive.current));
+        return;
+      }
+      if (key.ctrl && input === "e") {
+        setViewTab((prev) => {
+          if (prev !== "archived") viewBeforeArchive.current = prev;
+          return nextView(prev, "ctrl-e", viewBeforeArchive.current);
+        });
+        return;
+      }
+      if (input === "G" && region !== null) {
+        setRegion(nextRegion(strip, region));
+        return;
+      }
+      const jump = regionByKey(strip, input);
+      if (jump !== null) {
+        setRegion(jump);
         return;
       }
       if (key.return) {
@@ -807,6 +957,8 @@ export default function JobBrowser({
       handleSearch,
       handleOpenResume,
       handleCopyId,
+      region,
+      strip,
     ],
   );
 
@@ -816,22 +968,23 @@ export default function JobBrowser({
     return visibleJobs.slice(scrollOffset, scrollOffset + visibleCount);
   }, [visibleJobs, scrollOffset, visibleCount]);
 
-  const activeCount = useMemo(
-    () =>
-      jobs.filter((j) => j.state === "active" || j.state === "applied").length,
-    [jobs],
-  );
-  const archivedCount = useMemo(
-    () => jobs.filter((j) => j.state === "archived").length,
-    [jobs],
-  );
+  const stripCounts = useMemo(() => viewCounts(jobs, region), [jobs, region]);
 
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
       <Box height={HEADER_LINES} justifyContent="space-between">
-        <Box flexShrink={0} marginRight={2}>
+        <Box flexShrink={1} marginRight={2}>
+          <HeaderStrip
+            regions={strip}
+            current={region}
+            view={viewTab}
+            counts={stripCounts}
+            accent={SAND}
+          />
           {isSearching && (
-            <Text color={pulseColor(pulseTick)}>Searching...</Text>
+            <Text color={pulseColor(pulseTick)} wrap="truncate-end">
+              {"   Searching..."}
+            </Text>
           )}
         </Box>
         <Box flexShrink={1}>
@@ -947,7 +1100,7 @@ export default function JobBrowser({
               - {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
-            <Text dimColor>{selectedJob.listingId}</Text>
+            <Text dimColor>{idLine}</Text>
             {description && (
               <>
                 <Box height={GAP_LINE} />
@@ -965,9 +1118,7 @@ export default function JobBrowser({
             selectedIsTailored,
             selectedJob?.state === "archived",
             !!selectedJob?.appliedAt,
-            viewTab === "active"
-              ? `Archived (${archivedCount})`
-              : `Active (${activeCount})`,
+            footerRegions,
           ).map((item) => (
             <Text key={item.key}>
               {" | "}

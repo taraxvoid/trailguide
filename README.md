@@ -201,7 +201,12 @@ Browse stored jobs interactively:
 trailguide tui [--db <path>] [--config <path>]
 ```
 
-The header shows the branch and last commit of the checkout that's running
+The header's left side lists your regions (in config order, the current one
+highlighted, plus `unassigned` while some job matches none), then the
+Active, Applied and Archived views with the current region's counts. A job in
+two regions shows in both. The TUI reopens on the region you used last.
+
+The right side shows the branch and last commit of the checkout that's running
 (`*` = uncommitted changes). A global `trailguide` from `bun link` runs whichever
 trailguide checkout (or worktree) you're currently inside, and the linked one
 everywhere else. Set `TRAILGUIDE_NO_DELEGATE=1` to always run the linked one.
@@ -210,19 +215,21 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 
 - ↑↓ / k j: navigate job list
 - ←→ / h l: page up/down
-- Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
+- G / 1-9: next region / jump to region N
+- Tab: switch between the Active and Applied views. Active is grouped into one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list. Applied lists tailored jobs first
+- Ctrl+E: open the Archived view; press it again to go back
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
 - Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
-- S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
-- T: tailor your resume to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
+- S: search the current region in the background. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
+- T: tailor your resume (the current region's master) to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
 - V: view the job's tailored resume PDF
 - E: archive
 - A: mark applied
 - L: cycle the job's resume trail (none, then each trail in the config)
 - I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
-- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across both views), Esc clears it
+- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across regions and views), Esc clears it
 - q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so

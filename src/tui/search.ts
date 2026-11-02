@@ -42,6 +42,8 @@ export interface BackgroundSearchOptions {
   configPath?: string;
   cwd?: string;
   spawn?: SpawnFn;
+  /** Search only this region (the TUI's current one). */
+  region?: string;
 }
 
 function errorText(error: unknown): string {
@@ -86,6 +88,7 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
           ...(options.configPath
             ? ["--config", resolve(cwd, options.configPath)]
             : []),
+          ...(options.region ? ["--region", options.region] : []),
         ],
         cwd,
         env: { ...process.env, [NO_DELEGATE_ENV]: "1" },
@@ -119,7 +122,7 @@ export function startBackgroundSearch(options: BackgroundSearchOptions): {
     }
     return {
       started: true,
-      message: `Searching in the background (survives quitting); log: ${logPath}`,
+      message: `Searching${options.region ? ` ${options.region}` : ""} in the background (survives quitting); log: ${logPath}`,
     };
   } catch (error) {
     return fail(error);
