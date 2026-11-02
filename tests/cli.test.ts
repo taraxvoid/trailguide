@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   buildSources,
+  chooseTailorRegion,
   createProgram,
   isInternship,
   requiresClearance,
@@ -11,6 +12,35 @@ import {
   runAdd,
   type SearchOptions,
 } from "../src/cli.ts";
+
+describe("chooseTailorRegion", () => {
+  const regions = [
+    { name: "bay", work: "in-person" as const, places: ["East Bay"] },
+    { name: "omaha", work: "in-person" as const, places: ["Omaha metro"] },
+  ];
+
+  it("takes the job's first region in config order", () => {
+    expect(chooseTailorRegion(["omaha", "bay"], regions)).toBe("bay");
+  });
+
+  it("lets --region win", () => {
+    expect(chooseTailorRegion(["omaha", "bay"], regions, "omaha")).toBe(
+      "omaha",
+    );
+  });
+
+  it("is undefined for a job in no configured region", () => {
+    expect(chooseTailorRegion([], regions)).toBeUndefined();
+    expect(chooseTailorRegion(["gone"], regions)).toBeUndefined();
+  });
+
+  it("rejects an unknown --region", () => {
+    expect(() => chooseTailorRegion([], regions, "mars")).toThrow(
+      'unknown region "mars" (configured: bay, omaha)',
+    );
+  });
+});
+
 import { ConfigError, configuredTrails } from "../src/config.ts";
 import { ImportError, type importJob } from "../src/importUrl.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
@@ -321,6 +351,19 @@ describe("search command parsing", () => {
     });
   });
 
+  it("collects multiple --region values", async () => {
+    const { program, calls } = programWithSpy();
+    await program.parseAsync([
+      "node",
+      "trailguide",
+      "search",
+      "--region",
+      "bay",
+      "omaha",
+    ]);
+    expect(calls[0]).toMatchObject({ region: ["bay", "omaha"] });
+  });
+
   it("collects multiple --location and --role values", async () => {
     const { program, calls } = programWithSpy();
     await program.parseAsync([
@@ -517,6 +560,26 @@ describe("add command", () => {
     expect(logs).toEqual([
       "Added greenhouse:4727981005: Software Engineer, Teacher Experience @ CodeAI (Remote or Seattle, WA), trail platform",
     ]);
+  });
+
+  it("passes the regions and the first region as the fallback", async () => {
+    const { fn, calls } = fakeImport(true, "platform");
+    await runAdd(options("platform"), { importJob: fn });
+    const regions = (calls[0]?.[4] ?? []) as { name: string }[];
+    expect(regions.map((r) => r.name)).toEqual(["remote"]);
+    expect(calls[0]?.[5]).toBe("remote");
+  });
+
+  it("uses --region as the fallback and rejects an unknown one", async () => {
+    const { fn, calls } = fakeImport(true, "platform");
+    await runAdd(
+      { ...options("platform"), region: "remote" },
+      { importJob: fn },
+    );
+    expect(calls[0]?.[5]).toBe("remote");
+    await runAdd({ ...options("platform"), region: "mars" }, { importJob: fn });
+    expect(calls).toHaveLength(1);
+    expect(errors.join("\n")).toContain('unknown region "mars"');
   });
 
   it("reports a job it already tracks, and no trail", async () => {

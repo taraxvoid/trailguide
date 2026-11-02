@@ -7,9 +7,11 @@ import pkg from "../package.json" with { type: "json" };
 import { delegateTarget, runDelegate } from "./checkout.ts";
 import {
   ConfigError,
+  configuredRegions,
   configuredTrails,
   describeConfig,
   loadConfig,
+  type RegionEntry,
   resolveBoards,
   resolveDbPath,
   resolveResumeDir,
@@ -24,6 +26,7 @@ import {
   finishRun,
   finishTailorRun,
   getJob,
+  getTailoredResume,
   jobsByState,
   jobsInStateBetween,
   listingId,
@@ -41,6 +44,7 @@ import { ImportError, importJob } from "./importUrl.ts";
 import { type InitOptions, runInit, terminalIO } from "./init.ts";
 import { mapLimit } from "./limit.ts";
 import type { Env } from "./paths.ts";
+import { tagUntaggedJobs, UNASSIGNED } from "./regions.ts";
 import {
   collectJobs,
   formatRunMessage,
@@ -105,6 +109,8 @@ export interface SearchOptions {
   config?: string;
   excludeClearance?: boolean;
   includeClearance?: boolean;
+  /** Search only these regions (default: all). */
+  region?: string[];
 }
 
 export interface SearchDeps {
@@ -112,6 +118,19 @@ export interface SearchDeps {
   isUrlDead?: (url: string) => Promise<boolean>;
   cwd?: string;
   env?: Env;
+}
+
+/** The configured regions, or none when the config is missing or broken. */
+function configuredRegionsOrNone(
+  config: string | undefined,
+  cwd: string,
+  env: Env,
+) {
+  try {
+    return configuredRegions(loadConfig({ config, cwd, env }).config);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -172,6 +191,9 @@ export async function runSearch(
       if (await deadCheck(job.url)) states.set(listingId(job), "inactive");
     });
     newJobs = upsertJobs(db, jobs, states);
+    // Jobs found without a region (--location, --role) get one from their
+    // place when a config with regions exists.
+    tagUntaggedJobs(db, configuredRegionsOrNone(options.config, cwd, env));
     if (options.json || options.csv) stored = allJobs(db);
     result = {
       found: jobs.length,
@@ -374,6 +396,8 @@ export interface AddCliOptions {
   trail?: string;
   db?: string;
   config?: string;
+  /** Region for a job whose location matches none (default: the first). */
+  region?: string;
 }
 
 export async function runAdd(
@@ -386,6 +410,8 @@ export async function runAdd(
   const ctx = { db: options.db, config: options.config };
   try {
     const { config } = loadConfig(ctx);
+    const regions = configuredRegions(config);
+    if (options.region !== undefined) assertRegion(options.region, regions);
     const trail = await resolveTrailChoice(
       options.trail,
       configuredTrails(config),
@@ -398,6 +424,8 @@ export async function runAdd(
         options.url,
         trail,
         resolveBoards(config),
+        regions,
+        options.region ?? regions[0]?.name,
       );
       console.log(
         `${added ? "Added" : "Already tracked"} ${job.listingId}: ${job.title} @ ${job.company} (${job.location}), ${job.trail ? `trail ${job.trail}` : "no trail"}`,
@@ -468,6 +496,8 @@ export interface JobsCliOptions {
   since?: string;
   until?: string;
   words: number;
+  /** Only jobs in this region (`unassigned`: jobs in none). */
+  region?: string;
 }
 
 /** Emits jobs in a state as JSON, filtered by when they entered that state. */
@@ -488,12 +518,43 @@ export function runJobs(options: JobsCliOptions, now = new Date()): void {
   }
 
   const db = openDb(resolveDbPath({ db: options.db }));
-  const jobs = jobsInStateBetween(db, state, from, to).map((job) => ({
-    ...job,
-    description: truncateWords(job.description, options.words),
-  }));
+  const region = options.region;
+  const inRegion = (regions: string[]) =>
+    region === undefined ||
+    (region === UNASSIGNED ? regions.length === 0 : regions.includes(region));
+  const jobs = jobsInStateBetween(db, state, from, to)
+    .filter((job) => inRegion(job.regions))
+    .map((job) => ({
+      ...job,
+      description: truncateWords(job.description, options.words),
+    }));
   db.close();
   console.log(JSON.stringify(jobs, null, 2));
+}
+
+/** An error naming the configured regions when `name` is not one of them. */
+function assertRegion(name: string, regions: RegionEntry[]): void {
+  if (!regions.some((r) => r.name === name)) {
+    throw new ConfigError(
+      `unknown region ${JSON.stringify(name)} (configured: ${regions.map((r) => r.name).join(", ") || "none"})`,
+    );
+  }
+}
+
+/**
+ * The region whose resume masters a tailor run uses: --region, else the
+ * job's first region in config order, else none (the plain resume dir).
+ */
+export function chooseTailorRegion(
+  jobRegions: string[],
+  regions: RegionEntry[],
+  flag?: string,
+): string | undefined {
+  if (flag !== undefined) {
+    assertRegion(flag, regions);
+    return flag;
+  }
+  return regions.find((r) => jobRegions.includes(r.name))?.name;
 }
 
 export interface TailorCliOptions {
@@ -505,6 +566,8 @@ export interface TailorCliOptions {
   ollamaHost?: string;
   ollamaModel?: string;
   fresh?: boolean;
+  /** Use this region's resume masters (default: the job's first region). */
+  region?: string;
 }
 
 export async function runTailor(options: TailorCliOptions): Promise<void> {
@@ -519,15 +582,20 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
   }
   let result: Awaited<ReturnType<typeof tailorOrRegenerate>>;
   try {
+    const ctx = { config: options.config };
+    const region = chooseTailorRegion(
+      getJob(db, options.listingId)?.regions ?? [],
+      configuredRegions(loadConfig(ctx).config),
+      options.region,
+    );
     result = await tailorOrRegenerate(db, options.listingId, {
       fresh: options.fresh,
       resumePath: options.resume,
-      resumeDir: options.resume
-        ? undefined
-        : resolveResumeDir({ config: options.config }),
+      resumeDir: options.resume ? undefined : resolveResumeDir(ctx, region),
       outputDir: options.outputDir,
       ollamaHost: options.ollamaHost,
       ollamaModel: options.ollamaModel,
+      region,
     });
   } catch (err) {
     finishTailorRun(db, options.listingId, false, (err as Error).message);
@@ -538,11 +606,12 @@ export async function runTailor(options: TailorCliOptions): Promise<void> {
     result.warnings.length > 0 ? ` (${result.warnings.join("; ")})` : "";
   if (result.ok) {
     const verb = result.action === "regenerated" ? "Regenerated" : "Wrote";
+    const usedRegion = getTailoredResume(db, options.listingId)?.region;
     finishTailorRun(
       db,
       options.listingId,
       true,
-      `${verb} ${result.pdfPath ?? result.markdownPath}${warningSuffix}`,
+      `${verb} ${result.pdfPath ?? result.markdownPath}${usedRegion ? ` (${usedRegion} resume)` : ""}${warningSuffix}`,
     );
   } else {
     finishTailorRun(
@@ -608,6 +677,10 @@ export function createProgram(
     .option(
       "--location <city...>",
       "location(s) to search in (accepts multiple values)",
+    )
+    .option(
+      "--region <name...>",
+      "search only these [region.<name>] regions (default: all)",
     )
     .option("--remote", "only search for remote jobs", false)
     .option("--onsite", "only search for onsite/hybrid jobs", false)
@@ -676,6 +749,10 @@ export function createProgram(
       (v) => Number.parseInt(v, 10),
       200,
     )
+    .option(
+      "--region <name>",
+      'only jobs in this region ("unassigned": jobs in none)',
+    )
     .option("--db <path>", DB_HELP)
     .action((stateArg: string, options: Omit<JobsCliOptions, "state">) => {
       try {
@@ -715,6 +792,10 @@ export function createProgram(
       "re-tailor from the resume master even if a tailored .md already exists (overwrites it)",
       false,
     )
+    .option(
+      "--region <name>",
+      "use this region's resume folder (default: the job's first region)",
+    )
     .action(
       async (
         listingIdArg: string,
@@ -726,6 +807,7 @@ export function createProgram(
           ollamaHost?: string;
           ollamaModel?: string;
           fresh?: boolean;
+          region?: string;
         },
       ) => {
         await tailorAction({ ...options, listingId: listingIdArg });
@@ -742,12 +824,21 @@ export function createProgram(
       "--trail <trail>",
       'resume trail for the job, or "none" (asked in a terminal; required otherwise)',
     )
+    .option(
+      "--region <name>",
+      "region for a job whose location matches none (default: the first)",
+    )
     .option("--db <path>", DB_HELP)
     .option("--config <path>", CONFIG_HELP)
     .action(
       async (
         url: string,
-        options: { trail?: string; db?: string; config?: string },
+        options: {
+          trail?: string;
+          db?: string;
+          config?: string;
+          region?: string;
+        },
       ) => {
         await addAction({ ...options, url });
       },

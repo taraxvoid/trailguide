@@ -47,6 +47,8 @@ export interface TailorOptions {
   ollamaModel?: string;
   /** Overridable for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
+  /** Region whose masters `resumeDir` holds; recorded with the result. */
+  region?: string;
 }
 
 export interface TailorResult {
@@ -201,7 +203,7 @@ export async function tailorResume(
   );
 
   await Bun.write(markdownPath, toMarkdown(tailoredDoc));
-  setTailoredResume(db, listingId, markdownPath);
+  setTailoredResume(db, listingId, markdownPath, options.region ?? null);
 
   return renderPdf(tailoredDoc, markdownPath, "tailored", warnings);
 }

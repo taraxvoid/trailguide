@@ -173,11 +173,11 @@ and description. On the command line, `--exclude-clearance` and
 ## Usage
 
 ```bash
-trailguide search [--role <query...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
+trailguide search [--role <query...>] [--region <name...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
 ```
 
 - no `--role`: the config's `[[keywords]]` and regions drive the search
-- `--region <name>`: search only this region (repeatable; default: every region)
+- `--region`: search only these regions; accepts multiple values (default: every region)
 - `--role`: search for exactly these roles instead (the config's keywords and locations are not used); accepts multiple values, e.g. `--role engineer manager`
 - `--location`: replace the config's region places; accepts multiple values, e.g. `--location Austin "San Francisco"`
 - `--remote` / `--onsite`: only remote / only not-remote jobs for every place (mutually exclusive)
@@ -248,7 +248,6 @@ Setup:
 
 1. Put your resume master in `~/.config/trailguide/resumes/<name>.md` (or the
    `[resume] dir` from your config; it's your personal resume, so keep it
-<<<<<<< HEAD
    out of this repo). It needs a `## Highlights` section
    and a `## Career Experience` section with each employer's bullets for
    tailoring to have anything to work with. A section whose heading mentions
@@ -264,7 +263,7 @@ Setup:
    ```
 
 ```bash
-trailguide tailor <listingId> [--db <path>] [--config <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
+trailguide tailor <listingId> [--db <path>] [--config <path>] [--region <name>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
 ```
 
 Output goes to `~/.local/share/trailguide/resumes/<company>-<title>.md` and `.pdf`
@@ -289,7 +288,7 @@ a `trail`:
 ```toml
 [[keywords]]
 role = "Security Platform Engineer"
-trail = "secplat"        # tailors from <resume dir>/secplat.md
+trail = "secplat"        # tailors from <region resume folder>/secplat.md
 ```
 
 Search records the trail of the keyword that found each job. For sources
@@ -298,6 +297,14 @@ order) the job title contains. Tailoring then picks, in order: `--resume`,
 the job's `<trail>.md` (an error if missing), `default.md`, or the only `.md`
 in the dir. It never guesses between masters. Change a job's trail with `L`
 in the TUI or `trailguide trail <listingId> [trail] [--clear]`.
+
+With regions, each region has its own folder of masters
+(`<resume dir>/<region name>/`, or the region's `resumes`), so the Omaha and
+Bay Area versions of `secplat.md` can say different things. `T` in the TUI
+tailors with the region you are looking at; `trailguide tailor` uses
+`--region`, else the job's first region in config order. The tailored resume
+remembers which region's master it came from (shown in the TUI's detail
+panel) and keeps it when regenerated from your edits.
 
 ### Importing a job from a link
 
@@ -318,7 +325,8 @@ can't be imported.
 `--trail` takes a configured trail or `none`. In a terminal, leaving it out
 asks; in a script it's required. Adding a job that's already tracked
 refreshes its details and sets the trail you chose, keeping its state and
-applied date.
+applied date. The job joins every region its location matches; if none
+does, it goes in `--region` (the TUI's current region), else the first one.
 
 ## Network use
 

@@ -190,6 +190,15 @@ describe("tailorOrRegenerate", () => {
     );
   });
 
+  it("records the region it tailored for and keeps it on regenerate", async () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    await tailorOrRegenerate(db, "jsearch:1", { ...offline, region: "bay" });
+    expect(getTailoredResume(db, "jsearch:1")?.region).toBe("bay");
+    await tailorOrRegenerate(db, "jsearch:1", offline);
+    expect(getTailoredResume(db, "jsearch:1")?.region).toBe("bay");
+  });
+
   it("regenerates from the hand-edited .md on later calls instead of re-tailoring", async () => {
     const db = freshDb();
     upsertJobs(db, [mockJob()]);

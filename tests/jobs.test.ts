@@ -125,4 +125,28 @@ describe("runJobs", () => {
       log.mockRestore();
     }
   });
+
+  const listed = (region: string) => {
+    const path = join(mkdtempSync(join(tmpdir(), "tg-jobs-")), "t.db");
+    const db = openDb(path);
+    upsertJobs(db, [{ ...job("1"), regions: ["bay"] }, job("2")]);
+    db.close();
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      runJobs({ db: path, state: "active", words: 200, region }, now);
+      return JSON.parse(log.mock.calls[0]?.[0] as string).map(
+        (j: { listingId: string }) => j.listingId,
+      );
+    } finally {
+      log.mockRestore();
+    }
+  };
+
+  it("--region filters", () => {
+    expect(listed("bay")).toEqual(["jsearch:1"]);
+  });
+
+  it("--region unassigned lists untagged jobs", () => {
+    expect(listed("unassigned")).toEqual(["jsearch:2"]);
+  });
 });

@@ -282,3 +282,38 @@ describe("runSearch run registration", () => {
     expect(searchRun()?.pid).toBe(1);
   });
 });
+
+describe("runSearch regions", () => {
+  it("--region searches only that region", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const scoped = fake([], true, "jsearch");
+    await runSearch(flags({ region: ["omaha"] }), deps([scoped.source]));
+    expect(scoped.calls.map((c) => c.location)).toEqual(["Omaha"]);
+  });
+
+  it("stores jobs with their regions", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const loose = fake([job({ location: "Omaha, NE" })]);
+    await runSearch(flags(), deps([loose.source]));
+    const db = openDb(dbPath());
+    expect(allJobs(db)[0]?.regions).toEqual(["omaha"]);
+    db.close();
+  });
+
+  it("tags jobs found with --location by their place", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const loose = fake([job({ location: "Omaha, NE" })]);
+    await runSearch(flags({ location: ["Omaha"] }), deps([loose.source]));
+    const db = openDb(dbPath());
+    expect(allJobs(db)[0]?.regions).toEqual(["omaha"]);
+    db.close();
+  });
+
+  it("an unknown region fails the run", async () => {
+    writeGlobal(OMAHA_AND_US);
+    await expect(
+      runSearch(flags({ region: ["mars"] }), deps([fake([]).source])),
+    ).rejects.toThrow(ConfigError);
+    expect(searchRun()?.message).toContain(`unknown region "mars"`);
+  });
+});
