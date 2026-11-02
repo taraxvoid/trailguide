@@ -1,6 +1,7 @@
 import type { StoredJob } from "../db.ts";
+import { UNASSIGNED } from "../regions.ts";
 
-export type ViewTab = "active" | "archived";
+export type ViewTab = "active" | "applied" | "archived";
 
 export const NO_TRAIL_LABEL = "Not on a trail (for now)";
 
@@ -13,10 +14,27 @@ export interface Section {
 }
 
 /**
- * Which list section a job falls in. Archived has one flat section. The
- * active view pins applied jobs, then groups the rest by configured trail
- * (in config order); jobs without a configured trail go under a nudge
- * header, or a plain "Active" one when no trails are configured at all.
+ * Whether a job shows in `region`. `null` (no regions configured) shows
+ * everything; `unassigned` holds jobs that belong to no region.
+ */
+export function inRegion(job: StoredJob, region: string | null): boolean {
+  if (region === null) return true;
+  const regions = job.regions ?? [];
+  return region === UNASSIGNED
+    ? regions.length === 0
+    : regions.includes(region);
+}
+
+/** The job states a view lists. */
+function inView(job: StoredJob, view: ViewTab): boolean {
+  return job.state === view;
+}
+
+/**
+ * Which list section a job falls in. Applied and archived have one flat
+ * section each. The active view groups jobs by configured trail (in config
+ * order); jobs without a configured trail go under a nudge header, or a
+ * plain "Active" one when no trails are configured at all.
  */
 export function sectionOf(
   job: StoredJob,
@@ -25,7 +43,7 @@ export function sectionOf(
 ): Section {
   if (view === "archived")
     return { id: "archived", label: "Archived", tone: "archived" };
-  if (job.state === "applied")
+  if (view === "applied")
     return { id: "applied", label: "Applied", tone: "applied" };
   if (job.trail && trails.includes(job.trail))
     return {
@@ -45,27 +63,40 @@ export function orderJobs(
   trails: string[],
   tailoredIds: ReadonlySet<string>,
 ): StoredJob[] {
-  if (view === "archived") return jobs.filter((j) => j.state === "archived");
-  const inView = jobs.filter(
-    (j) => j.state === "applied" || j.state === "active",
-  );
+  const listed = jobs.filter((j) => inView(j, view));
+  if (view === "archived") return listed;
+  if (view === "applied") {
+    // Array.prototype.sort is stable, so ties keep the db order.
+    return listed.sort(
+      (x, y) =>
+        Number(tailoredIds.has(y.listingId)) -
+        Number(tailoredIds.has(x.listingId)),
+    );
+  }
   const rank = (job: StoredJob): number => {
     const { id } = sectionOf(job, view, trails);
-    if (id === "applied") return 0;
-    if (id.startsWith("trail:")) return 1 + trails.indexOf(job.trail ?? "");
-    return 1 + trails.length;
+    if (id.startsWith("trail:")) return trails.indexOf(job.trail ?? "");
+    return trails.length;
   };
-  // Array.prototype.sort is stable, so ties keep the db order.
-  return inView.sort((x, y) => {
-    const byRank = rank(x) - rank(y);
-    if (byRank !== 0) return byRank;
-    if (x.state === "applied")
-      return (
-        Number(tailoredIds.has(y.listingId)) -
-        Number(tailoredIds.has(x.listingId))
-      );
-    return 0;
-  });
+  return listed.sort((x, y) => rank(x) - rank(y));
+}
+
+/** Jobs per view in `region`, for the header strip. */
+export function viewCounts(
+  jobs: StoredJob[],
+  region: string | null,
+): Record<ViewTab, number> {
+  const counts: Record<ViewTab, number> = {
+    active: 0,
+    applied: 0,
+    archived: 0,
+  };
+  for (const job of jobs) {
+    if (!inRegion(job, region)) continue;
+    if (job.state === "active" || job.state === "applied") counts[job.state]++;
+    else if (job.state === "archived") counts.archived++;
+  }
+  return counts;
 }
 
 /** Jobs per section id, for header counts. */
