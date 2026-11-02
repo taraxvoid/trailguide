@@ -60,7 +60,7 @@ interface AppProps {
 // Chrome heights below are line counts for the JSX blocks they mirror -
 // keep them in sync when the layout changes, since visibleCount depends on
 // knowing exactly how many non-list rows are on screen in each state.
-const HEADER_LINES = 3; // the cairn's 3 rows; search status and version sit on the top row
+const HEADER_LINES = 1; // one row: search status left, version right (the cairn overlays the top-right)
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
@@ -76,13 +76,16 @@ const SKY = "#7aa7d9";
 const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
 
-// A small cairn of offset stones for the header's top-right corner. Each
-// stone is a row of lower-3/4 blocks so a sliver of gap separates them.
+// A small cairn of offset stones, drawn over the top-right corner (absolutely
+// positioned, so it takes no layout rows and the content below starts at the
+// real top). Each stone is a row of lower-3/4 blocks so a sliver of gap
+// separates them.
 const CAIRN = [
   { stone: "   ▆▆▆", color: SAND },
   { stone: " ▆▆▆▆▆", color: TERRACOTTA },
   { stone: "▆▆▆▆▆▆▆▆", color: SAGE },
 ];
+const CAIRN_WIDTH = 8;
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
@@ -832,19 +835,22 @@ export default function JobBrowser({
             <Text color={pulseColor(pulseTick)}>Searching...</Text>
           )}
         </Box>
-        <Box flexShrink={1}>
+        <Box flexShrink={1} marginRight={CAIRN_WIDTH + 1}>
           {version && (
             <Text dimColor wrap="truncate-start">
-              {`${version} `}
+              {version}
             </Text>
           )}
-          <Box flexDirection="column" flexShrink={0}>
-            {CAIRN.map(({ stone, color }) => (
-              <Text key={color} color={color}>
-                {stone}
-              </Text>
-            ))}
-          </Box>
+        </Box>
+      </Box>
+
+      <Box position="absolute" width="100%" justifyContent="flex-end">
+        <Box flexDirection="column" width={CAIRN_WIDTH} marginRight={2}>
+          {CAIRN.map(({ stone, color }) => (
+            <Text key={color} color={color}>
+              {stone}
+            </Text>
+          ))}
         </Box>
       </Box>
 
