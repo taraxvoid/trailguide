@@ -60,7 +60,7 @@ interface AppProps {
 // Chrome heights below are line counts for the JSX blocks they mirror -
 // keep them in sync when the layout changes, since visibleCount depends on
 // knowing exactly how many non-list rows are on screen in each state.
-const HEADER_LINES = 1; // one row: search status left, version + cairn logo right
+const HEADER_LINES = 3; // the cairn's 3 rows; search status and version sit on the top row
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
@@ -76,14 +76,12 @@ const SKY = "#7aa7d9";
 const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
 
-// A one-row cairn logo for the header's top-right corner: a pile of
-// partial-height blocks peaking in the middle.
+// A small cairn of offset stones for the header's top-right corner. Each
+// stone is a row of lower-3/4 blocks so a sliver of gap separates them.
 const CAIRN = [
-  { stone: "▂", color: SAGE },
-  { stone: "▄", color: TERRACOTTA },
-  { stone: "▆", color: SAND },
-  { stone: "▄", color: TERRACOTTA },
-  { stone: "▂", color: SAGE },
+  { stone: "   ▆▆▆", color: SAND },
+  { stone: " ▆▆▆▆▆", color: TERRACOTTA },
+  { stone: "▆▆▆▆▆▆▆▆", color: SAGE },
 ];
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
@@ -840,10 +838,9 @@ export default function JobBrowser({
               {`${version} `}
             </Text>
           )}
-          <Box flexShrink={0}>
-            {CAIRN.map(({ stone, color }, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: static list
-              <Text key={i} color={color}>
+          <Box flexDirection="column" flexShrink={0}>
+            {CAIRN.map(({ stone, color }) => (
+              <Text key={color} color={color}>
                 {stone}
               </Text>
             ))}
