@@ -81,9 +81,9 @@ const TERRACOTTA = "#c98f6b";
 // real top). Each stone is a row of lower-3/4 blocks so a sliver of gap
 // separates them.
 const CAIRN = [
-  { stone: "   ▆▆▆", color: SAND },
-  { stone: " ▆▆▆▆▆", color: TERRACOTTA },
-  { stone: "▆▆▆▆▆▆▆▆", color: SAGE },
+  { stone: "   ▆▆ ", color: SAND },
+  { stone: "   ▆▆▆", color: TERRACOTTA },
+  { stone: "  ▆▆▆▆▆ ", color: SAGE },
 ];
 const CAIRN_WIDTH = 8;
 const PULSE_TICK_MS = 150;
