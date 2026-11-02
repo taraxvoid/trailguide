@@ -85,6 +85,20 @@ const LOCATION_ALIASES: Record<string, string[]> = {
     "tacoma",
     "puget sound",
   ],
+  // Suburbs that are de facto Omaha.
+  "omaha metro": [
+    "omaha metro",
+    "omaha",
+    "ralston",
+    "bellevue",
+    "papillion",
+    "la vista",
+    "gretna",
+    "elkhorn",
+    "millard",
+    "boys town",
+    "bennington",
+  ],
   "united states": [
     "united states",
     "usa",
@@ -252,6 +266,7 @@ const REGION_STATES: Record<string, { code: string; name: string }> = {
   "east bay": { code: "CA", name: "california" },
   "south bay": { code: "CA", name: "california" },
   seattle: { code: "WA", name: "washington" },
+  "omaha metro": { code: "NE", name: "nebraska" },
 };
 
 function inRegionState(jobLocation: string, place: string): boolean {

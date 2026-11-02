@@ -420,3 +420,30 @@ describe("state-stripped key is not a match term", () => {
     expect(matchesLocation("United States", "U.S.")).toBe(true);
   });
 });
+
+describe("Omaha metro", () => {
+  it("matches metro towns in Nebraska", () => {
+    for (const loc of [
+      "Omaha, NE",
+      "Ralston, NE",
+      "Bellevue, Nebraska",
+      "Papillion, NE",
+      "La Vista, NE",
+      "Gretna, NE",
+      "Elkhorn, NE",
+      "Millard",
+      "Boys Town, NE",
+      "Bennington, NE",
+    ])
+      expect(matchesLocation(loc, "Omaha metro")).toBe(true);
+  });
+
+  it("rejects same-named towns in other states", () => {
+    expect(matchesLocation("Bellevue, WA", "Omaha metro")).toBe(false);
+    expect(matchesLocation("Lincoln, NE", "Omaha metro")).toBe(false);
+  });
+
+  it("accepts a bare town name", () => {
+    expect(matchesLocation("Bellevue", "Omaha metro")).toBe(true);
+  });
+});

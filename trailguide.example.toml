@@ -22,7 +22,7 @@ region = ["Texas"]                   # optional: extra places a REMOTE listing m
 city = "United States"
 flexibility = "remote"
 
-# Built in: "Bay Area", "East Bay", "South Bay" and "Seattle" cover their
+# Built in: "Bay Area", "East Bay", "South Bay", "Seattle" and "Omaha metro" cover their
 # metro's main towns (a listing must name the state or use a bare town name).
 
 [[keywords]]
