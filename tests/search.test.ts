@@ -69,6 +69,47 @@ const OMAHA_AND_US: SearchPlan = {
 
 const ids = (jobs: NormalizedJob[]) => jobs.map((j) => j.sourceId).sort();
 
+const THREE_REGIONS: SearchPlan = {
+  keywords: ["swe"],
+  trails: {},
+  filter: NO_FILTER,
+  targets: [
+    { city: "East Bay", flexibility: "in-person", region: "bay" },
+    { city: "Omaha metro", flexibility: "in-person", region: "omaha" },
+    { city: "United States", flexibility: "remote", region: "remote" },
+  ],
+};
+
+describe("collectJobs regions", () => {
+  const regionsById = (jobs: NormalizedJob[]) =>
+    Object.fromEntries(jobs.map((j) => [j.sourceId, j.regions]));
+
+  it("tags unscoped jobs with every matching region", async () => {
+    const loose = fake("greenhouse", false, () => [
+      job({ sourceId: "a", location: "Oakland, CA", url: "https://e.com/a" }),
+      job({
+        sourceId: "b",
+        title: "Remote SWE",
+        location: "Remote - USA",
+        remoteType: "remote",
+        url: "https://e.com/b",
+      }),
+    ]);
+    const { jobs } = await collectJobs(THREE_REGIONS, [loose.source]);
+    expect(regionsById(jobs)).toEqual({ a: ["bay"], b: ["remote"] });
+  });
+
+  it("tags scoped jobs with the queried target's region", async () => {
+    const scoped = fake("jsearch", true, (params) =>
+      params.location === "Omaha metro"
+        ? [job({ sourceId: "o", source: "jsearch", location: "Somewhere" })]
+        : [],
+    );
+    const { jobs } = await collectJobs(THREE_REGIONS, [scoped.source]);
+    expect(regionsById(jobs)).toEqual({ o: ["omaha"] });
+  });
+});
+
 let errorSpy: { mockRestore(): void };
 beforeEach(() => {
   errorSpy = spyOn(console, "error").mockImplementation(() => {});
