@@ -35,8 +35,9 @@ import {
   tailoredListingIds,
 } from "../db.ts";
 import { ImportError, importJob } from "../importUrl.ts";
+import { filterJobs, stepFilterPrompt } from "./filter.ts";
 import { type ImportPrompt, stepImportPrompt } from "./importPrompt.ts";
-import { linkifyPdfPath, openTarget } from "./open.ts";
+import { copyToClipboard, linkifyPdfPath, openTarget } from "./open.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 import {
   orderJobs,
@@ -64,7 +65,7 @@ const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
 const STATUS_LINES = 2; // marginTop 1 + content 1
-const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url wrap, measured below)
+const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url/id wrap, measured below)
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
@@ -122,6 +123,7 @@ function footerItems(
 ): FooterItem[] {
   return [
     { before: "", key: "O", after: "pen link" },
+    { key: "Y", after: "ank id" },
     {
       before: tailored ? "(re)" : "",
       key: "T",
@@ -136,6 +138,7 @@ function footerItems(
     { key: "Tab", after: ` → ${otherView}` },
     { key: "S", after: "earch" },
     { key: "I", after: "mport link" },
+    { key: "/", after: " filter" },
     { key: "R", after: "efresh (auto-archives)" },
   ];
 }
@@ -313,9 +316,15 @@ export default function JobBrowser({
   const [isImporting, setIsImporting] = useState(false);
   const pendingSelect = useRef<string | null>(null);
 
+  // The / filter. It applies live while typing, and stays applied after
+  // Enter until Esc clears it.
+  const [filterQuery, setFilterQuery] = useState("");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
   const visibleJobs = useMemo(
-    () => orderJobs(jobs, viewTab, trails, tailoredIds),
-    [jobs, viewTab, trails, tailoredIds],
+    () =>
+      orderJobs(filterJobs(jobs, filterQuery), viewTab, trails, tailoredIds),
+    [jobs, filterQuery, viewTab, trails, tailoredIds],
   );
   const counts = useMemo(
     () => sectionCounts(visibleJobs, viewTab, trails),
@@ -332,6 +341,11 @@ export default function JobBrowser({
   // The I prompt takes the status line's place. Kept to one line (a long
   // link shows its end) so the list height math below still holds.
   const promptLine = (() => {
+    if (isFilterOpen) {
+      const hint = "   ↵ keep, Esc clear";
+      const room = Math.max(1, contentWidth - hint.length - 2);
+      return `/${filterQuery.slice(-room)}▏${hint}`;
+    }
     if (!importPrompt) return null;
     if (importPrompt.step === "url") {
       const label = "Import link: ";
@@ -382,7 +396,8 @@ export default function JobBrowser({
   const detailContentLines = selectedJob
     ? wrapText(titleLine, contentWidth).length +
       wrapText(companyLine, contentWidth).length +
-      wrapText(selectedJob.url, contentWidth).length
+      wrapText(selectedJob.url, contentWidth).length +
+      wrapText(selectedJob.listingId, contentWidth).length
     : 0;
 
   const footerLines = wrapText(FOOTER_TEXT, contentWidth).length;
@@ -424,10 +439,10 @@ export default function JobBrowser({
     );
   }, [visibleJobs.length]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab or filter changes
   useEffect(() => {
     setSelectedIndex(0);
-  }, [viewTab]);
+  }, [viewTab, filterQuery]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the selection changes
   useEffect(() => {
@@ -495,6 +510,8 @@ export default function JobBrowser({
       try {
         const { job, added } = await importJob(db, url, trail, boards);
         pendingSelect.current = job.listingId;
+        // A filter could hide the job we're about to select.
+        setFilterQuery("");
         setJobs(allJobs(db));
         setViewTab(job.state === "archived" ? "archived" : "active");
         showStatus(
@@ -641,6 +658,16 @@ export default function JobBrowser({
     showStatus(`Opened ${pdfPath}`);
   }, [db, visibleJobs, selectedIndex, showStatus]);
 
+  const handleCopyId = useCallback(async () => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    showStatus(
+      (await copyToClipboard(job.listingId))
+        ? `Copied ${job.listingId}`
+        : `No clipboard tool found (id: ${job.listingId})`,
+    );
+  }, [visibleJobs, selectedIndex, showStatus]);
+
   const handleInput = useCallback(
     (input: string, key: Key) => {
       // While the I prompt is open it gets every key (so q and Esc don't quit).
@@ -652,6 +679,36 @@ export default function JobBrowser({
         }
         setImportPrompt(null);
         if ("done" in result) handleImport(result.done.url, result.done.trail);
+        return;
+      }
+      // Likewise for the / filter, except ↑↓ still move through the matches.
+      if (isFilterOpen) {
+        if (key.upArrow) {
+          setSelectedIndex((prev) => Math.max(0, prev - 1));
+          return;
+        }
+        if (key.downArrow) {
+          setSelectedIndex((prev) =>
+            Math.min(visibleJobs.length - 1, prev + 1),
+          );
+          return;
+        }
+        const result = stepFilterPrompt({ text: filterQuery }, input, key);
+        if ("prompt" in result) {
+          setFilterQuery(result.prompt.text);
+          return;
+        }
+        setIsFilterOpen(false);
+        setFilterQuery("cancelled" in result ? "" : result.done);
+        return;
+      }
+      if (input === "/") {
+        setIsFilterOpen(true);
+        return;
+      }
+      // With a filter applied, Esc clears it rather than quitting.
+      if (key.escape && filterQuery) {
+        setFilterQuery("");
         return;
       }
       if (input === "I") {
@@ -704,6 +761,10 @@ export default function JobBrowser({
         openTarget(selectedJob.url);
         return;
       }
+      if (input === "Y" && selectedJob) {
+        handleCopyId();
+        return;
+      }
       if (input === "V" && selectedJob) {
         handleOpenResume();
         return;
@@ -728,6 +789,8 @@ export default function JobBrowser({
     [
       importPrompt,
       isImporting,
+      isFilterOpen,
+      filterQuery,
       trails,
       handleImport,
       exit,
@@ -743,6 +806,7 @@ export default function JobBrowser({
       handleTailor,
       handleSearch,
       handleOpenResume,
+      handleCopyId,
     ],
   );
 
@@ -789,10 +853,25 @@ export default function JobBrowser({
 
       <Box height={GAP_LINE} />
 
-      <Text dimColor>{"─".repeat(40)}</Text>
+      {/* An applied filter shows on the separator line, so it costs no rows. */}
+      {filterQuery && !isFilterOpen ? (
+        <Text wrap="truncate-end">
+          <Text dimColor>{"── "}</Text>
+          <Text color={SAND}>{`/${filterQuery}`}</Text>
+          <Text dimColor>
+            {` (${visibleJobs.length} ${visibleJobs.length === 1 ? "match" : "matches"}, / edit, Esc clear) ──`}
+          </Text>
+        </Text>
+      ) : (
+        <Text dimColor>{"─".repeat(40)}</Text>
+      )}
 
       <Box flexDirection="column" flexGrow={1}>
-        {visibleJobs.length === 0 ? (
+        {visibleJobs.length === 0 && filterQuery ? (
+          <Box flexDirection="column" alignItems="center" marginTop={2}>
+            <Text dimColor>No jobs here match "{filterQuery}".</Text>
+          </Box>
+        ) : visibleJobs.length === 0 ? (
           <Box flexDirection="column" alignItems="center" marginTop={2}>
             <Text dimColor>No jobs found.</Text>
             <Text dimColor>
@@ -868,6 +947,7 @@ export default function JobBrowser({
               - {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
+            <Text dimColor>{selectedJob.listingId}</Text>
             {description && (
               <>
                 <Box height={GAP_LINE} />

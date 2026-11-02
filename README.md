@@ -190,6 +190,7 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
+- Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
 - S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
 - T: tailor your resume to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
 - V: view the job's tailored resume PDF
@@ -198,7 +199,8 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - L: cycle the job's resume trail (none, then each trail in the config)
 - I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
-- q / esc: quit
+- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across both views), Esc clears it
+- q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so
 repeated searches only flag what's `NEW`.
