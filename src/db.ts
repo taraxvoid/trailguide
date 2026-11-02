@@ -15,6 +15,8 @@ export interface StoredJob extends NormalizedJob {
   appliedAt: string | null;
   /** When the job was first imported from a link (`trailguide add`), if ever. */
   importedAt: string | null;
+  /** Regions it belongs to; empty means unassigned. */
+  regions: string[];
 }
 
 export function listingId(
@@ -102,6 +104,29 @@ export function openDb(path: string): Database {
       updated_at TEXT NOT NULL
     )
   `);
+  // Which region's resume master a tailored resume was built from.
+  const tailoredCols = db
+    .query("PRAGMA table_info(tailored_resumes)")
+    .all() as Array<{ name: string }>;
+  if (!tailoredCols.some((c) => c.name === "region")) {
+    db.run("ALTER TABLE tailored_resumes ADD COLUMN region TEXT");
+  }
+  // The regions (`[region.<name>]`) a job belongs to. Search only adds rows,
+  // so a job found by two regions' searches stays in both.
+  db.run(`
+    CREATE TABLE IF NOT EXISTS job_regions (
+      listing_id TEXT NOT NULL,
+      region TEXT NOT NULL,
+      PRIMARY KEY (listing_id, region)
+    )
+  `);
+  // Small UI state that should survive restarts (the TUI's last region).
+  db.run(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
   // Background trailguide processes (`trailguide tailor`, `trailguide search`), so the TUI can
   // show progress and pick it back up after being restarted. One row per
   // (kind, key), the latest run; finished_at is NULL while running.
@@ -162,6 +187,7 @@ export function upsertJobs(
         $explicitState: explicitState,
         $trail: job.trail ?? null,
       });
+      addJobRegions(db, key, job.regions ?? []);
       if (isNew) {
         newJobs.push({
           ...job,
@@ -172,6 +198,7 @@ export function upsertJobs(
           state: jobState,
           appliedAt: jobState === "applied" ? now : null,
           importedAt: null,
+          regions: job.regions ?? [],
         });
       }
     }
@@ -181,8 +208,73 @@ export function upsertJobs(
   return newJobs;
 }
 
-function rowToStoredJob(row: Record<string, string>): StoredJob {
+/** Adds a job to regions; never removes it from any. */
+export function addJobRegions(
+  db: Database,
+  listingId: string,
+  regions: string[],
+): void {
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO job_regions (listing_id, region) VALUES (?, ?)",
+  );
+  for (const region of regions) insert.run(listingId, region);
+}
+
+/** Regions per listing, for `listingIds` only when given. */
+function regionsByListing(
+  db: Database,
+  listingIds?: string[],
+): Map<string, string[]> {
+  const rows = (
+    listingIds && listingIds.length === 1
+      ? db
+          .prepare(
+            "SELECT listing_id, region FROM job_regions WHERE listing_id = ? ORDER BY rowid",
+          )
+          .all(listingIds[0] as string)
+      : db
+          .query("SELECT listing_id, region FROM job_regions ORDER BY rowid")
+          .all()
+  ) as Array<{ listing_id: string; region: string }>;
+  const map = new Map<string, string[]>();
+  for (const { listing_id, region } of rows) {
+    map.set(listing_id, [...(map.get(listing_id) ?? []), region]);
+  }
+  return map;
+}
+
+function rowsToStoredJobs(
+  db: Database,
+  rows: Array<Record<string, string>>,
+): StoredJob[] {
+  const regions = regionsByListing(
+    db,
+    rows.length === 1 ? [rows[0]?.listing_id ?? ""] : undefined,
+  );
+  return rows.map((row) =>
+    rowToStoredJob(row, regions.get(row.listing_id ?? "") ?? []),
+  );
+}
+
+export function getSetting(db: Database, key: string): string | null {
+  const row = db
+    .prepare("SELECT value FROM settings WHERE key = ?")
+    .get(key) as { value: string } | null;
+  return row?.value ?? null;
+}
+
+export function setSetting(db: Database, key: string, value: string): void {
+  db.prepare(
+    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(key, value);
+}
+
+function rowToStoredJob(
+  row: Record<string, string>,
+  regions: string[],
+): StoredJob {
   return {
+    regions,
     listingId: row.listing_id ?? "",
     sourceId: row.source_id ?? "",
     source: row.source as NormalizedJob["source"],
@@ -254,7 +346,7 @@ export function allJobs(db: Database): StoredJob[] {
   const rows = db
     .query("SELECT * FROM jobs ORDER BY last_seen_at DESC")
     .all() as Array<Record<string, string>>;
-  return rows.map(rowToStoredJob);
+  return rowsToStoredJobs(db, rows);
 }
 
 export function jobsByState(db: Database, state: ListingState): StoredJob[] {
@@ -263,14 +355,14 @@ export function jobsByState(db: Database, state: ListingState): StoredJob[] {
       "SELECT * FROM jobs WHERE state = $state ORDER BY last_seen_at DESC",
     )
     .all({ $state: state }) as Array<Record<string, string>>;
-  return rows.map(rowToStoredJob);
+  return rowsToStoredJobs(db, rows);
 }
 
 export function getJob(db: Database, listingId: string): StoredJob | null {
   const row = db
     .prepare("SELECT * FROM jobs WHERE listing_id = $listingId")
     .get({ $listingId: listingId }) as Record<string, string> | null;
-  return row ? rowToStoredJob(row) : null;
+  return row ? (rowsToStoredJobs(db, [row])[0] ?? null) : null;
 }
 
 export function setJobState(
@@ -326,9 +418,10 @@ export function jobsInStateBetween(
           .prepare("SELECT * FROM jobs WHERE state = $state")
           .all({ $state: state })
   ) as Array<Record<string, string>>;
+  const regions = regionsByListing(db);
   return rows
     .map((row) => ({
-      ...rowToStoredJob(row),
+      ...rowToStoredJob(row, regions.get(row.listing_id ?? "") ?? []),
       stateChangedAt:
         (byApplied ? row.applied_at : row.state_changed_at) ??
         row.last_checked_at ??
@@ -343,6 +436,7 @@ export function jobsInStateBetween(
 
 export function clearJobs(db: Database): void {
   db.run("DELETE FROM jobs");
+  db.run("DELETE FROM job_regions");
 }
 
 export interface TailoredResumeRecord {
@@ -350,6 +444,8 @@ export interface TailoredResumeRecord {
   markdownPath: string;
   createdAt: string;
   updatedAt: string;
+  /** Region whose resume master it was built from, if known. */
+  region: string | null;
 }
 
 export function getTailoredResume(
@@ -365,6 +461,7 @@ export function getTailoredResume(
     markdownPath: row.markdown_path ?? "",
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
+    region: row.region ?? null,
   };
 }
 
@@ -392,13 +489,20 @@ export function setTailoredResume(
   db: Database,
   listingId: string,
   markdownPath: string,
+  region: string | null = null,
 ): void {
   const now = new Date().toISOString();
+  // A regenerate passes no region and keeps the one it was tailored with.
   db.prepare(`
-    INSERT INTO tailored_resumes (listing_id, markdown_path, created_at, updated_at)
-    VALUES ($listingId, $markdownPath, $now, $now)
-    ON CONFLICT(listing_id) DO UPDATE SET markdown_path = $markdownPath, updated_at = $now
-  `).run({ $listingId: listingId, $markdownPath: markdownPath, $now: now });
+    INSERT INTO tailored_resumes (listing_id, markdown_path, created_at, updated_at, region)
+    VALUES ($listingId, $markdownPath, $now, $now, $region)
+    ON CONFLICT(listing_id) DO UPDATE SET markdown_path = $markdownPath, updated_at = $now, region = COALESCE($region, region)
+  `).run({
+    $listingId: listingId,
+    $markdownPath: markdownPath,
+    $now: now,
+    $region: region,
+  });
 }
 
 export type RunKind = "tailor" | "search";

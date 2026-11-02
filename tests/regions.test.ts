@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { RegionEntry } from "../src/config.ts";
-import { regionsFor } from "../src/regions.ts";
+import { getJob, openDb, upsertJobs } from "../src/db.ts";
+import { regionsFor, tagUntaggedJobs } from "../src/regions.ts";
 import type { RemoteType } from "../src/sources/types.ts";
 
 const REGIONS: RegionEntry[] = [
@@ -34,5 +35,33 @@ describe("regionsFor", () => {
 
   it("puts a job elsewhere in none", () => {
     expect(regionsFor(at("Berlin, Germany", "onsite"), REGIONS)).toEqual([]);
+  });
+});
+
+describe("tagUntaggedJobs", () => {
+  const job = (sourceId: string, location: string, regions?: string[]) => ({
+    sourceId,
+    source: "greenhouse" as const,
+    title: `SWE ${sourceId}`,
+    company: "Acme",
+    location,
+    remoteType: "onsite" as const,
+    url: `https://e.com/${sourceId}`,
+    postedAt: null,
+    description: null,
+    ...(regions && { regions }),
+  });
+
+  it("tags only untagged jobs", () => {
+    const db = openDb(":memory:");
+    upsertJobs(db, [
+      job("a", "Oakland, CA"),
+      job("b", "Berlin, Germany"),
+      job("c", "Oakland, CA", ["omaha"]),
+    ]);
+    expect(tagUntaggedJobs(db, REGIONS)).toBe(1);
+    expect(getJob(db, "greenhouse:a")?.regions).toEqual(["bay"]);
+    expect(getJob(db, "greenhouse:b")?.regions).toEqual([]);
+    expect(getJob(db, "greenhouse:c")?.regions).toEqual(["omaha"]);
   });
 });

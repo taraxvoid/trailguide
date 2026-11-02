@@ -1,4 +1,6 @@
+import type { Database } from "bun:sqlite";
 import type { RegionEntry } from "./config.ts";
+import { addJobRegions, allJobs } from "./db.ts";
 import { matches } from "./sources/location.ts";
 import type { NormalizedJob } from "./sources/types.ts";
 
@@ -20,4 +22,26 @@ export function regionsFor(
       ),
     )
     .map((region) => region.name);
+}
+
+/**
+ * Gives every job that has no region yet the regions its stored location
+ * matches. Covers jobs from before regions existed, `--role`/`--location`
+ * searches, and regions added to the config later. Returns how many jobs
+ * got at least one region. Stored jobs keep no other locations, so only
+ * the main location counts here.
+ */
+export function tagUntaggedJobs(db: Database, regions: RegionEntry[]): number {
+  if (regions.length === 0) return 0;
+  let tagged = 0;
+  db.transaction(() => {
+    for (const job of allJobs(db)) {
+      if (job.regions.length > 0) continue;
+      const found = regionsFor(job, regions);
+      if (found.length === 0) continue;
+      addJobRegions(db, job.listingId, found);
+      tagged++;
+    }
+  })();
+  return tagged;
 }
