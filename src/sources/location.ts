@@ -307,17 +307,10 @@ function isUnitedStates(place: string): boolean {
 }
 
 /** Whether a remote listing's location lets someone in `city` take it. */
-export function remoteEligible(
-  jobLocation: string,
-  city: string,
-  region: string[] = [],
-  aliases: string[] = [],
-): boolean {
+export function remoteEligible(jobLocation: string, city: string): boolean {
   if (isGlobalLocation(jobLocation)) return true;
-  if ([city, ...region].some(isUnitedStates) && isUsLocation(jobLocation)) {
-    return true;
-  }
-  if (matchesLocation(jobLocation, [city, ...aliases, ...region])) return true;
+  if (isUnitedStates(city) && isUsLocation(jobLocation)) return true;
+  if (matchesLocation(jobLocation, city)) return true;
   const job = jobLocation.toLowerCase();
   return (REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []).some((term) =>
     containsTerm(job, term),
@@ -364,10 +357,7 @@ export function matches(
   const city = target.city;
   if (options.scoped || city === null) return true;
   const places = [job.location, ...(job.otherLocations ?? [])];
-  const aliases = target.aliases ?? [];
   return places.some((place) =>
-    remote
-      ? remoteEligible(place, city, target.region, aliases)
-      : matchesLocation(place, [city, ...aliases]),
+    remote ? remoteEligible(place, city) : matchesLocation(place, city),
   );
 }

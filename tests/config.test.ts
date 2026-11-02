@@ -22,14 +22,13 @@ exclude = ["Offutt", " STRATCOM "]
 [db]
 path = "sandbox.db"
 
-[[location]]
-city = "Omaha"
-flexibility = "in-person"
-region = ["Nebraska"]
+[region.omaha]
+work = "in-person"
+places = ["Omaha"]
 
-[[location]]
-city = "United States"
-flexibility = "remote"
+[region.remote]
+work = "remote"
+places = ["United States"]
 
 [[keywords]]
 role = "Software Engineer"
@@ -53,27 +52,22 @@ describe("parseConfig", () => {
       clearance: "exclude",
       excludeTerms: ["Offutt", "STRATCOM"],
       db: "/etc/trailguide/sandbox.db",
-      locations: [
-        { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
-        { city: "United States", flexibility: "remote", region: [] },
+      regions: [
+        { name: "omaha", work: "in-person", places: ["Omaha"] },
+        { name: "remote", work: "remote", places: ["United States"] },
       ],
       keywords: [{ role: "Software Engineer" }, { role: "DevOps Engineer" }],
     });
   });
 
-  it("defaults flexibility to any and accepts region as a single string", () => {
+  it("accepts places as a single string", () => {
     const config = parseConfig(
-      '[[location]]\ncity = "Austin"\nregion = "Texas"\n',
+      '[region.austin]\nplaces = "Austin, TX"\n',
       "trailguide.toml",
     );
-    expect(config.locations).toEqual([
-      { city: "Austin", flexibility: "any", region: ["Texas"] },
+    expect(config.regions).toEqual([
+      { name: "austin", work: "any", places: ["Austin, TX"] },
     ]);
-  });
-
-  it("keeps a city with a comma as one location", () => {
-    const config = parseConfig('[[location]]\ncity = "Omaha, NE"\n', "x.toml");
-    expect(config.locations?.[0]?.city).toBe("Omaha, NE");
   });
 
   it("keeps absolute db paths as they are", () => {
@@ -134,32 +128,10 @@ describe("parseConfig", () => {
     ]);
   });
 
-  it("reads location aliases and keeps them through a round trip", () => {
-    const config = parseConfig(
-      '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\naliases = ["La Vista", "Elkhorn"]\nregion = "Nebraska"\n[[location]]\ncity = "Austin"\naliases = "Round Rock"\n',
-      "trailguide.toml",
-    );
-    expect(config.locations).toEqual([
-      {
-        city: "Omaha",
-        flexibility: "in-person",
-        region: ["Nebraska"],
-        aliases: ["La Vista", "Elkhorn"],
-      },
-      {
-        city: "Austin",
-        flexibility: "any",
-        region: [],
-        aliases: ["Round Rock"],
-      },
-    ]);
-    expect(parseConfig(formatConfig(config), "x.toml")).toEqual(config);
+  it("rejects places that are not strings", () => {
     expect(() =>
-      parseConfig(
-        '[[location]]\ncity = "A"\naliases = [1]\n',
-        "trailguide.toml",
-      ),
-    ).toThrow('"aliases" must be a string or a list of strings');
+      parseConfig("[region.a]\nplaces = [1]\n", "trailguide.toml"),
+    ).toThrow('"places" must be a string or a list of strings');
   });
 
   it("rejects malformed boards", () => {
@@ -188,7 +160,7 @@ describe("parseConfig", () => {
     expect(() =>
       parseConfig('[[keyword]]\nrole = "x"\n', "trailguide.toml"),
     ).toThrow(
-      'trailguide.toml: top level has unknown key "keyword" (expected filter, db, resume, location, keywords, board, sources)',
+      'trailguide.toml: top level has unknown key "keyword" (expected filter, db, resume, region, keywords, board, sources)',
     );
     expect(() =>
       parseConfig('[[locations]]\ncity = "x"\n', "trailguide.toml"),
@@ -218,10 +190,10 @@ describe("parseConfig", () => {
     ).toThrow('trailguide.toml: [[keywords]] entry 2 is missing "role"');
     expect(() =>
       parseConfig(
-        '[[location]]\ncity = "A"\n[[location]]\nflexibility = "any"\n',
+        '[region.a]\nplaces = ["A"]\n[region.b]\nwork = "any"\n',
         "trailguide.toml",
       ),
-    ).toThrow('trailguide.toml: [[location]] entry 2 is missing "city"');
+    ).toThrow('trailguide.toml: [region.b] is missing "places"');
   });
 
   it("rejects wrong types", () => {
@@ -238,11 +210,12 @@ describe("parseConfig", () => {
     ).toThrow("[job] was replaced by [filter]");
     expect(() =>
       parseConfig(
-        '[[location]]\ncity = "A"\nregion = [1]\n',
+        '[region.a]\nplaces = ["A"]\nresumes = 1\n',
         "trailguide.toml",
       ),
-    ).toThrow(
-      'trailguide.toml: [[location]] entry 1 "region" must be a string or a list of strings',
+    ).toThrow('trailguide.toml: [region.a] "resumes" must be a string');
+    expect(() => parseConfig('region = "a"\n', "trailguide.toml")).toThrow(
+      "regions must be written as [region.<name>] tables",
     );
     expect(() =>
       parseConfig("[[keywords]]\nrole = 3\n", "trailguide.toml"),
@@ -255,11 +228,11 @@ describe("parseConfig", () => {
   it("rejects an invalid flexibility and lists the valid ones", () => {
     expect(() =>
       parseConfig(
-        '[[location]]\ncity = "A"\nflexibility = "onsite"\n',
+        '[region.a]\nplaces = ["A"]\nwork = "onsite"\n',
         "trailguide.toml",
       ),
     ).toThrow(
-      'trailguide.toml: [[location]] entry 1 has invalid flexibility "onsite" (use remote, in-person, or any)',
+      'trailguide.toml: [region.a] has invalid work "onsite" (use remote, in-person, or any)',
     );
   });
 
@@ -282,14 +255,14 @@ describe("mergeConfigs", () => {
 
   it("replaces lists wholesale and overrides scalars per key", () => {
     const local = parseConfig(
-      '[filter]\nclearance = "include"\n[[location]]\ncity = "Austin"\n',
+      '[filter]\nclearance = "include"\n[region.austin]\nplaces = ["Austin"]\n',
       "/l/trailguide.toml",
     );
     const merged = mergeConfigs(base, local);
     expect(merged.clearance).toBe("include");
     expect(merged.excludeTerms).toEqual(["Offutt", "STRATCOM"]);
-    expect(merged.locations).toEqual([
-      { city: "Austin", flexibility: "any", region: [] },
+    expect(merged.regions).toEqual([
+      { name: "austin", work: "any", places: ["Austin"] },
     ]);
     expect(merged.keywords).toEqual([
       { role: "Software Engineer" },
@@ -353,12 +326,12 @@ describe("formatConfig / writeConfig", () => {
     ).toEqual(config);
   });
 
-  it("escapes quotes and omits empty regions", () => {
+  it("escapes quotes and omits an unset resumes folder", () => {
     const text = formatConfig({
-      locations: [{ city: "Omaha, NE", flexibility: "any", region: [] }],
+      regions: [{ name: "home", work: "any", places: ["Omaha, NE"] }],
       keywords: [{ role: 'C "sharp" dev' }],
     });
-    expect(text).not.toContain("region");
+    expect(text).not.toContain("resumes");
     expect(parseConfig(text, "x.toml").keywords).toEqual([
       { role: 'C "sharp" dev' },
     ]);

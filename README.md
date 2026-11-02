@@ -58,13 +58,15 @@ trailguide init --location "Austin, TX" --keywords "software engineer" --work in
 ```
 
 (each flag is repeatable; `--work "Austin, TX:in-person"` sets one location).
+init groups the locations into one region per work type (`home` for
+in-person, `remote`, `anywhere` for either).
 [`trailguide.example.toml`](trailguide.example.toml) shows every section.
 
-Every keyword is searched in every location, so at least one `[[location]]`
-and one `[[keywords]]` entry are required.
+Every keyword is searched in every place of every region, so at least one
+`[region.<name>]` and one `[[keywords]]` entry are required.
 
 A `./trailguide.toml` in the current directory is merged over the global config:
-scalar keys override one by one, and lists (`[[location]]`, `[[keywords]]`,
+scalar keys override one by one, and lists (the regions, `[[keywords]]`,
 `[[board]]`, `[filter] exclude`) replace the global ones. `[db] path =
 "trailguide.db"` in a local file gives a self-contained sandbox (relative paths
 resolve against that file's directory). `trailguide config` shows which files,
@@ -74,25 +76,45 @@ Precedence, high to low: CLI flags, `TRAILGUIDE_*` environment variables, local
 `trailguide.toml`, global `config.toml`, defaults. `--config <path>` (or
 `TRAILGUIDE_CONFIG`) replaces the whole chain and uses only that one file.
 
-### Locations
+### Regions
 
-`flexibility` per `[[location]]`:
+A region is a job market with its own places, work type and resume folder.
+Each job is tagged with every region it matches, and the TUI shows one region
+at a time:
+
+```toml
+[resume]
+dir = "resumes"            # relative to this file; each region reads <dir>/<region name>/<trail>.md
+
+[region.bay]
+work = "in-person"
+places = ["East Bay", "San Francisco", "San Jose, CA"]
+
+[region.omaha]
+work = "in-person"
+places = ["Omaha metro"]
+resumes = "resumes/omaha-v2"     # optional: overrides <dir>/omaha
+
+[region.remote]
+work = "remote"
+places = ["United States"]
+```
+
+Regions keep the order they have in the file. `work` is one of:
 
 - `remote`: listings marked remote whose location is blank, global
   ("Worldwide", "Anywhere"), or names the place. "United States" also
-  matches USA, US, and North America.
+  matches USA, US, North America, and any US state or city ("Remote, Texas").
 - `in-person` (onsite or hybrid): anything not marked remote, located in the
-  city.
+  place.
 - `any` (default): either of the above.
 
-`aliases` lists other names for the same place and counts everywhere:
-`aliases = ["La Vista", "Elkhorn"]` on "Omaha". `region` only extends which
-remote listings are eligible for the city, e.g. `region = ["Texas", "TX"]`.
-"City, ST" also matches the state spelled out.
+Another name for a place is just another place in the list. "City, ST" also
+matches the state spelled out.
 
-"Bay Area", "East Bay", "South Bay" and "Seattle" are built-in regions
-covering their metro's main towns. A region only matches listings that name
-its state ("Dublin, CA", not "Dublin, Ireland") or use a bare town name. Broad
+"Bay Area", "East Bay", "South Bay", "Seattle" and "Omaha metro" are built-in
+places covering their metro's main towns. They only match listings that name
+the state ("Dublin, CA", not "Dublin, Ireland") or use a bare town name. Broad
 places like "United States" with `in-person` or `any` only match listings
 that name that place, so use specific cities for in-person work.
 
@@ -154,10 +176,11 @@ and description. On the command line, `--exclude-clearance` and
 trailguide search [--role <query...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
 ```
 
-- no `--role`: the config's `[[keywords]]` and `[[location]]` entries drive the search
+- no `--role`: the config's `[[keywords]]` and regions drive the search
+- `--region <name>`: search only this region (repeatable; default: every region)
 - `--role`: search for exactly these roles instead (the config's keywords and locations are not used); accepts multiple values, e.g. `--role engineer manager`
-- `--location`: replace the config's locations; accepts multiple values, e.g. `--location Austin "San Francisco"`
-- `--remote` / `--onsite`: only remote / only not-remote jobs for every location (mutually exclusive)
+- `--location`: replace the config's region places; accepts multiple values, e.g. `--location Austin "San Francisco"`
+- `--remote` / `--onsite`: only remote / only not-remote jobs for every place (mutually exclusive)
 - `--json` / `--csv`: print all jobs stored in the db
 - `--db`: path to the sqlite db (default: the precedence chain above)
 - `--config`: config file to use instead of the global plus local chain

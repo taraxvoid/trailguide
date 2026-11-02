@@ -28,7 +28,7 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
 - **`collectJobs`** (`src/search.ts`) runs every source, then decides what
   stays. One predicate, `matches`, answers "does this job satisfy this
   (place, remote | in-person | any) target?"; place matching is word-boundary
-  based, understands regions and aliases, and never lets "Dublin, Ireland"
+  based, understands built-in metros, and never lets "Dublin, Ireland"
   satisfy "Dublin, CA". Then it dedupes across sources, drops internships,
   applies `[filter]`, and strips tracking parameters.
 - **Storage** (`src/db.ts`): `upsertJobs` keeps one row per listing, so

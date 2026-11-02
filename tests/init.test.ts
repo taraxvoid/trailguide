@@ -23,6 +23,14 @@ const dbPath = () => join(root, "data", "trailguide", "trailguide.db");
 const readConfig = () =>
   parseConfig(readFileSync(configPath(), "utf8"), configPath());
 
+/** Work type per city, from the regions init wrote. */
+const workByCity = () =>
+  Object.fromEntries(
+    (readConfig().regions ?? []).flatMap((r) =>
+      r.places.map((city) => [city, r.work]),
+    ),
+  );
+
 function scripted(answers: string[]): InitIO & { asked: string[] } {
   const asked: string[] = [];
   return {
@@ -82,9 +90,9 @@ describe("runInit prompts", () => {
     ]);
     expect(await runInit({}, io)).toBe(true);
     expect(readConfig()).toEqual({
-      locations: [
-        { city: "Omaha, NE", flexibility: "in-person", region: [] },
-        { city: "United States", flexibility: "remote", region: [] },
+      regions: [
+        { name: "home", work: "in-person", places: ["Omaha, NE"] },
+        { name: "remote", work: "remote", places: ["United States"] },
       ],
       keywords: [{ role: "software engineer" }, { role: "devops engineer" }],
     });
@@ -97,17 +105,19 @@ describe("runInit prompts", () => {
   it("offers 'same for all' first, so one answer covers every location", async () => {
     const io = scripted(["Omaha, NE", "Lincoln, NE", "", "swe", "", "i"]);
     await runInit({}, io);
-    expect(readConfig().locations?.map((l) => l.flexibility)).toEqual([
-      "in-person",
-      "in-person",
-    ]);
+    expect(workByCity()).toEqual({
+      "Omaha, NE": "in-person",
+      "Lincoln, NE": "in-person",
+    });
     expect(io.asked.some((q) => q.includes("same for all"))).toBe(true);
   });
 
   it("asks once for a single location and defaults to either", async () => {
     const io = scripted(["Omaha, NE", "", "swe", "", ""]);
     await runInit({}, io);
-    expect(readConfig().locations?.[0]?.flexibility).toBe("any");
+    expect(readConfig().regions).toEqual([
+      { name: "anywhere", work: "any", places: ["Omaha, NE"] },
+    ]);
     expect(io.asked.some((q) => q.includes("same for all"))).toBe(false);
   });
 
@@ -152,10 +162,10 @@ describe("runInit flags", () => {
       },
       scripted([]),
     );
-    expect(readConfig().locations?.map((l) => l.flexibility)).toEqual([
-      "in-person",
-      "remote",
-    ]);
+    expect(workByCity()).toEqual({
+      "Omaha, NE": "in-person",
+      "United States": "remote",
+    });
   });
 
   it("uses a plain --work as the default next to per-location entries", async () => {
@@ -167,10 +177,10 @@ describe("runInit flags", () => {
       },
       scripted([]),
     );
-    expect(readConfig().locations?.map((l) => l.flexibility)).toEqual([
-      "in-person",
-      "remote",
-    ]);
+    expect(workByCity()).toEqual({
+      "Omaha, NE": "in-person",
+      "United States": "remote",
+    });
   });
 
   it("rejects --work that leaves a location uncovered or names an unknown one", async () => {
@@ -219,7 +229,7 @@ describe("runInit never destroys anything", () => {
     const io = scripted([]);
     await runInit({ ...flags, yes: true }, io);
     expect(io.asked).toEqual([]);
-    expect(readConfig().locations?.[0]?.city).toBe("Omaha");
+    expect(readConfig().regions?.[0]?.places).toEqual(["Omaha"]);
   });
 
   it("ignores a local trailguide.toml when choosing the database", async () => {

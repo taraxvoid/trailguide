@@ -36,41 +36,41 @@ describe("loadConfig", () => {
   it("layers the local file over the global one", () => {
     write(
       globalFile(),
-      '[filter]\nclearance = "exclude"\n[[location]]\ncity = "Omaha"\n[[keywords]]\nrole = "swe"\n',
+      '[filter]\nclearance = "exclude"\n[region.omaha]\nplaces = ["Omaha"]\n[[keywords]]\nrole = "swe"\n',
     );
-    write(localFile(), '[[location]]\ncity = "Austin"\n');
+    write(localFile(), '[region.austin]\nplaces = ["Austin"]\n');
     const { config, files } = loadConfig({ cwd, env });
     expect(files).toEqual([globalFile(), localFile()]);
     expect(config.clearance).toBe("exclude");
-    expect(config.locations).toEqual([
-      { city: "Austin", flexibility: "any", region: [] },
+    expect(config.regions).toEqual([
+      { name: "austin", work: "any", places: ["Austin"] },
     ]);
     expect(config.keywords).toEqual([{ role: "swe" }]);
   });
 
   it("uses only the explicit --config file, ignoring the chain", () => {
-    write(localFile(), '[[location]]\ncity = "Austin"\n');
-    write(join(root, "other.toml"), '[[location]]\ncity = "Reno"\n');
+    write(localFile(), '[region.a]\nplaces = ["Austin"]\n');
+    write(join(root, "other.toml"), '[region.a]\nplaces = ["Reno"]\n');
     const { config, files } = loadConfig({
       cwd,
       env,
       config: join(root, "other.toml"),
     });
     expect(files).toEqual([join(root, "other.toml")]);
-    expect(config.locations?.[0]?.city).toBe("Reno");
+    expect(config.regions?.[0]?.places).toEqual(["Reno"]);
   });
 
   it("honors TRAILGUIDE_CONFIG the same way, with the flag winning", () => {
-    write(join(root, "env.toml"), '[[location]]\ncity = "Env"\n');
-    write(join(root, "flag.toml"), '[[location]]\ncity = "Flag"\n');
+    write(join(root, "env.toml"), '[region.a]\nplaces = ["Env"]\n');
+    write(join(root, "flag.toml"), '[region.a]\nplaces = ["Flag"]\n');
     const envConfig = { ...env, TRAILGUIDE_CONFIG: join(root, "env.toml") };
     expect(
-      loadConfig({ cwd, env: envConfig }).config.locations?.[0]?.city,
-    ).toBe("Env");
+      loadConfig({ cwd, env: envConfig }).config.regions?.[0]?.places,
+    ).toEqual(["Env"]);
     expect(
       loadConfig({ cwd, env: envConfig, config: join(root, "flag.toml") })
-        .config.locations?.[0]?.city,
-    ).toBe("Flag");
+        .config.regions?.[0]?.places,
+    ).toEqual(["Flag"]);
   });
 
   it("errors when an explicit config file is missing", () => {
@@ -136,16 +136,13 @@ describe("resolveDbPath", () => {
 
 describe("describeConfig", () => {
   it("lists files, the db path, and the merged config", () => {
-    write(
-      localFile(),
-      '[[location]]\ncity = "Omaha"\nflexibility = "remote"\n',
-    );
+    write(localFile(), '[region.omaha]\nwork = "remote"\nplaces = ["Omaha"]\n');
     const text = describeConfig({ cwd, env });
     expect(text).toContain(localFile());
     expect(text).toContain(
       `database: ${join(root, "data", "trailguide", "trailguide.db")}`,
     );
-    expect(text).toContain('city = "Omaha"');
+    expect(text).toContain("[region.omaha]");
   });
 
   it("points at trailguide init when there is no config", () => {

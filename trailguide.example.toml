@@ -1,7 +1,7 @@
 # Copy to trailguide.toml (per project) or ~/.config/trailguide/config.toml (global).
 # `trailguide init` writes the global one for you. A local trailguide.toml is merged over
-# the global file: scalar keys override one by one, while [[location]],
-# [[keywords]], [[board]] and [filter] exclude REPLACE the global lists if the
+# the global file: scalar keys override one by one, while the regions,
+# [[keywords]], [[board]] and [filter] exclude REPLACE the global ones if the
 # local file defines them.
 
 # Uncomment for a self-contained sandbox next to this file (relative paths
@@ -9,25 +9,26 @@
 # [db]
 # path = "trailguide.db"
 
-# Every keyword is searched in every location. At least one of each is required.
-# Use specific cities for in-person work; broad regions only match listings
-# that name the region.
-[[location]]
-city = "Austin, TX"
-flexibility = "in-person"            # remote | in-person (onsite or hybrid) | any (default)
-aliases = ["Round Rock", "Cedar Park"]  # optional: other names for the same place
-region = ["Texas"]                   # optional: extra places a REMOTE listing may name
+# A region is a job market with its own places, work type and resume folder.
+# Every keyword is searched in every place. At least one region and one
+# keyword are required. The TUI shows one region at a time (G or 1-9 to
+# switch); a job matching several regions shows in each.
+[region.austin]
+work = "in-person"                   # remote | in-person (onsite or hybrid) | any (default)
+places = ["Austin, TX", "Round Rock", "Cedar Park"]
+# resumes = "resumes/austin"         # optional: default <[resume] dir>/<region name>
 
-[[location]]
-city = "United States"
-flexibility = "remote"
+# A US-wide remote place also takes listings like "Remote, Texas".
+[region.remote]
+work = "remote"
+places = ["United States"]
 
 # Built in: "Bay Area", "East Bay", "South Bay", "Seattle" and "Omaha metro" cover their
 # metro's main towns (a listing must name the state or use a bare town name).
 
 [[keywords]]
 role = "Platform Engineer"
-trail = "platform"    # optional: tailor these jobs from <resume dir>/platform.md
+trail = "platform"    # optional: tailor these jobs from <region resume folder>/platform.md
 
 [[keywords]]
 role = "Security Engineer"
@@ -58,6 +59,7 @@ site = "External_Careers"
 # [sources]
 # builtin_boards = false
 
-# Resume masters for `trailguide tailor`. Default: ~/.config/trailguide/resumes
+# Resume masters for `trailguide tailor`. Default: ~/.config/trailguide/resumes.
+# Each region reads <dir>/<region name>/<trail>.md unless it sets `resumes`.
 # [resume]
 # dir = "resumes"

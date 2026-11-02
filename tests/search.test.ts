@@ -62,13 +62,8 @@ const OMAHA_AND_US: SearchPlan = {
   trails: {},
   filter: NO_FILTER,
   targets: [
-    {
-      city: "Omaha",
-      flexibility: "in-person",
-      region: [],
-      aliases: ["La Vista"],
-    },
-    { city: "United States", flexibility: "remote", region: [] },
+    { city: "Omaha metro", flexibility: "in-person" },
+    { city: "United States", flexibility: "remote" },
   ],
 };
 
@@ -94,8 +89,8 @@ describe("collectJobs source calls", () => {
     adzuna.source.labelsRemote = false;
     await collectJobs(plan, [adzuna.source]);
     expect(adzuna.calls.map((c) => c.location).sort()).toEqual([
-      "Omaha",
-      "Omaha",
+      "Omaha metro",
+      "Omaha metro",
     ]);
   });
 
@@ -106,9 +101,9 @@ describe("collectJobs source calls", () => {
       .map((c) => `${c.role}|${c.location}|${c.remote === true}`)
       .sort();
     expect(seen).toEqual([
-      "devops|Omaha|false",
+      "devops|Omaha metro|false",
       "devops|United States|true",
-      "swe|Omaha|false",
+      "swe|Omaha metro|false",
       "swe|United States|true",
     ]);
   });
@@ -169,7 +164,7 @@ describe("collectJobs filtering", () => {
 
   it("trusts scoped sources for place and checks only the work type", async () => {
     const scoped = fake("jsearch", true, (params) =>
-      params.location === "Omaha"
+      params.location === "Omaha metro"
         ? [
             job({
               sourceId: "s1",
@@ -207,7 +202,7 @@ describe("collectJobs filtering", () => {
       keywords: ["swe"],
       trails: {},
       filter: NO_FILTER,
-      targets: [{ city: null, flexibility: "remote", region: [] }],
+      targets: [{ city: null, flexibility: "remote" }],
     };
     const loose = fake("greenhouse", false, () => [
       job({
@@ -333,7 +328,7 @@ describe("trails", () => {
     keywords: ["Platform Engineer", "Security Engineer"],
     trails: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
     filter: NO_FILTER,
-    targets: [{ city: null, flexibility: "any", region: [] }],
+    targets: [{ city: null, flexibility: "any" }],
   };
 
   it("tags scoped results with their keyword's trail", async () => {

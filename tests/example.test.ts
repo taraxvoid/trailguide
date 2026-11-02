@@ -9,8 +9,9 @@ describe("trailguide.example.toml", () => {
   const config = parseConfig(readFileSync(path, "utf8"), path);
 
   it("parses and exercises every section", () => {
-    expect(config.locations?.length).toBeGreaterThan(0);
-    expect(config.locations?.[0]?.aliases).toEqual([
+    expect(config.regions?.map((r) => r.name)).toEqual(["austin", "remote"]);
+    expect(config.regions?.[0]?.places).toEqual([
+      "Austin, TX",
       "Round Rock",
       "Cedar Park",
     ]);

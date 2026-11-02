@@ -94,7 +94,7 @@ const searchRun = () => {
 };
 
 const OMAHA_AND_US =
-  '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\n[[location]]\ncity = "United States"\nflexibility = "remote"\n[[keywords]]\nrole = "swe"\n';
+  '[region.omaha]\nwork = "in-person"\nplaces = ["Omaha"]\n[region.remote]\nwork = "remote"\nplaces = ["United States"]\n[[keywords]]\nrole = "swe"\n';
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "trailguide-runsearch-"));
@@ -197,11 +197,11 @@ describe("runSearch config errors", () => {
     expect(run?.message).toContain(file);
   });
 
-  it("refuses keywords without a location and never calls a source", async () => {
+  it("refuses keywords without a region and never calls a source", async () => {
     writeGlobal('[[keywords]]\nrole = "swe"\n');
     const source = fake([job({})]);
     await expect(runSearch(flags(), deps([source.source]))).rejects.toThrow(
-      /\[\[location\]\]/,
+      /\[region\.<name>\]/,
     );
     expect(source.calls).toHaveLength(0);
     expect(searchRun()?.ok).toBe(false);

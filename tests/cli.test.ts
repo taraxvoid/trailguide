@@ -461,7 +461,7 @@ describe("add command", () => {
     dir = mkdtempSync(join(tmpdir(), "trailguide-add-"));
     writeFileSync(
       join(dir, "config.toml"),
-      '[[location]]\ncity = "Remote"\nflexibility = "remote"\n\n[[keywords]]\nrole = "Platform Engineer"\ntrail = "platform"\n',
+      '[region.remote]\nwork = "remote"\nplaces = ["Remote"]\n\n[[keywords]]\nrole = "Platform Engineer"\ntrail = "platform"\n',
     );
     logs = [];
     errors = [];
