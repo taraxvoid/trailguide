@@ -22,7 +22,9 @@ still get your resume, untailored. See [docs/architecture.md](docs/architecture.
 
 ## Quick start
 
-Requires [Bun](https://bun.sh) >= 1.4.0.
+Requires [Bun](https://bun.sh) >= 1.4.0. If you use [mise](https://mise.jdx.dev),
+`mise install` sets up Bun and the rest of the toolchain (Typst, just,
+lefthook, gitleaks) at the pinned versions.
 
 ```bash
 git clone https://github.com/taraxvoid/trailguide && cd trailguide
@@ -58,7 +60,9 @@ trailguide init --location "Austin, TX" --keywords "software engineer" --work in
 ```
 
 (each flag is repeatable; `--work "Austin, TX:in-person"` sets one location).
-[`trailguide.example.toml`](trailguide.example.toml) shows every section.
+[`trailguide.example.toml`](trailguide.example.toml) shows every section;
+[`examples/bay-area.toml`](examples/bay-area.toml) is a complete Bay Area search
+to copy and adapt.
 
 Every keyword is searched in every location, so at least one `[[location]]`
 and one `[[keywords]]` entry are required.
@@ -308,6 +312,8 @@ Searches run when you ask for them, not on a timer. Please keep it that way
 if you script it.
 
 ## Development
+
+`mise install` provides the tools below (see `mise.toml`).
 
 ```bash
 mise install          # typst, lefthook, gitleaks, jactionlint, shellcheck (pinned in mise.toml)
