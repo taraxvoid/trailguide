@@ -34,13 +34,22 @@ describe("trailguide.example.toml", () => {
 describe("examples/bay-area.toml", () => {
   const path = join(import.meta.dir, "..", "examples", "bay-area.toml");
   const config = parseConfig(readFileSync(path, "utf8"), path);
-  const onsite = (config.locations ?? [])
-    .filter((l) => l.flexibility === "in-person")
-    .flatMap((l) => [l.city, ...(l.aliases ?? [])]);
+  const onsite = (config.regions ?? [])
+    .filter((region) => region.work === "in-person")
+    .flatMap((region) => region.places);
   const matches = (job: string) => matchesLocation(job, onsite);
 
   it("parses, with a trail on every keyword", () => {
-    expect(config.locations?.length).toBe(4);
+    expect(config.regions?.map((region) => region.name)).toEqual([
+      "bay",
+      "remote",
+    ]);
+    expect(onsite).toEqual([
+      "East Bay",
+      "San Francisco",
+      "San Jose, CA",
+      "Milpitas, CA",
+    ]);
     expect(config.keywords?.every((k) => k.trail)).toBe(true);
     expect(resolveBoards(config).length).toBe(
       resolveBoards({}).length + (config.boards?.length ?? 0),
