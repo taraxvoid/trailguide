@@ -18,7 +18,7 @@ import React, {
 } from "react";
 import { NO_DELEGATE_ENV } from "../checkout.ts";
 import { refreshListings } from "../cli.ts";
-import { loadConfig } from "../config.ts";
+import { configuredTrails, loadConfig, resolveBoards } from "../config.ts";
 import type { ListingState, StoredJob } from "../db.ts";
 import {
   allJobs,
@@ -34,7 +34,10 @@ import {
   startTailorRun,
   tailoredListingIds,
 } from "../db.ts";
-import { linkifyPdfPath, openTarget } from "./open.ts";
+import { ImportError, importJob } from "../importUrl.ts";
+import { filterJobs, stepFilterPrompt } from "./filter.ts";
+import { type ImportPrompt, stepImportPrompt } from "./importPrompt.ts";
+import { copyToClipboard, linkifyPdfPath, openTarget } from "./open.ts";
 import { describeSearchRun, startBackgroundSearch } from "./search.ts";
 import {
   orderJobs,
@@ -50,19 +53,19 @@ interface AppProps {
   dbPath: string;
   /** Explicit config file (--config or TRAILGUIDE_CONFIG), forwarded to `trailguide search`. */
   configPath?: string;
-  /** The running checkout's last commit, e.g. "main@abc1234 fix things". */
+  /** The running checkout's last commit, e.g. "main@abc1234*". */
   version?: string | null;
 }
 
 // Chrome heights below are line counts for the JSX blocks they mirror -
 // keep them in sync when the layout changes, since visibleCount depends on
 // knowing exactly how many non-list rows are on screen in each state.
-const HEADER_LINES = 3; // paddingY 1 (top+bottom) + 1 content line
+const HEADER_LINES = 1; // one row: search status left, version right (the cairn overlays the top-right)
 const GAP_LINE = 1; // blank line between sections
 const SEPARATOR_LINES = 1;
 const FOOTER_FIXED_LINES = 5; // marginTop 1 + border 2 + paddingY 2 (content wraps, measured below)
 const STATUS_LINES = 2; // marginTop 1 + content 1
-const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url wrap, measured below)
+const DETAIL_FIXED_LINES = 5; // gap 1 + border 2 + paddingY 2 (title/company/url/id wrap, measured below)
 const DESCRIPTION_PREVIEW_LINES = 2;
 const ROW_LINES = 3; // title line + meta line + marginBottom gap, see JobRow
 
@@ -72,6 +75,17 @@ const SAGE = "#8fbf9f";
 const SKY = "#7aa7d9";
 const SAND = "#ffd479";
 const TERRACOTTA = "#c98f6b";
+
+// A small cairn of offset stones, drawn over the top-right corner (absolutely
+// positioned, so it takes no layout rows and the content below starts at the
+// real top). Each stone is a row of lower-3/4 blocks so a sliver of gap
+// separates them.
+const CAIRN = [
+  { stone: "   ▆▆ ", color: SAND },
+  { stone: "   ▆▆▆", color: TERRACOTTA },
+  { stone: "  ▆▆▆▆▆ ", color: SAGE },
+];
+const CAIRN_WIDTH = 8;
 const PULSE_TICK_MS = 150;
 const POLL_MS = 1000;
 const PULSE_PERIOD_TICKS = 16; // ~2.4s per breath
@@ -110,6 +124,7 @@ function footerItems(
 ): FooterItem[] {
   return [
     { before: "", key: "O", after: "pen link" },
+    { key: "Y", after: "ank id" },
     {
       before: tailored ? "(re)" : "",
       key: "T",
@@ -123,6 +138,8 @@ function footerItems(
     { before: "cycle trai", key: "L" },
     { key: "Tab", after: ` → ${otherView}` },
     { key: "S", after: "earch" },
+    { key: "I", after: "mport link" },
+    { key: "/", after: " filter" },
     { key: "R", after: "efresh (auto-archives)" },
   ];
 }
@@ -280,16 +297,35 @@ export default function JobBrowser({
   // config just means no trails to cycle through.
   const trails = useMemo(() => {
     try {
-      const { keywords = [] } = loadConfig({ config: configPath }).config;
-      return [...new Set(keywords.flatMap((k) => (k.trail ? [k.trail] : [])))];
+      return configuredTrails(loadConfig({ config: configPath }).config);
     } catch {
       return [];
     }
   }, [configPath]);
+  // Boards for naming imported jobs (I); a broken config means built-ins only.
+  const boards = useMemo(() => {
+    try {
+      return resolveBoards(loadConfig({ config: configPath }).config);
+    } catch {
+      return resolveBoards({});
+    }
+  }, [configPath]);
+
+  // The I prompt (link, then trail) while it's open, and the job to select
+  // once an import lands in the list.
+  const [importPrompt, setImportPrompt] = useState<ImportPrompt | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const pendingSelect = useRef<string | null>(null);
+
+  // The / filter. It applies live while typing, and stays applied after
+  // Enter until Esc clears it.
+  const [filterQuery, setFilterQuery] = useState("");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const visibleJobs = useMemo(
-    () => orderJobs(jobs, viewTab, trails, tailoredIds),
-    [jobs, viewTab, trails, tailoredIds],
+    () =>
+      orderJobs(filterJobs(jobs, filterQuery), viewTab, trails, tailoredIds),
+    [jobs, filterQuery, viewTab, trails, tailoredIds],
   );
   const counts = useMemo(
     () => sectionCounts(visibleJobs, viewTab, trails),
@@ -302,6 +338,27 @@ export default function JobBrowser({
   // paddingX 2 + border 1 on each side), so their wrappable text sees the
   // same content width.
   const contentWidth = Math.max(20, columns - 6);
+
+  // The I prompt takes the status line's place. Kept to one line (a long
+  // link shows its end) so the list height math below still holds.
+  const promptLine = (() => {
+    if (isFilterOpen) {
+      const hint = "   ↵ keep, Esc clear";
+      const room = Math.max(1, contentWidth - hint.length - 2);
+      return `/${filterQuery.slice(-room)}▏${hint}`;
+    }
+    if (!importPrompt) return null;
+    if (importPrompt.step === "url") {
+      const label = "Import link: ";
+      const room = Math.max(1, contentWidth - label.length - 1);
+      return `${label}${importPrompt.text.slice(-room)}▏`;
+    }
+    const choices = [...trails, "none"].map((t, i) =>
+      i === importPrompt.index ? `[${t}]` : t,
+    );
+    return `Trail: ${choices.join(" ")}   ←/→ choose, ↵ import, Esc cancel`;
+  })();
+  const bottomLine = promptLine ?? statusMessage;
 
   const selectedIsTailored = selectedJob
     ? tailoredIds.has(selectedJob.listingId)
@@ -332,15 +389,16 @@ export default function JobBrowser({
   const companyLine = selectedJob
     ? `${selectedJob.company}${
         formatRemote(selectedJob.remoteType)
-          ? ` · ${formatRemote(selectedJob.remoteType)}`
+          ? ` - ${formatRemote(selectedJob.remoteType)}`
           : ""
-      } · ${selectedJob.location}`
+      } - ${selectedJob.location}`
     : "";
 
   const detailContentLines = selectedJob
     ? wrapText(titleLine, contentWidth).length +
       wrapText(companyLine, contentWidth).length +
-      wrapText(selectedJob.url, contentWidth).length
+      wrapText(selectedJob.url, contentWidth).length +
+      wrapText(selectedJob.listingId, contentWidth).length
     : 0;
 
   const footerLines = wrapText(FOOTER_TEXT, contentWidth).length;
@@ -349,7 +407,7 @@ export default function JobBrowser({
   // very different heights (an ~8-11 line bordered box vs. a single line),
   // so the number of rows available to the scrollable list has to be
   // recomputed for whichever one is actually on screen right now.
-  const bottomSectionLines = statusMessage
+  const bottomSectionLines = bottomLine
     ? STATUS_LINES
     : selectedJob
       ? DETAIL_FIXED_LINES +
@@ -382,10 +440,10 @@ export default function JobBrowser({
     );
   }, [visibleJobs.length]);
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the tab or filter changes
   useEffect(() => {
     setSelectedIndex(0);
-  }, [viewTab]);
+  }, [viewTab, filterQuery]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentionally reset only when the selection changes
   useEffect(() => {
@@ -445,6 +503,39 @@ export default function JobBrowser({
           : 'no trails configured (add trail = "..." to a [[keywords]] entry)',
     );
   }, [db, trails, visibleJobs, selectedIndex, showStatus]);
+
+  const handleImport = useCallback(
+    async (url: string, trail: string | null) => {
+      setIsImporting(true);
+      setStatusMessage("Importing…");
+      try {
+        const { job, added } = await importJob(db, url, trail, boards);
+        pendingSelect.current = job.listingId;
+        // A filter could hide the job we're about to select.
+        setFilterQuery("");
+        setJobs(allJobs(db));
+        setViewTab(job.state === "archived" ? "archived" : "active");
+        showStatus(
+          `${added ? "Added" : "Already tracked"} ${job.title} @ ${job.company}`,
+        );
+      } catch (err) {
+        showStatus(err instanceof ImportError ? err.message : String(err));
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [db, boards, showStatus],
+  );
+
+  // Select an imported job once it shows up in the (re-sorted) list.
+  useEffect(() => {
+    const id = pendingSelect.current;
+    if (!id) return;
+    const index = visibleJobs.findIndex((j) => j.listingId === id);
+    if (index === -1) return;
+    pendingSelect.current = null;
+    setSelectedIndex(index);
+  }, [visibleJobs]);
 
   const handleStateChange = useCallback(
     (state: ListingState) => {
@@ -568,8 +659,63 @@ export default function JobBrowser({
     showStatus(`Opened ${pdfPath}`);
   }, [db, visibleJobs, selectedIndex, showStatus]);
 
+  const handleCopyId = useCallback(async () => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    showStatus(
+      (await copyToClipboard(job.listingId))
+        ? `Copied ${job.listingId}`
+        : `No clipboard tool found (id: ${job.listingId})`,
+    );
+  }, [visibleJobs, selectedIndex, showStatus]);
+
   const handleInput = useCallback(
     (input: string, key: Key) => {
+      // While the I prompt is open it gets every key (so q and Esc don't quit).
+      if (importPrompt) {
+        const result = stepImportPrompt(importPrompt, input, key, trails);
+        if ("prompt" in result) {
+          setImportPrompt(result.prompt);
+          return;
+        }
+        setImportPrompt(null);
+        if ("done" in result) handleImport(result.done.url, result.done.trail);
+        return;
+      }
+      // Likewise for the / filter, except ↑↓ still move through the matches.
+      if (isFilterOpen) {
+        if (key.upArrow) {
+          setSelectedIndex((prev) => Math.max(0, prev - 1));
+          return;
+        }
+        if (key.downArrow) {
+          setSelectedIndex((prev) =>
+            Math.min(visibleJobs.length - 1, prev + 1),
+          );
+          return;
+        }
+        const result = stepFilterPrompt({ text: filterQuery }, input, key);
+        if ("prompt" in result) {
+          setFilterQuery(result.prompt.text);
+          return;
+        }
+        setIsFilterOpen(false);
+        setFilterQuery("cancelled" in result ? "" : result.done);
+        return;
+      }
+      if (input === "/") {
+        setIsFilterOpen(true);
+        return;
+      }
+      // With a filter applied, Esc clears it rather than quitting.
+      if (key.escape && filterQuery) {
+        setFilterQuery("");
+        return;
+      }
+      if (input === "I") {
+        if (!isImporting) setImportPrompt({ step: "url", text: "" });
+        return;
+      }
       if (key.escape || input === "q") {
         exit();
         return;
@@ -616,6 +762,10 @@ export default function JobBrowser({
         openTarget(selectedJob.url);
         return;
       }
+      if (input === "Y" && selectedJob) {
+        handleCopyId();
+        return;
+      }
       if (input === "V" && selectedJob) {
         handleOpenResume();
         return;
@@ -638,6 +788,12 @@ export default function JobBrowser({
       }
     },
     [
+      importPrompt,
+      isImporting,
+      isFilterOpen,
+      filterQuery,
+      trails,
+      handleImport,
       exit,
       visibleJobs.length,
       visibleCount,
@@ -651,6 +807,7 @@ export default function JobBrowser({
       handleTailor,
       handleSearch,
       handleOpenResume,
+      handleCopyId,
     ],
   );
 
@@ -672,32 +829,52 @@ export default function JobBrowser({
 
   return (
     <Box flexDirection="column" height="100%" paddingX={2} overflow="hidden">
-      <Box paddingY={1} justifyContent="space-between" alignItems="center">
-        <Box flexShrink={1} marginRight={2}>
-          <Text bold color={SAGE}>
-            Hi! I'll be your guide through the forested trails of job
-            applications. 🌲🏕️🥾🎒⛰️~
-          </Text>
-          {version && (
-            <Text dimColor wrap="truncate-end">
-              {"  "}
-              {version}
-            </Text>
-          )}
+      <Box height={HEADER_LINES} justifyContent="space-between">
+        <Box flexShrink={0} marginRight={2}>
           {isSearching && (
-            <Text color={pulseColor(pulseTick)} wrap="truncate-end">
-              {"  Searching..."}
+            <Text color={pulseColor(pulseTick)}>Searching...</Text>
+          )}
+        </Box>
+        <Box flexShrink={1} marginRight={CAIRN_WIDTH + 1}>
+          {version && (
+            <Text dimColor wrap="truncate-start">
+              {version}
             </Text>
           )}
         </Box>
       </Box>
 
+      <Box position="absolute" width="100%" justifyContent="flex-end">
+        <Box flexDirection="column" width={CAIRN_WIDTH} marginRight={2}>
+          {CAIRN.map(({ stone, color }) => (
+            <Text key={color} color={color}>
+              {stone}
+            </Text>
+          ))}
+        </Box>
+      </Box>
+
       <Box height={GAP_LINE} />
 
-      <Text dimColor>{"─".repeat(40)}</Text>
+      {/* An applied filter shows on the separator line, so it costs no rows. */}
+      {filterQuery && !isFilterOpen ? (
+        <Text wrap="truncate-end">
+          <Text dimColor>{"── "}</Text>
+          <Text color={SAND}>{`/${filterQuery}`}</Text>
+          <Text dimColor>
+            {` (${visibleJobs.length} ${visibleJobs.length === 1 ? "match" : "matches"}, / edit, Esc clear) ──`}
+          </Text>
+        </Text>
+      ) : (
+        <Text dimColor>{"─".repeat(40)}</Text>
+      )}
 
       <Box flexDirection="column" flexGrow={1}>
-        {visibleJobs.length === 0 ? (
+        {visibleJobs.length === 0 && filterQuery ? (
+          <Box flexDirection="column" alignItems="center" marginTop={2}>
+            <Text dimColor>No jobs here match "{filterQuery}".</Text>
+          </Box>
+        ) : visibleJobs.length === 0 ? (
           <Box flexDirection="column" alignItems="center" marginTop={2}>
             <Text dimColor>No jobs found.</Text>
             <Text dimColor>
@@ -740,13 +917,19 @@ export default function JobBrowser({
         )}
       </Box>
 
-      {statusMessage && (
+      {promptLine && (
+        <Box marginTop={1}>
+          <Text wrap="truncate-end">{promptLine}</Text>
+        </Box>
+      )}
+
+      {!promptLine && statusMessage && (
         <Box marginTop={1}>
           <Text dimColor>{linkifyPdfPath(statusMessage)}</Text>
         </Box>
       )}
 
-      {selectedJob && !statusMessage && (
+      {selectedJob && !bottomLine && (
         <>
           <Box height={GAP_LINE} />
           <Box
@@ -762,11 +945,12 @@ export default function JobBrowser({
             <Text>
               {selectedJob.company}
               {formatRemote(selectedJob.remoteType)
-                ? ` · ${formatRemote(selectedJob.remoteType)}`
+                ? ` - ${formatRemote(selectedJob.remoteType)}`
                 : ""}{" "}
-              · {selectedJob.location}
+              - {selectedJob.location}
             </Text>
             <Text dimColor>{selectedJob.url}</Text>
+            <Text dimColor>{selectedJob.listingId}</Text>
             {description && (
               <>
                 <Box height={GAP_LINE} />
@@ -858,7 +1042,7 @@ function JobRow({ job, isSelected, isTailored, pulse }: JobRowProps) {
         <Box marginLeft={isSelected ? 3 : 0}>
           <Text dimColor>
             {formatRemote(job.remoteType)
-              ? `${formatRemote(job.remoteType)} · `
+              ? `${formatRemote(job.remoteType)} - `
               : ""}
             {job.location}
           </Text>

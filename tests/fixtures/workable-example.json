@@ -1,0 +1,102 @@
+{
+  "name": "Example Org",
+  "description": null,
+  "jobs": [
+    {
+      "title": "Lead Instructor",
+      "shortcode": "AAA111",
+      "code": "",
+      "employment_type": "Temporary",
+      "telecommuting": false,
+      "department": "Education",
+      "url": "https://apply.workable.com/j/AAA111",
+      "shortlink": "https://apply.workable.com/j/AAA111",
+      "application_url": "https://apply.workable.com/j/AAA111/apply",
+      "published_on": "2026-08-28",
+      "created_at": "2026-08-28",
+      "country": "United States",
+      "city": "San Francisco",
+      "state": "California",
+      "education": "",
+      "experience": "Entry level",
+      "function": "Education",
+      "industry": "Computer Software",
+      "locations": [
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "San Francisco",
+          "region": "California",
+          "hidden": false
+        },
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "Oakland",
+          "region": "California",
+          "hidden": false
+        },
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "Secret",
+          "region": "California",
+          "hidden": true
+        }
+      ],
+      "description": "<h3><strong>About</strong></h3><p>Teach <em>Python</em>.</p>"
+    },
+    {
+      "title": "Systems Engineer",
+      "shortcode": "BBB222",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": true,
+      "department": "Ops",
+      "url": "https://apply.workable.com/j/BBB222",
+      "shortlink": "https://apply.workable.com/j/BBB222",
+      "application_url": "https://apply.workable.com/j/BBB222/apply",
+      "published_on": "2026-09-02",
+      "created_at": "2026-09-02",
+      "country": "United States",
+      "city": "",
+      "state": "",
+      "education": "",
+      "experience": "",
+      "function": "",
+      "industry": "",
+      "locations": [
+        {
+          "country": "United States",
+          "countryCode": "US",
+          "city": "",
+          "region": "",
+          "hidden": false
+        }
+      ],
+      "description": "<p>Keep things running.</p>"
+    },
+    {
+      "title": "Development Director",
+      "shortcode": "CCC333",
+      "code": "",
+      "employment_type": "Full-time",
+      "telecommuting": false,
+      "department": "Development",
+      "url": "https://apply.workable.com/j/CCC333",
+      "shortlink": "https://apply.workable.com/j/CCC333",
+      "application_url": "https://apply.workable.com/j/CCC333/apply",
+      "published_on": "2026-09-10",
+      "created_at": "2026-09-10",
+      "country": "United States",
+      "city": "Omaha",
+      "state": "Nebraska",
+      "education": "",
+      "experience": "",
+      "function": "",
+      "industry": "",
+      "locations": [],
+      "description": "<p>Fundraising.</p>"
+    }
+  ]
+}

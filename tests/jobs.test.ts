@@ -1,4 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, spyOn } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { runJobs } from "../src/cli.ts";
 import { parseRange, truncateWords, weekRange } from "../src/dateRange.ts";
 import {
   jobsInStateBetween,
@@ -92,5 +96,33 @@ describe("jobsInStateBetween", () => {
     const { from, to } = parseRange("last week", now);
     const got = jobsInStateBetween(db, "applied", from, to);
     expect(got.map((j) => j.listingId)).toEqual(["jsearch:1"]);
+  });
+});
+
+describe("runJobs", () => {
+  it("lists every applied job when no range is given", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "tg-jobs-")), "t.db");
+    const db = openDb(path);
+    upsertJobs(db, [job("1"), job("2")]);
+    // One from long ago, one from this week: neither is in "last week".
+    setJobState(db, "jsearch:1", "applied", new Date(2026, 0, 5).toISOString());
+    setJobState(
+      db,
+      "jsearch:2",
+      "applied",
+      new Date(2026, 8, 23).toISOString(),
+    );
+    db.close();
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      runJobs({ db: path, state: "applied", words: 200 }, now);
+      const out = JSON.parse(log.mock.calls[0]?.[0] as string);
+      expect(out.map((j: { listingId: string }) => j.listingId)).toEqual([
+        "jsearch:2",
+        "jsearch:1",
+      ]);
+    } finally {
+      log.mockRestore();
+    }
   });
 });

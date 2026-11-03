@@ -2,7 +2,7 @@
 
 Job search and resume tailoring that only rearranges what you've already written.
 
-trailguide searches company job boards (Greenhouse, Lever, Ashby, Workday) and
+trailguide searches company job boards (Greenhouse, Lever, Ashby, Workday, Workable) and
 aggregators for the roles and places you configure, keeps what it finds in a
 local SQLite database, and lets you browse, triage and apply from a terminal
 UI. For each job it can also tailor your resume: a local model picks and
@@ -106,7 +106,7 @@ remote label are missed, and hybrid is not told apart from onsite.
 
 ### Company job boards
 
-The Greenhouse, Lever, Ashby and Workday boards of a built-in set of companies
+The Greenhouse, Lever, Ashby, Workday and Workable boards of a built-in set of companies
 are searched (see `seed/ats-companies.json`). Add your own with `[[board]]`
 entries, taking the slug from the board's URL:
 
@@ -122,7 +122,15 @@ site = "External_Careers"
 company = "10x Genomics"
 ats = "greenhouse"
 slug = "10xgenomics"  # https://boards.greenhouse.io/10xgenomics
+
+[[board]]
+company = "Mission Bit"
+ats = "workable"
+slug = "missionbit"   # https://apply.workable.com/missionbit
 ```
+
+[`examples/nonprofits.toml`](examples/nonprofits.toml) lists mission-driven
+nonprofits whose boards trailguide can read.
 
 `[sources] builtin_boards = false` searches only your own. A board that fails
 (wrong slug, outage) is listed in the run summary and skipped; the rest are
@@ -158,7 +166,7 @@ trailguide search [--role <query...>] [--location <place...>] [--remote|--onsite
 - `--db`: path to the sqlite db (default: the precedence chain above)
 - `--config`: config file to use instead of the global plus local chain
 
-Other commands: `trailguide tui`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
+Other commands: `trailguide tui`, `trailguide add`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
 `trailguide trail`, `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
 
 Every `trailguide search`, including one started by hand, registers itself as the
@@ -186,14 +194,17 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 - Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
+- Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
 - S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
 - T: tailor your resume to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
 - V: view the job's tailored resume PDF
 - E: archive
 - A: mark applied
 - L: cycle the job's resume trail (none, then each trail in the config)
+- I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
-- q / esc: quit
+- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across both views), Esc clears it
+- q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so
 repeated searches only flag what's `NEW`.
@@ -269,10 +280,32 @@ the job's `<trail>.md` (an error if missing), `default.md`, or the only `.md`
 in the dir. It never guesses between masters. Change a job's trail with `L`
 in the TUI or `trailguide trail <listingId> [trail] [--clear]`.
 
+### Importing a job from a link
+
+A job that search wouldn't find (a link someone sent, a board you don't
+watch, a title your keywords don't match) can be added by hand:
+
+```bash
+trailguide add https://job-boards.greenhouse.io/codeorg/jobs/4727981005 --trail platform
+```
+
+or `I` in the TUI. Search filters don't apply: the job goes in because you
+picked it. Greenhouse, Lever, Ashby, Workable and Workday links are read
+through the board's API, and get the same listing id search would give
+them, so a later search finds the same row. Any other link is read from the
+schema.org `JobPosting` data most careers pages embed; a page without it
+can't be imported.
+
+`--trail` takes a configured trail or `none`. In a terminal, leaving it out
+asks; in a script it's required. Adding a job that's already tracked
+refreshes its details and sets the trail you chose, keeping its state and
+applied date.
+
 ## Network use
 
-trailguide only talks to the public job-board APIs of the sources it searches, and
-tries to be a polite client: every request sends `User-Agent: trailguide/<version>
+trailguide only talks to the public job-board APIs of the sources it searches
+(and, for `trailguide add` with a link that isn't a job board's, that one
+page), and tries to be a polite client: every request sends `User-Agent: trailguide/<version>
 (+https://github.com/taraxvoid/trailguide)`, times out after 20 seconds, and runs
 under small concurrency limits (4 boards at a time per source, 8 link checks).
 Searches run when you ask for them, not on a timer. Please keep it that way

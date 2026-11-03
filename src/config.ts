@@ -32,6 +32,7 @@ export const BOARD_SYSTEMS: readonly Board["ats"][] = [
   "lever",
   "ashby",
   "workday",
+  "workable",
 ];
 
 export interface KeywordEntry {
@@ -59,6 +60,15 @@ export interface TrailguideConfig {
   boards?: Board[];
   /** false: search only `boards`, not the built-in set. */
   builtinBoards?: boolean;
+}
+
+/** The `[[keywords]] trail` values, each once, in config order. */
+export function configuredTrails(config: TrailguideConfig): string[] {
+  return [
+    ...new Set(
+      (config.keywords ?? []).flatMap((k) => (k.trail ? [k.trail] : [])),
+    ),
+  ];
 }
 
 export class ConfigError extends Error {

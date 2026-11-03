@@ -64,5 +64,5 @@ export function gitVersion(dir = dirname(import.meta.dir)): GitVersion | null {
 export function formatGitVersion(version: GitVersion): string {
   const branch = version.branch ? `${version.branch}@` : "";
   const dirty = version.dirty ? "*" : "";
-  return `${branch}${version.hash}${dirty} ${version.subject}`;
+  return `${branch}${version.hash}${dirty}`;
 }

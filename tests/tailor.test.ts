@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { getTailoredResume, openDb, upsertJobs } from "../src/db.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
 import {
@@ -10,7 +11,7 @@ import {
 
 let counter = 0;
 function freshDb() {
-  const path = `/tmp/trailguide-tailor-test-${Date.now()}-${++counter}.db`;
+  const path = `${tmpdir()}/trailguide-tailor-test-${Date.now()}-${++counter}.db`;
   rmSync(path, { force: true });
   return openDb(path);
 }
@@ -30,7 +31,7 @@ function mockJob(overrides: Partial<NormalizedJob> = {}): NormalizedJob {
   };
 }
 
-const outputDir = `/tmp/trailguide-tailor-test-output-${Date.now()}`;
+const outputDir = `${tmpdir()}/trailguide-tailor-test-output-${Date.now()}`;
 const resumeDir = `${import.meta.dir}/fixtures`;
 const resumePath = `${resumeDir}/resume-sample.md`;
 
@@ -156,7 +157,7 @@ describe("tailorResume", () => {
   it("renders the resume unmodified (with a warning) when there's no Highlights section", async () => {
     const db = freshDb();
     upsertJobs(db, [mockJob()]);
-    const plainResumeDir = `/tmp/trailguide-tailor-plain-${Date.now()}`;
+    const plainResumeDir = `${tmpdir()}/trailguide-tailor-plain-${Date.now()}`;
     await Bun.write(
       `${plainResumeDir}/resume.md`,
       "# Just a title\n\nNo sections here.\n",
@@ -294,7 +295,7 @@ describe("resume selection by trail", () => {
   });
 
   async function masters(files: Record<string, string>): Promise<string> {
-    dir = `/tmp/trailguide-tailor-trails-${Date.now()}-${++counter}`;
+    dir = `${tmpdir()}/trailguide-tailor-trails-${Date.now()}-${++counter}`;
     for (const [name, title] of Object.entries(files)) {
       await Bun.write(`${dir}/${name}`, `# ${title}\n\nNo sections here.\n`);
     }

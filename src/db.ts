@@ -13,6 +13,8 @@ export interface StoredJob extends NormalizedJob {
   state: ListingState;
   /** When the job was marked applied; survives archiving (state is single-valued). */
   appliedAt: string | null;
+  /** When the job was first imported from a link (`trailguide add`), if ever. */
+  importedAt: string | null;
 }
 
 export function listingId(
@@ -84,6 +86,9 @@ export function openDb(path: string): Database {
     db.run(
       "UPDATE jobs SET applied_at = COALESCE(state_changed_at, last_checked_at) WHERE state = 'applied'",
     );
+  }
+  if (!cols.some((c) => c.name === "imported_at")) {
+    db.run("ALTER TABLE jobs ADD COLUMN imported_at TEXT");
   }
   // Which tailored markdown file belongs to which listing. That .md is the
   // canonical resume for the job once generated (it's meant to be
@@ -166,6 +171,7 @@ export function upsertJobs(
           lastCheckedAt: now,
           state: jobState,
           appliedAt: jobState === "applied" ? now : null,
+          importedAt: null,
         });
       }
     }
@@ -192,8 +198,44 @@ function rowToStoredJob(row: Record<string, string>): StoredJob {
     lastCheckedAt: row.last_checked_at ?? "",
     state: (row.state as ListingState) ?? "active",
     appliedAt: row.applied_at ?? null,
+    importedAt: row.imported_at ?? null,
     ...(row.trail ? { trail: row.trail } : {}),
   };
+}
+
+/**
+ * Stores a job imported from a link (`trailguide add`). Unlike a search
+ * upsert, details are refreshed and the chosen trail always wins (null
+ * clears it); state and applied date are left alone.
+ */
+export function saveImportedJob(
+  db: Database,
+  job: NormalizedJob,
+  trail: string | null,
+): { listingId: string; added: boolean } {
+  const key = listingId(job);
+  const now = new Date().toISOString();
+  const added =
+    db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?").get(key) === null;
+  db.prepare(`
+    INSERT INTO jobs (listing_id, source_id, source, title, company, location, remote_type, url, posted_at, description, first_seen_at, last_seen_at, last_checked_at, state, trail, imported_at)
+    VALUES ($listingId, $sourceId, $source, $title, $company, $location, $remoteType, $url, $postedAt, $description, $now, $now, $now, 'active', $trail, $now)
+    ON CONFLICT(listing_id) DO UPDATE SET title = $title, company = $company, location = $location, remote_type = $remoteType, url = $url, posted_at = $postedAt, description = $description, last_seen_at = $now, last_checked_at = $now, trail = $trail, imported_at = COALESCE(imported_at, $now)
+  `).run({
+    $listingId: key,
+    $sourceId: job.sourceId,
+    $source: job.source,
+    $title: job.title,
+    $company: job.company,
+    $location: job.location,
+    $remoteType: job.remoteType,
+    $url: job.url,
+    $postedAt: job.postedAt,
+    $description: job.description,
+    $now: now,
+    $trail: trail,
+  });
+  return { listingId: key, added };
 }
 
 /** Sets (or with null, clears) a job's resume trail. */

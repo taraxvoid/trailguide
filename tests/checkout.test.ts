@@ -1,12 +1,13 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import {
   delegateTarget,
   findCheckout,
   NO_DELEGATE_ENV,
 } from "../src/checkout.ts";
 
-const root = `/tmp/trailguide-checkout-test-${Date.now()}`;
+const root = `${tmpdir()}/trailguide-checkout-test-${Date.now()}`;
 const main = `${root}/trailguide`;
 const worktree = `${main}/.claude/worktrees/feature`;
 const other = `${root}/not-trailguide`;

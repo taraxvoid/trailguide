@@ -21,3 +21,28 @@ export async function mapLimit<T, R>(
   );
   return results;
 }
+
+/**
+ * Returns a wrapper that lets at most `limit` of the calls passed to it run
+ * at once; the rest wait their turn in call order.
+ */
+export function createLimiter(
+  limit: number,
+): <R>(fn: () => Promise<R>) => Promise<R> {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  return async (fn) => {
+    if (active >= limit) {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    } else {
+      active++;
+    }
+    try {
+      return await fn();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}

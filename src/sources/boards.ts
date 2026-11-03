@@ -4,7 +4,7 @@ import type { NormalizedJob, SearchParams } from "./types.ts";
 /** A company's public job board on one applicant tracking system. */
 export interface Board {
   company: string;
-  ats: "greenhouse" | "lever" | "ashby" | "workday";
+  ats: "greenhouse" | "lever" | "ashby" | "workday" | "workable";
   /** Board id; for workday, the tenant (<tenant>.<host>.myworkdayjobs.com). */
   slug: string;
   /** Workday only: the wdN host and the career site name from the board URL. */
