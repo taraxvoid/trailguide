@@ -60,15 +60,17 @@ trailguide init --location "Austin, TX" --keywords "software engineer" --work in
 ```
 
 (each flag is repeatable; `--work "Austin, TX:in-person"` sets one location).
+init groups the locations into one region per work type (`home` for
+in-person, `remote`, `anywhere` for either).
 [`trailguide.example.toml`](trailguide.example.toml) shows every section;
 [`examples/bay-area.toml`](examples/bay-area.toml) is a complete Bay Area search
 to copy and adapt.
 
-Every keyword is searched in every location, so at least one `[[location]]`
-and one `[[keywords]]` entry are required.
+Every keyword is searched in every place of every region, so at least one
+`[region.<name>]` and one `[[keywords]]` entry are required.
 
 A `./trailguide.toml` in the current directory is merged over the global config:
-scalar keys override one by one, and lists (`[[location]]`, `[[keywords]]`,
+scalar keys override one by one, and lists (the regions, `[[keywords]]`,
 `[[board]]`, `[filter] exclude`) replace the global ones. `[db] path =
 "trailguide.db"` in a local file gives a self-contained sandbox (relative paths
 resolve against that file's directory). `trailguide config` shows which files,
@@ -78,25 +80,45 @@ Precedence, high to low: CLI flags, `TRAILGUIDE_*` environment variables, local
 `trailguide.toml`, global `config.toml`, defaults. `--config <path>` (or
 `TRAILGUIDE_CONFIG`) replaces the whole chain and uses only that one file.
 
-### Locations
+### Regions
 
-`flexibility` per `[[location]]`:
+A region is a job market with its own places, work type and resume folder.
+Each job is tagged with every region it matches, and the TUI shows one region
+at a time:
+
+```toml
+[resume]
+dir = "resumes"            # relative to this file; each region reads <dir>/<region name>/<trail>.md
+
+[region.bay]
+work = "in-person"
+places = ["East Bay", "San Francisco", "San Jose, CA"]
+
+[region.omaha]
+work = "in-person"
+places = ["Omaha metro"]
+resumes = "resumes/omaha-v2"     # optional: overrides <dir>/omaha
+
+[region.remote]
+work = "remote"
+places = ["United States"]
+```
+
+Regions keep the order they have in the file. `work` is one of:
 
 - `remote`: listings marked remote whose location is blank, global
   ("Worldwide", "Anywhere"), or names the place. "United States" also
-  matches USA, US, and North America.
+  matches USA, US, North America, and any US state or city ("Remote, Texas").
 - `in-person` (onsite or hybrid): anything not marked remote, located in the
-  city.
+  place.
 - `any` (default): either of the above.
 
-`aliases` lists other names for the same place and counts everywhere:
-`aliases = ["La Vista", "Elkhorn"]` on "Omaha". `region` only extends which
-remote listings are eligible for the city, e.g. `region = ["Texas", "TX"]`.
-"City, ST" also matches the state spelled out.
+Another name for a place is just another place in the list. "City, ST" also
+matches the state spelled out.
 
-"Bay Area", "East Bay", "South Bay" and "Seattle" are built-in regions
-covering their metro's main towns. A region only matches listings that name
-its state ("Dublin, CA", not "Dublin, Ireland") or use a bare town name. Broad
+"Bay Area", "East Bay", "South Bay", "Seattle" and "Omaha metro" are built-in
+places covering their metro's main towns. They only match listings that name
+the state ("Dublin, CA", not "Dublin, Ireland") or use a bare town name. Broad
 places like "United States" with `in-person` or `any` only match listings
 that name that place, so use specific cities for in-person work.
 
@@ -155,13 +177,14 @@ and description. On the command line, `--exclude-clearance` and
 ## Usage
 
 ```bash
-trailguide search [--role <query...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
+trailguide search [--role <query...>] [--region <name...>] [--location <place...>] [--remote|--onsite] [--exclude-clearance|--include-clearance] [--json] [--csv] [--db <path>] [--config <path>]
 ```
 
-- no `--role`: the config's `[[keywords]]` and `[[location]]` entries drive the search
+- no `--role`: the config's `[[keywords]]` and regions drive the search
+- `--region`: search only these regions; accepts multiple values (default: every region)
 - `--role`: search for exactly these roles instead (the config's keywords and locations are not used); accepts multiple values, e.g. `--role engineer manager`
-- `--location`: replace the config's locations; accepts multiple values, e.g. `--location Austin "San Francisco"`
-- `--remote` / `--onsite`: only remote / only not-remote jobs for every location (mutually exclusive)
+- `--location`: replace the config's region places; accepts multiple values, e.g. `--location Austin "San Francisco"`
+- `--remote` / `--onsite`: only remote / only not-remote jobs for every place (mutually exclusive)
 - `--json` / `--csv`: print all jobs stored in the db
 - `--db`: path to the sqlite db (default: the precedence chain above)
 - `--config`: config file to use instead of the global plus local chain
@@ -182,7 +205,12 @@ Browse stored jobs interactively:
 trailguide tui [--db <path>] [--config <path>]
 ```
 
-The header shows the branch and last commit of the checkout that's running
+The header's left side lists your regions (in config order, the current one
+highlighted, plus `unassigned` while some job matches none), then the
+Active, Applied and Archived views with the current region's counts. A job in
+two regions shows in both. The TUI reopens on the region you used last.
+
+The right side shows the branch and last commit of the checkout that's running
 (`*` = uncommitted changes). A global `trailguide` from `bun link` runs whichever
 trailguide checkout (or worktree) you're currently inside, and the linked one
 everywhere else. Set `TRAILGUIDE_NO_DELEGATE=1` to always run the linked one.
@@ -191,19 +219,21 @@ Lowercase keys navigate; capital letters act (the capital in each footer label i
 
 - ↑↓ / k j: navigate job list
 - ←→ / h l: page up/down
-- Tab: switch between the Active and Archived views (the footer names where it will take you). The Active view is grouped into Applied, then one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list
+- G / 1-9: next region / jump to region N
+- Tab: switch between the Active and Applied views. Active is grouped into one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list. Applied lists tailored jobs first
+- Ctrl+E: open the Archived view; press it again to go back
 - ↵: expand/collapse the selected job's description
 - O: open the listing URL in your browser
 - Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
-- S: search in the background with your config. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
-- T: tailor your resume to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
+- S: search the current region in the background. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
+- T: tailor your resume (the current region's master) to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
 - V: view the job's tailored resume PDF
 - E: archive
 - A: mark applied
 - L: cycle the job's resume trail (none, then each trail in the config)
 - I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
 - R: refresh (checks whether active listings are still live)
-- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across both views), Esc clears it
+- /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across regions and views), Esc clears it
 - q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so
@@ -229,7 +259,6 @@ Setup:
 
 1. Put your resume master in `~/.config/trailguide/resumes/<name>.md` (or the
    `[resume] dir` from your config; it's your personal resume, so keep it
-<<<<<<< HEAD
    out of this repo). It needs a `## Highlights` section
    and a `## Career Experience` section with each employer's bullets for
    tailoring to have anything to work with. A section whose heading mentions
@@ -245,7 +274,7 @@ Setup:
    ```
 
 ```bash
-trailguide tailor <listingId> [--db <path>] [--config <path>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
+trailguide tailor <listingId> [--db <path>] [--config <path>] [--region <name>] [--resume <path>] [--output-dir <path>] [--ollama-host <host>] [--ollama-model <model>] [--fresh]
 ```
 
 Output goes to `~/.local/share/trailguide/resumes/<company>-<title>.md` and `.pdf`
@@ -270,7 +299,7 @@ a `trail`:
 ```toml
 [[keywords]]
 role = "Security Platform Engineer"
-trail = "secplat"        # tailors from <resume dir>/secplat.md
+trail = "secplat"        # tailors from <region resume folder>/secplat.md
 ```
 
 Search records the trail of the keyword that found each job. For sources
@@ -279,6 +308,14 @@ order) the job title contains. Tailoring then picks, in order: `--resume`,
 the job's `<trail>.md` (an error if missing), `default.md`, or the only `.md`
 in the dir. It never guesses between masters. Change a job's trail with `L`
 in the TUI or `trailguide trail <listingId> [trail] [--clear]`.
+
+With regions, each region has its own folder of masters
+(`<resume dir>/<region name>/`, or the region's `resumes`), so the Omaha and
+Bay Area versions of `secplat.md` can say different things. `T` in the TUI
+tailors with the region you are looking at; `trailguide tailor` uses
+`--region`, else the job's first region in config order. The tailored resume
+remembers which region's master it came from (shown in the TUI's detail
+panel) and keeps it when regenerated from your edits.
 
 ### Importing a job from a link
 
@@ -299,7 +336,8 @@ can't be imported.
 `--trail` takes a configured trail or `none`. In a terminal, leaving it out
 asks; in a script it's required. Adding a job that's already tracked
 refreshes its details and sets the trail you chose, keeping its state and
-applied date.
+applied date. The job joins every region its location matches; if none
+does, it goes in `--region` (the TUI's current region), else the first one.
 
 ## Network use
 

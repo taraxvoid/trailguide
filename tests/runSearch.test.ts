@@ -94,7 +94,7 @@ const searchRun = () => {
 };
 
 const OMAHA_AND_US =
-  '[[location]]\ncity = "Omaha"\nflexibility = "in-person"\n[[location]]\ncity = "United States"\nflexibility = "remote"\n[[keywords]]\nrole = "swe"\n';
+  '[region.omaha]\nwork = "in-person"\nplaces = ["Omaha"]\n[region.remote]\nwork = "remote"\nplaces = ["United States"]\n[[keywords]]\nrole = "swe"\n';
 
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), "trailguide-runsearch-"));
@@ -197,11 +197,11 @@ describe("runSearch config errors", () => {
     expect(run?.message).toContain(file);
   });
 
-  it("refuses keywords without a location and never calls a source", async () => {
+  it("refuses keywords without a region and never calls a source", async () => {
     writeGlobal('[[keywords]]\nrole = "swe"\n');
     const source = fake([job({})]);
     await expect(runSearch(flags(), deps([source.source]))).rejects.toThrow(
-      /\[\[location\]\]/,
+      /\[region\.<name>\]/,
     );
     expect(source.calls).toHaveLength(0);
     expect(searchRun()?.ok).toBe(false);
@@ -280,5 +280,40 @@ describe("runSearch run registration", () => {
     expect(process.exitCode).toBe(1);
     expect(source.calls).toHaveLength(0);
     expect(searchRun()?.pid).toBe(1);
+  });
+});
+
+describe("runSearch regions", () => {
+  it("--region searches only that region", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const scoped = fake([], true, "jsearch");
+    await runSearch(flags({ region: ["omaha"] }), deps([scoped.source]));
+    expect(scoped.calls.map((c) => c.location)).toEqual(["Omaha"]);
+  });
+
+  it("stores jobs with their regions", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const loose = fake([job({ location: "Omaha, NE" })]);
+    await runSearch(flags(), deps([loose.source]));
+    const db = openDb(dbPath());
+    expect(allJobs(db)[0]?.regions).toEqual(["omaha"]);
+    db.close();
+  });
+
+  it("tags jobs found with --location by their place", async () => {
+    writeGlobal(OMAHA_AND_US);
+    const loose = fake([job({ location: "Omaha, NE" })]);
+    await runSearch(flags({ location: ["Omaha"] }), deps([loose.source]));
+    const db = openDb(dbPath());
+    expect(allJobs(db)[0]?.regions).toEqual(["omaha"]);
+    db.close();
+  });
+
+  it("an unknown region fails the run", async () => {
+    writeGlobal(OMAHA_AND_US);
+    await expect(
+      runSearch(flags({ region: ["mars"] }), deps([fake([]).source])),
+    ).rejects.toThrow(ConfigError);
+    expect(searchRun()?.message).toContain(`unknown region "mars"`);
   });
 });

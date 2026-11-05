@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { parse, stringify, TomlError } from "smol-toml";
 import {
   type Env,
@@ -18,13 +18,14 @@ export const FLEXIBILITIES: readonly Flexibility[] = [
   "any",
 ];
 
-export interface LocationEntry {
-  city: string;
-  flexibility: Flexibility;
-  /** Extra terms a remote listing may match; never used for onsite matching. */
-  region: string[];
-  /** Other names for the same place ("La Vista" for Omaha); used everywhere. */
-  aliases?: string[];
+/** A named job market: `[region.<name>]`. */
+export interface RegionEntry {
+  name: string;
+  work: Flexibility;
+  /** Places searched for this region; built-in metro names work too. */
+  places: string[];
+  /** Absolute resume folder; default `<resume dir>/<name>`. */
+  resumes?: string;
 }
 
 export const BOARD_SYSTEMS: readonly Board["ats"][] = [
@@ -54,7 +55,8 @@ export interface TrailguideConfig {
   db?: string;
   /** Absolute path to the resume masters (same resolution as `db`). */
   resumeDir?: string;
-  locations?: LocationEntry[];
+  /** In file order, which is the order everywhere regions are listed. */
+  regions?: RegionEntry[];
   keywords?: KeywordEntry[];
   /** Company job boards searched in addition to the built-in ones. */
   boards?: Board[];
@@ -69,6 +71,11 @@ export function configuredTrails(config: TrailguideConfig): string[] {
       (config.keywords ?? []).flatMap((k) => (k.trail ? [k.trail] : [])),
     ),
   ];
+}
+
+/** The configured regions, in config order. */
+export function configuredRegions(config: TrailguideConfig): RegionEntry[] {
+  return config.regions ?? [];
 }
 
 export class ConfigError extends Error {
@@ -167,11 +174,16 @@ export function parseConfig(text: string, file: string): TrailguideConfig {
       `${file}: [job] was replaced by [filter]: "govmil = true" is now the default; use [filter] clearance = "exclude" to drop clearance jobs`,
     );
   }
+  if (raw.location !== undefined) {
+    throw new ConfigError(
+      `${file}: [[location]] was replaced by [region.<name>]. For example:\n  [region.home]\n  work = "in-person"\n  places = ["Austin, TX"]`,
+    );
+  }
   rejectUnknown(file, "top level", raw, [
     "filter",
     "db",
     "resume",
-    "location",
+    "region",
     "keywords",
     "board",
     "sources",
@@ -220,33 +232,44 @@ export function parseConfig(text: string, file: string): TrailguideConfig {
     config.resumeDir = isAbsolute(dir) ? dir : resolve(dirname(file), dir);
   }
 
-  if (raw.location !== undefined) {
-    config.locations = tableArray(file, "location", raw.location).map(
-      (entry, i) => {
-        const where = `[[location]] entry ${i + 1}`;
-        rejectUnknown(file, where, entry, [
-          "city",
-          "flexibility",
-          "region",
-          "aliases",
-        ]);
-        const city = requireString(file, where, entry, "city");
-        const flexibility = entry.flexibility ?? "any";
-        if (
-          typeof flexibility !== "string" ||
-          !FLEXIBILITIES.includes(flexibility as Flexibility)
-        ) {
+  if (raw.region !== undefined) {
+    if (!isTable(raw.region) || !Object.values(raw.region).every(isTable)) {
+      throw new ConfigError(
+        `${file}: regions must be written as [region.<name>] tables`,
+      );
+    }
+    config.regions = Object.entries(raw.region as Record<string, Table>).map(
+      ([name, entry]) => {
+        const where = `[region.${name}]`;
+        if (!TRAIL_PATTERN.test(name)) {
           throw new ConfigError(
-            `${file}: ${where} has invalid flexibility ${JSON.stringify(flexibility)} (use remote, in-person, or any)`,
+            `${file}: region name ${JSON.stringify(name)} must be lowercase letters, digits, - or _ (it names a resume folder)`,
           );
         }
-        const aliases = parseStrings(file, where, "aliases", entry.aliases);
-        return {
-          city,
-          flexibility: flexibility as Flexibility,
-          region: parseStrings(file, where, "region", entry.region),
-          ...(aliases.length > 0 && { aliases }),
+        rejectUnknown(file, where, entry, ["work", "places", "resumes"]);
+        const work = entry.work ?? "any";
+        if (
+          typeof work !== "string" ||
+          !FLEXIBILITIES.includes(work as Flexibility)
+        ) {
+          throw new ConfigError(
+            `${file}: ${where} has invalid work ${JSON.stringify(work)} (use remote, in-person, or any)`,
+          );
+        }
+        const places = parseStrings(file, where, "places", entry.places);
+        if (places.length === 0) {
+          throw new ConfigError(`${file}: ${where} is missing "places"`);
+        }
+        const region: RegionEntry = {
+          name,
+          work: work as Flexibility,
+          places,
         };
+        if (entry.resumes !== undefined) {
+          const dir = requireString(file, where, entry, "resumes");
+          region.resumes = isAbsolute(dir) ? dir : resolve(dirname(file), dir);
+        }
+        return region;
       },
     );
   }
@@ -334,7 +357,7 @@ export function mergeConfigs(
   }
   if (override.db !== undefined) merged.db = override.db;
   if (override.resumeDir !== undefined) merged.resumeDir = override.resumeDir;
-  if (override.locations !== undefined) merged.locations = override.locations;
+  if (override.regions !== undefined) merged.regions = override.regions;
   if (override.keywords !== undefined) merged.keywords = override.keywords;
   if (override.boards !== undefined) merged.boards = override.boards;
   if (override.builtinBoards !== undefined) {
@@ -355,14 +378,12 @@ export function formatConfig(config: TrailguideConfig): string {
   }
   if (config.db !== undefined) doc.db = { path: config.db };
   if (config.resumeDir !== undefined) doc.resume = { dir: config.resumeDir };
-  if (config.locations) {
-    doc.location = config.locations.map(
-      ({ city, flexibility, region, aliases }) => ({
-        city,
-        flexibility,
-        ...(region.length > 0 && { region }),
-        ...(aliases?.length && { aliases }),
-      }),
+  if (config.regions) {
+    doc.region = Object.fromEntries(
+      config.regions.map(({ name, work, places, resumes }) => [
+        name,
+        { work, places, ...(resumes !== undefined && { resumes }) },
+      ]),
     );
   }
   if (config.keywords) {
@@ -461,10 +482,20 @@ export function resolveBoards(config: TrailguideConfig): Board[] {
   return [...boards.values()];
 }
 
-/** Where resume masters live: `[resume] dir`, else ~/.config/trailguide/resumes. */
-export function resolveResumeDir(ctx: ConfigContext = {}): string {
+/**
+ * Where resume masters live: `[resume] dir`, else ~/.config/trailguide/resumes.
+ * For a region, its `resumes` folder, else `<that dir>/<region name>`.
+ */
+export function resolveResumeDir(
+  ctx: ConfigContext = {},
+  region?: string,
+): string {
   const env = ctx.env ?? process.env;
-  return loadConfig(ctx).config.resumeDir ?? globalResumeDir(env);
+  const { config } = loadConfig(ctx);
+  const base = config.resumeDir ?? globalResumeDir(env);
+  if (!region) return base;
+  const entry = configuredRegions(config).find((r) => r.name === region);
+  return entry?.resumes ?? join(base, region);
 }
 
 export function describeConfig(ctx: ConfigContext = {}): string {
@@ -492,8 +523,8 @@ export function describeConfig(ctx: ConfigContext = {}): string {
 export interface SearchTarget {
   city: string | null;
   flexibility: Flexibility;
-  region: string[];
-  aliases?: string[];
+  /** The region this place belongs to; jobs it finds are tagged with it. */
+  region?: string;
 }
 
 /** Every keyword is searched in every target. */
@@ -518,6 +549,8 @@ export interface SearchFlags {
   onsite?: boolean;
   excludeClearance?: boolean;
   includeClearance?: boolean;
+  /** Search only these regions (default: all). */
+  region?: string[];
 }
 
 /**
@@ -547,7 +580,6 @@ export function toSearchOptions(
     (city): SearchTarget => ({
       city,
       flexibility: flagFlexibility ?? "any",
-      region: [],
     }),
   );
 
@@ -556,7 +588,7 @@ export function toSearchOptions(
       keywords: flags.role,
       trails: {},
       targets: flagTargets ?? [
-        { city: null, flexibility: flagFlexibility ?? "any", region: [] },
+        { city: null, flexibility: flagFlexibility ?? "any" },
       ],
       filter: {
         excludeClearance: flags.excludeClearance ?? false,
@@ -577,19 +609,37 @@ export function toSearchOptions(
       `no [[keywords]] configured (${where}). Add at least one [[keywords]] role, or pass --role.`,
     );
   }
+  const regions = configuredRegions(config);
+  const unknown = (flags.region ?? []).find(
+    (name) => !regions.some((r) => r.name === name),
+  );
+  if (unknown !== undefined) {
+    throw new ConfigError(
+      `unknown region ${JSON.stringify(unknown)} (configured: ${regions.map((r) => r.name).join(", ") || "none"})`,
+    );
+  }
+  const chosen =
+    flags.region && flags.region.length > 0
+      ? regions.filter((r) => flags.region?.includes(r.name))
+      : regions;
   const targets =
     flagTargets ??
-    config.locations?.map(
-      (entry): SearchTarget => ({
-        city: entry.city,
-        flexibility: flagFlexibility ?? entry.flexibility,
-        region: entry.region,
-        ...(entry.aliases && { aliases: entry.aliases }),
-      }),
+    chosen.flatMap((region) =>
+      region.places.map(
+        (city): SearchTarget => ({
+          city,
+          flexibility: flagFlexibility ?? region.work,
+          // A flag that changes the work type finds jobs this region does
+          // not want; they get regions from their place afterwards instead.
+          ...((flagFlexibility === null || flagFlexibility === region.work) && {
+            region: region.name,
+          }),
+        }),
+      ),
     );
-  if (!targets || targets.length === 0) {
+  if (targets.length === 0) {
     throw new ConfigError(
-      `no [[location]] configured (${where}). At least one location is required so a search is never unbounded.`,
+      `no [region.<name>] configured (${where}). At least one region with places is required so a search is never unbounded.`,
     );
   }
   return {

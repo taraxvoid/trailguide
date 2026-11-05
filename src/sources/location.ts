@@ -85,6 +85,20 @@ const LOCATION_ALIASES: Record<string, string[]> = {
     "tacoma",
     "puget sound",
   ],
+  // Suburbs that are de facto Omaha.
+  "omaha metro": [
+    "omaha metro",
+    "omaha",
+    "ralston",
+    "bellevue",
+    "papillion",
+    "la vista",
+    "gretna",
+    "elkhorn",
+    "millard",
+    "boys town",
+    "bennington",
+  ],
   "united states": [
     "united states",
     "usa",
@@ -252,6 +266,7 @@ const REGION_STATES: Record<string, { code: string; name: string }> = {
   "east bay": { code: "CA", name: "california" },
   "south bay": { code: "CA", name: "california" },
   seattle: { code: "WA", name: "washington" },
+  "omaha metro": { code: "NE", name: "nebraska" },
 };
 
 function inRegionState(jobLocation: string, place: string): boolean {
@@ -292,17 +307,10 @@ function isUnitedStates(place: string): boolean {
 }
 
 /** Whether a remote listing's location lets someone in `city` take it. */
-export function remoteEligible(
-  jobLocation: string,
-  city: string,
-  region: string[] = [],
-  aliases: string[] = [],
-): boolean {
+export function remoteEligible(jobLocation: string, city: string): boolean {
   if (isGlobalLocation(jobLocation)) return true;
-  if ([city, ...region].some(isUnitedStates) && isUsLocation(jobLocation)) {
-    return true;
-  }
-  if (matchesLocation(jobLocation, [city, ...aliases, ...region])) return true;
+  if (isUnitedStates(city) && isUsLocation(jobLocation)) return true;
+  if (matchesLocation(jobLocation, city)) return true;
   const job = jobLocation.toLowerCase();
   return (REMOTE_ONLY_ALIASES[canonicalKey(city)] ?? []).some((term) =>
     containsTerm(job, term),
@@ -349,10 +357,7 @@ export function matches(
   const city = target.city;
   if (options.scoped || city === null) return true;
   const places = [job.location, ...(job.otherLocations ?? [])];
-  const aliases = target.aliases ?? [];
   return places.some((place) =>
-    remote
-      ? remoteEligible(place, city, target.region, aliases)
-      : matchesLocation(place, [city, ...aliases]),
+    remote ? remoteEligible(place, city) : matchesLocation(place, city),
   );
 }

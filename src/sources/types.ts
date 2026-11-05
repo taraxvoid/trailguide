@@ -28,6 +28,8 @@ export interface NormalizedJob {
   description: string | null;
   /** Resume trail of the keyword that found it, if that keyword names one. */
   trail?: string;
+  /** Regions whose search targets it satisfied (see `[region.<name>]`). */
+  regions?: string[];
 }
 
 export interface SearchParams {

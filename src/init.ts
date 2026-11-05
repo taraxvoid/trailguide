@@ -3,6 +3,7 @@ import { createInterface } from "node:readline/promises";
 import {
   ConfigError,
   type Flexibility,
+  type RegionEntry,
   resolveBoards,
   resolveDbPath,
   writeConfig,
@@ -23,6 +24,26 @@ export interface InitIO {
   log(message: string): void;
   env?: Env;
   cwd?: string;
+}
+
+// init has no notion of named markets yet, so cities are grouped into one
+// region per work type, in this order.
+const INIT_REGIONS: [Flexibility, string][] = [
+  ["in-person", "home"],
+  ["remote", "remote"],
+  ["any", "anywhere"],
+];
+
+export function regionsByWork(
+  cities: string[],
+  flexibilities: Flexibility[],
+): RegionEntry[] {
+  return INIT_REGIONS.flatMap(([work, name]) => {
+    const places = cities.filter(
+      (_, i) => (flexibilities[i] ?? "any") === work,
+    );
+    return places.length > 0 ? [{ name, work, places }] : [];
+  });
 }
 
 const WORK_ANSWERS: Record<string, Flexibility> = {
@@ -199,11 +220,7 @@ export async function runInit(
     parseWorkFlags(clean(options.work), cities) ?? (await askWork(io, cities));
 
   writeConfig(configPath, {
-    locations: cities.map((city, i) => ({
-      city,
-      flexibility: flexibilities[i] ?? "any",
-      region: [],
-    })),
+    regions: regionsByWork(cities, flexibilities),
     keywords: roles.map((role) => ({ role })),
   });
 

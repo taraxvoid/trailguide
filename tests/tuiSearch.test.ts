@@ -80,6 +80,21 @@ describe("startBackgroundSearch", () => {
       spawn: h.spawn,
     });
     expect(h.requests[0]?.cmd).not.toContain("--config");
+    expect(h.requests[0]?.cmd).not.toContain("--region");
+    h.cleanup();
+  });
+
+  it("forwards the region to the child", () => {
+    const h = harness();
+    const result = startBackgroundSearch({
+      db: h.db,
+      dbPath: h.dbPath,
+      cwd: h.dir,
+      spawn: h.spawn,
+      region: "omaha",
+    });
+    expect(argAfter(h.requests[0]?.cmd ?? [], "--region")).toBe("omaha");
+    expect(result.message).toStartWith("Searching omaha in the background");
     h.cleanup();
   });
 

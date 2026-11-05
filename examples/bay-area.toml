@@ -6,32 +6,27 @@
 #   cp examples/bay-area.toml ~/.config/trailguide/config.toml
 #   trailguide search          # or: trailguide tui, then Ctrl+S
 
-# Onsite or hybrid. The built-in "East Bay" region covers Oakland, Berkeley,
+# Onsite or hybrid. The built-in "East Bay" place covers Oakland, Berkeley,
 # Emeryville, Alameda, San Leandro, Castro Valley, Hayward, Union City,
 # Fremont, Newark, Dublin, Pleasanton, Livermore, San Ramon, Danville, Walnut
 # Creek and Concord, and only matches listings that name California or give a
 # bare town name, so "Dublin, Ireland" and "Fremont, NE" stay out.
-[[location]]
-city = "East Bay"
-flexibility = "in-person"
+[region.bay]
+work = "in-person"
+places = [
+  "East Bay",
+  "San Francisco",
+  "San Jose, CA", # Can't tell North San Jose from the rest of the city: check the address.
+  "Milpitas, CA",
+]
 
 # Also matches "San Francisco Bay Area" listings, and South San Francisco
 # (there is no location exclude yet), so triage those by hand.
-[[location]]
-city = "San Francisco"
-flexibility = "in-person"
-
-# Can't tell North San Jose from the rest of the city: check the address.
-# The state code keeps San Jose, Costa Rica out.
-[[location]]
-city = "San Jose, CA"
-flexibility = "in-person"
-aliases = ["Milpitas, CA"]
 
 # Remote US roles are still worth seeing.
-[[location]]
-city = "United States"
-flexibility = "remote"
+[region.remote]
+work = "remote"
+places = ["United States"]
 
 # Each trail names a resume master in [resume] dir (platform.md, secplat.md,
 # ai-infra.md). Every keyword is searched in every location, so 8 keywords x

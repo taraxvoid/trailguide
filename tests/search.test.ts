@@ -62,17 +62,53 @@ const OMAHA_AND_US: SearchPlan = {
   trails: {},
   filter: NO_FILTER,
   targets: [
-    {
-      city: "Omaha",
-      flexibility: "in-person",
-      region: [],
-      aliases: ["La Vista"],
-    },
-    { city: "United States", flexibility: "remote", region: [] },
+    { city: "Omaha metro", flexibility: "in-person" },
+    { city: "United States", flexibility: "remote" },
   ],
 };
 
 const ids = (jobs: NormalizedJob[]) => jobs.map((j) => j.sourceId).sort();
+
+const THREE_REGIONS: SearchPlan = {
+  keywords: ["swe"],
+  trails: {},
+  filter: NO_FILTER,
+  targets: [
+    { city: "East Bay", flexibility: "in-person", region: "bay" },
+    { city: "Omaha metro", flexibility: "in-person", region: "omaha" },
+    { city: "United States", flexibility: "remote", region: "remote" },
+  ],
+};
+
+describe("collectJobs regions", () => {
+  const regionsById = (jobs: NormalizedJob[]) =>
+    Object.fromEntries(jobs.map((j) => [j.sourceId, j.regions]));
+
+  it("tags unscoped jobs with every matching region", async () => {
+    const loose = fake("greenhouse", false, () => [
+      job({ sourceId: "a", location: "Oakland, CA", url: "https://e.com/a" }),
+      job({
+        sourceId: "b",
+        title: "Remote SWE",
+        location: "Remote - USA",
+        remoteType: "remote",
+        url: "https://e.com/b",
+      }),
+    ]);
+    const { jobs } = await collectJobs(THREE_REGIONS, [loose.source]);
+    expect(regionsById(jobs)).toEqual({ a: ["bay"], b: ["remote"] });
+  });
+
+  it("tags scoped jobs with the queried target's region", async () => {
+    const scoped = fake("jsearch", true, (params) =>
+      params.location === "Omaha metro"
+        ? [job({ sourceId: "o", source: "jsearch", location: "Somewhere" })]
+        : [],
+    );
+    const { jobs } = await collectJobs(THREE_REGIONS, [scoped.source]);
+    expect(regionsById(jobs)).toEqual({ o: ["omaha"] });
+  });
+});
 
 let errorSpy: { mockRestore(): void };
 beforeEach(() => {
@@ -94,8 +130,8 @@ describe("collectJobs source calls", () => {
     adzuna.source.labelsRemote = false;
     await collectJobs(plan, [adzuna.source]);
     expect(adzuna.calls.map((c) => c.location).sort()).toEqual([
-      "Omaha",
-      "Omaha",
+      "Omaha metro",
+      "Omaha metro",
     ]);
   });
 
@@ -106,9 +142,9 @@ describe("collectJobs source calls", () => {
       .map((c) => `${c.role}|${c.location}|${c.remote === true}`)
       .sort();
     expect(seen).toEqual([
-      "devops|Omaha|false",
+      "devops|Omaha metro|false",
       "devops|United States|true",
-      "swe|Omaha|false",
+      "swe|Omaha metro|false",
       "swe|United States|true",
     ]);
   });
@@ -169,7 +205,7 @@ describe("collectJobs filtering", () => {
 
   it("trusts scoped sources for place and checks only the work type", async () => {
     const scoped = fake("jsearch", true, (params) =>
-      params.location === "Omaha"
+      params.location === "Omaha metro"
         ? [
             job({
               sourceId: "s1",
@@ -207,7 +243,7 @@ describe("collectJobs filtering", () => {
       keywords: ["swe"],
       trails: {},
       filter: NO_FILTER,
-      targets: [{ city: null, flexibility: "remote", region: [] }],
+      targets: [{ city: null, flexibility: "remote" }],
     };
     const loose = fake("greenhouse", false, () => [
       job({
@@ -333,7 +369,7 @@ describe("trails", () => {
     keywords: ["Platform Engineer", "Security Engineer"],
     trails: { "Platform Engineer": "platform", "Security Engineer": "secplat" },
     filter: NO_FILTER,
-    targets: [{ city: null, flexibility: "any", region: [] }],
+    targets: [{ city: null, flexibility: "any" }],
   };
 
   it("tags scoped results with their keyword's trail", async () => {

@@ -1,6 +1,13 @@
 import type { Database } from "bun:sqlite";
-import { getJob, type StoredJob, saveImportedJob } from "./db.ts";
+import type { RegionEntry } from "./config.ts";
+import {
+  addJobRegions,
+  getJob,
+  type StoredJob,
+  saveImportedJob,
+} from "./db.ts";
 import { httpFetch } from "./http.ts";
+import { regionsFor } from "./regions.ts";
 import { fetchAshbyJob } from "./sources/ashby.ts";
 import type { Board } from "./sources/boards.ts";
 import { fetchGreenhouseJob } from "./sources/greenhouse.ts";
@@ -185,15 +192,26 @@ export async function resolveJobUrl(
   }
 }
 
-/** Resolves a link and stores the job with `trail` (null for none). */
+/**
+ * Resolves a link and stores the job with `trail` (null for none), tagged
+ * with the regions its location matches, else with `fallbackRegion`.
+ */
 export async function importJob(
   db: Database,
   url: string,
   trail: string | null,
   boards: Board[],
+  regions: RegionEntry[] = [],
+  fallbackRegion?: string,
 ): Promise<{ job: StoredJob; added: boolean }> {
   const resolved = await resolveJobUrl(url, boards);
   const { listingId, added } = saveImportedJob(db, resolved, trail);
+  const matched = regionsFor(resolved, regions);
+  addJobRegions(
+    db,
+    listingId,
+    matched.length > 0 ? matched : fallbackRegion ? [fallbackRegion] : [],
+  );
   const job = getJob(db, listingId);
   if (!job) throw new ImportError(`could not save ${url}`);
   return { job, added };

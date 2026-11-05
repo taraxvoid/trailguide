@@ -89,6 +89,14 @@ function withTrail(
   return trail ? { ...job, trail } : job;
 }
 
+/** Tags a job with the regions of the targets it satisfied. */
+function withRegions(job: NormalizedJob, hit: SearchTarget[]): NormalizedJob {
+  const regions = [
+    ...new Set(hit.flatMap((t) => (t.region ? [t.region] : []))),
+  ];
+  return regions.length > 0 ? { ...job, regions } : job;
+}
+
 /**
  * Scoped sources are paid search APIs (adzuna, jsearch) called once per
  * (keyword, target); firing them all at once trips their rate limits (nginx
@@ -169,15 +177,18 @@ export async function collectJobs(
           return found
             .flat()
             .filter((job) => matches(job, target, { scoped: true }))
-            .map((job) => withTrail(job, plan.trails[role]));
+            .map((job) =>
+              withRegions(withTrail(job, plan.trails[role]), [target]),
+            );
         }),
       ),
     ),
   ]);
-  const kept = loose
-    .flat()
-    .filter((job) => plan.targets.some((target) => matches(job, target)))
-    .map((job) => withTrail(job, trailFromTitle(job.title, plan)));
+  const kept = loose.flat().flatMap((job) => {
+    const hit = plan.targets.filter((target) => matches(job, target));
+    if (hit.length === 0) return [];
+    return [withRegions(withTrail(job, trailFromTitle(job.title, plan)), hit)];
+  });
 
   const jobs = dedupe([...kept, ...perTarget.flat()])
     .filter((job) => !isInternship(job))

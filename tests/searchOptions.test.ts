@@ -12,9 +12,9 @@ const LOADED: LoadedConfig = {
   config: {
     clearance: "include",
     keywords: [{ role: "swe" }, { role: "devops" }],
-    locations: [
-      { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
-      { city: "United States", flexibility: "remote", region: [] },
+    regions: [
+      { name: "omaha", work: "in-person", places: ["Omaha"] },
+      { name: "remote", work: "remote", places: ["United States"] },
     ],
   },
 };
@@ -33,7 +33,7 @@ describe("toSearchOptions with --role", () => {
     ).toEqual({
       keywords: ["swe"],
       trails: {},
-      targets: [{ city: "Omaha", flexibility: "remote", region: [] }],
+      targets: [{ city: "Omaha", flexibility: "remote" }],
       filter: NO_FILTER,
     });
   });
@@ -47,7 +47,7 @@ describe("toSearchOptions with --role", () => {
     ).toEqual({
       keywords: ["swe"],
       trails: {},
-      targets: [{ city: null, flexibility: "in-person", region: [] }],
+      targets: [{ city: null, flexibility: "in-person" }],
       filter: { excludeClearance: true, excludeTerms: [] },
     });
   });
@@ -66,13 +66,13 @@ describe("toSearchOptions from the config", () => {
     expect(plan.trails).toEqual({ swe: "platform" });
   });
 
-  it("crosses keywords with locations, keeping region", () => {
+  it("crosses keywords with region places, tagging each with its region", () => {
     expect(toSearchOptions({}, () => LOADED)).toEqual({
       keywords: ["swe", "devops"],
       trails: {},
       targets: [
-        { city: "Omaha", flexibility: "in-person", region: ["Nebraska"] },
-        { city: "United States", flexibility: "remote", region: [] },
+        { city: "Omaha", flexibility: "in-person", region: "omaha" },
+        { city: "United States", flexibility: "remote", region: "remote" },
       ],
       filter: NO_FILTER,
     });
@@ -83,9 +83,7 @@ describe("toSearchOptions from the config", () => {
       { location: ["Reno"], excludeClearance: true },
       () => LOADED,
     );
-    expect(relocated.targets).toEqual([
-      { city: "Reno", flexibility: "any", region: [] },
-    ]);
+    expect(relocated.targets).toEqual([{ city: "Reno", flexibility: "any" }]);
     expect(relocated.filter.excludeClearance).toBe(true);
 
     const onsite = toSearchOptions({ onsite: true }, () => LOADED);
@@ -141,14 +139,14 @@ describe("toSearchOptions errors", () => {
     ).toThrow(/trailguide init/);
   });
 
-  it("never allows an unbounded search: locations are required", () => {
+  it("never allows an unbounded search: regions are required", () => {
     const noLocations: LoadedConfig = {
       files: ["/g/config.toml"],
       config: { keywords: [{ role: "swe" }] },
     };
     expect(() => toSearchOptions({}, () => noLocations)).toThrow(ConfigError);
     expect(() => toSearchOptions({}, () => noLocations)).toThrow(
-      "no [[location]] configured (/g/config.toml)",
+      "no [region.<name>] configured (/g/config.toml)",
     );
     // --location supplies what the config lacks.
     expect(
@@ -159,7 +157,7 @@ describe("toSearchOptions errors", () => {
   it("requires keywords", () => {
     const noKeywords: LoadedConfig = {
       files: ["/g/config.toml", "/p/trailguide.toml"],
-      config: { locations: LOADED.config.locations },
+      config: { regions: LOADED.config.regions },
     };
     expect(() => toSearchOptions({}, () => noKeywords)).toThrow(
       "no [[keywords]] configured (/g/config.toml, /p/trailguide.toml)",

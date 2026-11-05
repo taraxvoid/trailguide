@@ -23,6 +23,10 @@ export function dedupe(jobs: NormalizedJob[]): NormalizedJob[] {
   for (const job of jobs) {
     const key = dedupeKey(job);
     const existing = seen.get(key);
+    // Every copy's regions count, whichever copy wins.
+    const regions = [
+      ...new Set([...(existing?.regions ?? []), ...(job.regions ?? [])]),
+    ];
     // Prefer the entry with the richer description when the same job shows up twice.
     if (
       !existing ||
@@ -30,7 +34,13 @@ export function dedupe(jobs: NormalizedJob[]): NormalizedJob[] {
     ) {
       // Keep a trail whichever copy wins.
       const trail = job.trail ?? existing?.trail;
-      seen.set(key, trail ? { ...job, trail } : job);
+      seen.set(key, {
+        ...job,
+        ...(trail && { trail }),
+        ...(regions.length > 0 && { regions }),
+      });
+    } else if (regions.length > 0) {
+      seen.set(key, { ...existing, regions });
     }
   }
   return [...seen.values()];

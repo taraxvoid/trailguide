@@ -7,6 +7,8 @@ import {
   allJobs,
   clearJobs,
   getJob,
+  getSetting,
+  getTailoredResume,
   jobsByState,
   type ListingState,
   listingId,
@@ -15,6 +17,8 @@ import {
   setJobApplied,
   setJobState,
   setJobTrail,
+  setSetting,
+  setTailoredResume,
   upsertJobs,
 } from "../src/db.ts";
 import type { NormalizedJob } from "../src/sources/types.ts";
@@ -438,5 +442,58 @@ describe("saveImportedJob", () => {
       name: string;
     }[];
     expect(cols.some((c) => c.name === "imported_at")).toBe(true);
+  });
+});
+
+describe("job regions", () => {
+  it("upsertJobs stores regions and later searches add to them", () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ regions: ["bay"] })]);
+    upsertJobs(db, [mockJob({ regions: ["omaha"] })]);
+    const job = getJob(db, "jsearch:1");
+    expect(job?.regions.slice().sort()).toEqual(["bay", "omaha"]);
+    expect(first(allJobs(db)).regions.slice().sort()).toEqual(["bay", "omaha"]);
+  });
+
+  it("jobs without regions read back as []", () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob()]);
+    expect(getJob(db, "jsearch:1")?.regions).toEqual([]);
+    expect(first(jobsByState(db, "active")).regions).toEqual([]);
+  });
+});
+
+describe("settings", () => {
+  it("round-trips", () => {
+    const db = freshDb();
+    expect(getSetting(db, "tui.region")).toBeNull();
+    setSetting(db, "tui.region", "omaha");
+    expect(getSetting(db, "tui.region")).toBe("omaha");
+    setSetting(db, "tui.region", "bay");
+    expect(getSetting(db, "tui.region")).toBe("bay");
+  });
+});
+
+describe("tailored resume region", () => {
+  it("setTailoredResume records the region", () => {
+    const db = freshDb();
+    setTailoredResume(db, "a", "/x/a.md", "bay");
+    setTailoredResume(db, "b", "/x/b.md");
+    expect(getTailoredResume(db, "a")?.region).toBe("bay");
+    expect(getTailoredResume(db, "b")?.region).toBeNull();
+  });
+
+  it("opening an old db adds the new tables and column", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "trailguide-old-")), "t.db");
+    const old = new Database(path);
+    old.run(
+      "CREATE TABLE tailored_resumes (listing_id TEXT PRIMARY KEY, markdown_path TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+    );
+    old.close();
+    const db = openDb(path);
+    setTailoredResume(db, "a", "/x/a.md", "bay");
+    expect(getTailoredResume(db, "a")?.region).toBe("bay");
+    setSetting(db, "k", "v");
+    expect(getSetting(db, "k")).toBe("v");
   });
 });

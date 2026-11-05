@@ -206,6 +206,28 @@ describe("importJob", () => {
     expect((await importJob(db, url, null, BOARDS)).added).toBe(false);
   });
 
+  it("tags the job with the regions its location matches", async () => {
+    serve(() => new Response(JSON.stringify(greenhouseJob)));
+    const db = openDb(dbPath());
+    const url = "https://job-boards.greenhouse.io/codeorg/jobs/4727981005";
+    const { job } = await importJob(db, url, null, BOARDS, [
+      { name: "far", work: "in-person", places: ["Berlin"] },
+      { name: "sea", work: "any", places: ["Seattle"] },
+    ]);
+    expect(job.regions).toEqual(["sea"]);
+  });
+
+  it("falls back to the given region when none match", async () => {
+    serve(() => new Response(JSON.stringify(greenhouseJob)));
+    const db = openDb(dbPath());
+    const url = "https://job-boards.greenhouse.io/codeorg/jobs/4727981005";
+    const regions = [
+      { name: "far", work: "in-person" as const, places: ["Berlin"] },
+    ];
+    const { job } = await importJob(db, url, null, BOARDS, regions, "home");
+    expect(job.regions).toEqual(["home"]);
+  });
+
   it("writes nothing when the link can't be read", async () => {
     serve(() => new Response("<html></html>"));
     const db = openDb(dbPath());

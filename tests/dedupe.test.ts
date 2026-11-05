@@ -17,6 +17,16 @@ function job(overrides: Partial<NormalizedJob>): NormalizedJob {
   };
 }
 
+describe("dedupe regions", () => {
+  it("unions regions whichever copy wins", () => {
+    const [kept] = dedupe([
+      job({ sourceId: "1", regions: ["bay"] }),
+      job({ sourceId: "2", regions: ["omaha"], description: "longer" }),
+    ]);
+    expect(kept?.regions).toEqual(["bay", "omaha"]);
+  });
+});
+
 describe("dedupe", () => {
   it("collapses the same job seen across different sources", () => {
     const jobs = [
