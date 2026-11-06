@@ -190,7 +190,7 @@ trailguide search [--role <query...>] [--region <name...>] [--location <place...
 - `--config`: config file to use instead of the global plus local chain
 
 Other commands: `trailguide tui`, `trailguide add`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
-`trailguide trail`, `trailguide remove <listingId>` (delete one job), `trailguide region <listingId> [region...] [--clear]` (show, replace or clear a job's regions, e.g. one `add`ed into the wrong region), `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
+`trailguide trail`, `trailguide remove <listingId>` (delete one job), `trailguide region <listingId> [region...] [--clear]` (show, replace or clear a job's regions, e.g. one `add`ed into the wrong region), `trailguide clear`, `trailguide config`, `trailguide init`, `trailguide completion <bash|zsh|fish>` (shell completions; `trailguide completion --help` shows how to install); `trailguide --help` lists them.
 
 Every `trailguide search`, including one started by hand, registers itself as the
 db's single search run: it shows in the TUI, and a second one started while
