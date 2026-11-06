@@ -25,10 +25,15 @@ export function initialRegion(
   return strip[0] ?? null;
 }
 
-/** The region after `current`, wrapping around. */
-export function nextRegion(strip: string[], current: string): string {
-  const next = strip[(strip.indexOf(current) + 1) % strip.length];
-  return next ?? current;
+/** The region `step` places after `current` (-1: before), wrapping around. */
+export function stepRegion(
+  strip: string[],
+  current: string,
+  step: 1 | -1,
+): string {
+  const at = strip.indexOf(current);
+  if (at === -1 || strip.length === 0) return current;
+  return strip[(at + step + strip.length) % strip.length] ?? current;
 }
 
 /** The region a digit key 1-9 jumps to, if there is one. */
