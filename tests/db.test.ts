@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  addJobRegions,
   allJobs,
   clearJobs,
   getJob,
@@ -13,6 +14,7 @@ import {
   type ListingState,
   listingId,
   openDb,
+  removeJob,
   saveImportedJob,
   setJobApplied,
   setJobState,
@@ -323,6 +325,30 @@ describe("clearJobs", () => {
 
     clearJobs(db);
     expect(allJobs(db)).toHaveLength(0);
+    db.close();
+  });
+});
+
+describe("removeJob", () => {
+  it("deletes one job with its regions and tailored record, keeping others", () => {
+    const db = freshDb();
+    upsertJobs(db, [
+      mockJob({ sourceId: "j1", source: "jsearch" }),
+      mockJob({ sourceId: "j2", source: "jsearch" }),
+    ]);
+    addJobRegions(db, "jsearch:j1", ["omaha"]);
+    setTailoredResume(db, "jsearch:j1", "/x/a.md", "omaha");
+
+    expect(removeJob(db, "jsearch:j1")).toBe(true);
+    expect(getJob(db, "jsearch:j1")).toBeNull();
+    expect(getTailoredResume(db, "jsearch:j1")).toBeNull();
+    expect(
+      db
+        .query("SELECT * FROM job_regions WHERE listing_id = 'jsearch:j1'")
+        .all(),
+    ).toHaveLength(0);
+    expect(getJob(db, "jsearch:j2")).not.toBeNull();
+    expect(removeJob(db, "jsearch:j1")).toBe(false);
     db.close();
   });
 });

@@ -190,7 +190,7 @@ trailguide search [--role <query...>] [--region <name...>] [--location <place...
 - `--config`: config file to use instead of the global plus local chain
 
 Other commands: `trailguide tui`, `trailguide add`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
-`trailguide trail`, `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
+`trailguide trail`, `trailguide remove <listingId>` (delete one job), `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
 
 Every `trailguide search`, including one started by hand, registers itself as the
 db's single search run: it shows in the TUI, and a second one started while
@@ -229,6 +229,7 @@ Job:
 - v: view the job's tailored resume PDF
 - Ctrl+X: archive
 - Ctrl+L: cycle the job's resume trail (none, then each trail in the config)
+- Ctrl+D / Delete: delete the selected job from the database (asks you to press again to confirm; any other key cancels). Tailored files on disk are kept
 
 Find:
 

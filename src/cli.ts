@@ -31,6 +31,7 @@ import {
   jobsInStateBetween,
   listingId,
   openDb,
+  removeJob,
   SEARCH_RUN_KEY,
   type StoredJob,
   setJobState,
@@ -253,6 +254,24 @@ export async function runClear(options: { db?: string }): Promise<void> {
   clearJobs(db);
   db.close();
   console.log(`Cleared all jobs from ${dbPath}`);
+}
+
+export async function runRemove(options: {
+  listingId: string;
+  db?: string;
+}): Promise<void> {
+  const db = openDb(resolveDbPath({ db: options.db }));
+  try {
+    const job = getJob(db, options.listingId);
+    if (!job || !removeJob(db, options.listingId)) {
+      console.error(`error: no job found with id ${options.listingId}`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Removed ${options.listingId}: ${job.title} @ ${job.company}`);
+  } finally {
+    db.close();
+  }
 }
 
 const DEAD_PAGE_PATTERNS = [
@@ -675,6 +694,10 @@ export function createProgram(
   refreshAction: (options: { db?: string }) => Promise<void> = runRefresh,
   tailorAction: (options: TailorCliOptions) => Promise<void> = runTailor,
   addAction: (options: AddCliOptions) => Promise<void> = runAdd,
+  removeAction: (options: {
+    listingId: string;
+    db?: string;
+  }) => Promise<void> = runRemove,
 ): Command {
   const program = new Command();
 
@@ -863,6 +886,17 @@ export function createProgram(
         await addAction({ ...options, url });
       },
     );
+
+  program
+    .command("remove")
+    .description(
+      "Delete one job from the database (e.g. one added into the wrong region); `add` can bring it back",
+    )
+    .argument("<listingId>", "listing id, e.g. workday:acme:R1234")
+    .option("--db <path>", DB_HELP)
+    .action(async (listingIdArg: string, options: { db?: string }) => {
+      await removeAction({ ...options, listingId: listingIdArg });
+    });
 
   program
     .command("trail")
