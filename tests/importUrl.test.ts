@@ -228,6 +228,42 @@ describe("importJob", () => {
     expect(job.regions).toEqual(["home"]);
   });
 
+  it("asks which region when none match, and stores nothing if declined", async () => {
+    serve(() => new Response(JSON.stringify(greenhouseJob)));
+    const db = openDb(dbPath());
+    const url = "https://job-boards.greenhouse.io/codeorg/jobs/4727981005";
+    const regions = [
+      { name: "far", work: "in-person" as const, places: ["Berlin"] },
+    ];
+    const { job } = await importJob(
+      db,
+      url,
+      null,
+      BOARDS,
+      regions,
+      undefined,
+      async () => "far",
+    );
+    expect(job.regions).toEqual(["far"]);
+    const none = await importJob(
+      db,
+      url,
+      null,
+      BOARDS,
+      regions,
+      undefined,
+      async () => null,
+    );
+    expect(none.job.regions).toEqual(["far"]);
+    const db2 = openDb(dbPath());
+    await expect(
+      importJob(db2, url, null, BOARDS, regions, undefined, async () => {
+        throw new ImportError("no region chosen");
+      }),
+    ).rejects.toThrow("no region chosen");
+    expect(allJobs(db2)).toEqual([]);
+  });
+
   it("writes nothing when the link can't be read", async () => {
     serve(() => new Response("<html></html>"));
     const db = openDb(dbPath());
