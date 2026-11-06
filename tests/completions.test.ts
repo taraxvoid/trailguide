@@ -14,6 +14,15 @@ describe("completions", () => {
     });
   }
 
+  it("zsh and fish attach --region and its description to the search command", () => {
+    const zsh = generateCompletion(program, "zsh");
+    expect(zsh).toMatch(/search\) _arguments[^\n]*'--region\[/);
+    const fish = generateCompletion(program, "fish");
+    expect(fish).toMatch(
+      /__fish_seen_subcommand_from search[^\n]*-l region[^\n]* -d '/,
+    );
+  });
+
   it("bash completes --region per command from the commander tree", () => {
     expect(generateCompletion(program, "bash")).toMatch(
       /search\) opts="[^"]*--region/,

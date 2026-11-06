@@ -72,7 +72,10 @@ complete -o default -F _trailguide trailguide
 }
 
 const zshQuote = (s: string) => `'${s.replace(/'/g, "'\\''")}'`;
-const zshDesc = (s: string) => oneLine(s).replace(/([[\]])/g, "\\$1");
+const zshDesc = (s: string) =>
+  oneLine(s)
+    .replace(/\\/g, "\\\\")
+    .replace(/([[\]])/g, "\\$1");
 
 function zshOption(o: OptionSpec): string {
   const desc = `[${zshDesc(o.description)}]`;
@@ -91,7 +94,7 @@ function zsh(program: Command): string {
   const list = commands
     .map(
       (c) =>
-        `      ${zshQuote(`${c.name}:${oneLine(c.description).replace(/:/g, "\\:")}`)}`,
+        `      ${zshQuote(`${c.name}:${oneLine(c.description).replace(/\\/g, "\\\\").replace(/:/g, "\\:")}`)}`,
     )
     .join("\n");
   const cases = commands
