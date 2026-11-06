@@ -439,6 +439,33 @@ export function clearJobs(db: Database): void {
   db.run("DELETE FROM job_regions");
 }
 
+/**
+ * Deletes one job and its region links, tailored-resume record and tailor
+ * run. The tailored .md/.pdf files on disk are left alone. Returns false if
+ * no such job exists.
+ */
+export function removeJob(db: Database, listingId: string): boolean {
+  return db
+    .transaction(() => {
+      const $listingId = listingId;
+      db.prepare("DELETE FROM job_regions WHERE listing_id = $listingId").run({
+        $listingId,
+      });
+      db.prepare(
+        "DELETE FROM tailored_resumes WHERE listing_id = $listingId",
+      ).run({ $listingId });
+      db.prepare(
+        "DELETE FROM runs WHERE kind = 'tailor' AND key = $listingId",
+      ).run({ $listingId });
+      return (
+        db
+          .prepare("DELETE FROM jobs WHERE listing_id = $listingId")
+          .run({ $listingId }).changes > 0
+      );
+    })
+    .immediate();
+}
+
 export interface TailoredResumeRecord {
   listingId: string;
   markdownPath: string;
