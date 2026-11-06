@@ -34,6 +34,7 @@ import {
   removeJob,
   SEARCH_RUN_KEY,
   type StoredJob,
+  setJobRegions,
   setJobState,
   setJobTrail,
   startRun,
@@ -492,6 +493,51 @@ export function runTrail(options: TrailCliOptions): void {
   }
 }
 
+export interface RegionCliOptions {
+  listingId: string;
+  regions: string[];
+  clear?: boolean;
+  db?: string;
+  config?: string;
+}
+
+/** Shows a job's regions, or replaces them with the given ones (or none). */
+export function runRegion(options: RegionCliOptions): void {
+  if (options.regions.length > 0 && options.clear) {
+    throw new ConfigError("pass region names or --clear, not both");
+  }
+  const setting = options.regions.length > 0 || options.clear;
+  if (setting) {
+    assertRegionsConfigured(
+      options.regions,
+      configuredRegionsOrNone(options.config, process.cwd(), process.env),
+    );
+  }
+  const db = openDb(resolveDbPath({ db: options.db, config: options.config }));
+  try {
+    const job = getJob(db, options.listingId);
+    if (!job) {
+      console.error(`error: no job found with id ${options.listingId}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!setting) {
+      console.log(job.regions.join(", ") || "(unassigned)");
+      return;
+    }
+    setJobRegions(db, options.listingId, options.regions);
+    console.log(
+      `${options.listingId}: ${options.regions.length > 0 ? `region ${options.regions.join(", ")}` : "unassigned"}`,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function assertRegionsConfigured(names: string[], regions: RegionEntry[]) {
+  for (const name of names) assertRegion(name, regions);
+}
+
 export async function runRefresh(options: { db?: string }): Promise<void> {
   const db = openDb(resolveDbPath({ db: options.db }));
   const result = await refreshListings(db);
@@ -915,6 +961,26 @@ export function createProgram(
         options: { clear?: boolean; db?: string; config?: string },
       ) => {
         runTrail({ ...options, listingId: listingIdArg, trail });
+      },
+    );
+
+  program
+    .command("region")
+    .description(
+      "Show a job's regions, replace them with the given ones, or clear them with --clear (unassigned)",
+    )
+    .argument("<listingId>", "listing id, e.g. workday:acme:R1234")
+    .argument("[region...]", "region name(s) to set")
+    .option("--clear", "remove the job from all regions", false)
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(
+      (
+        listingIdArg: string,
+        regions: string[],
+        options: { clear?: boolean; db?: string; config?: string },
+      ) => {
+        runRegion({ ...options, listingId: listingIdArg, regions });
       },
     );
 
