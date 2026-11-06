@@ -215,25 +215,35 @@ The right side shows the branch and last commit of the checkout that's running
 trailguide checkout (or worktree) you're currently inside, and the linked one
 everywhere else. Set `TRAILGUIDE_NO_DELEGATE=1` to always run the linked one.
 
-Lowercase keys navigate; capital letters act (the capital in each footer label is its shortcut):
+Anything that does something or changes state is a Ctrl chord; plain keys only move around or open things (case doesn't matter). The footer groups them, most used first.
 
-- ↑↓ / k j: navigate job list
-- ←→ / h l: page up/down
-- G / 1-9: next region / jump to region N
-- Tab: switch between the Active and Applied views. Active is grouped into one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list. Applied lists tailored jobs first
-- Ctrl+E: open the Archived view; press it again to go back
-- ↵: expand/collapse the selected job's description
-- O: open the listing URL in your browser
-- Y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
-- S: search the current region in the background. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
-- T: tailor your resume (the current region's master) to the selected job, or (re)tailor, which regenerates its PDF if it already has one (see below)
-- V: view the job's tailored resume PDF
-- E: archive
-- A: mark applied
-- L: cycle the job's resume trail (none, then each trail in the config)
-- I: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link))
-- R: refresh (checks whether active listings are still live)
+Main actions:
+
+- Ctrl+T: tailor your resume (the current region's master) to the selected job, or re-tailor, which regenerates its PDF if it already has one (see below)
+- Ctrl+A: mark applied. The row stays in the list for a moment, marked "Moved to Applied", then leaves; press it again on an applied job to undo. On an archived job it toggles the applied mark without unarchiving
+
+Job:
+
+- o: open the listing URL in your browser
+- y: copy the selected job's listing id (shown under its URL in the detail panel) to the clipboard, e.g. for `trailguide tailor <listingId>`
+- v: view the job's tailored resume PDF
+- Ctrl+X: archive
+- Ctrl+L: cycle the job's resume trail (none, then each trail in the config)
+
+Find:
+
+- Ctrl+S: search the current region in the background. It keeps running if you quit or restart the TUI; the header shows `Searching...`, the list reloads when it finishes, and output goes to `trailguide-search.log` next to the db
+- Ctrl+N: import a job from a link: paste it, pick a trail (see [Importing a job from a link](#importing-a-job-from-a-link)). Not Ctrl+I, which terminals send as Tab
+- Ctrl+R: refresh (checks whether active listings are still live)
 - /: filter the list as you type. Matches title, company, location, trail, URL and description, case-insensitively; every space-separated word must appear. ↑↓ move through matches while typing, ↵ keeps the filter (shown on the separator line, across regions and views), Esc clears it
+
+View and move:
+
+- Tab: switch between the Active and Applied views. Active is grouped into one section per configured trail, then "Not on a trail (for now)"; with no trails configured it is a single flat list. Applied lists tailored jobs first
+- Ctrl+E: view the archive; press it again to go back
+- h / l or ←→: switch region; 1-9 jumps to region N
+- ↑↓ / k j: move through the job list; PgUp / PgDn page
+- ↵: expand/collapse the selected job's description
 - q / esc: quit (esc clears an applied filter first)
 
 Results are deduped across sources and persisted to the sqlite db, so
@@ -241,7 +251,7 @@ repeated searches only flag what's `NEW`.
 
 ## Tailoring your resume
 
-`trailguide tailor <listingId>` (or `T` in the TUI) reorders your resume's
+`trailguide tailor <listingId>` (or Ctrl+T in the TUI) reorders your resume's
 Highlights, each job's accomplishment bullets, and your Skills section to
 foreground whatever's most relevant to a specific listing, then renders a
 PDF. It never invents, rewrites, or drops factual content: a local model only
@@ -306,12 +316,12 @@ Search records the trail of the keyword that found each job. For sources
 searched with every keyword at once, it's the first keyword (in config
 order) the job title contains. Tailoring then picks, in order: `--resume`,
 the job's `<trail>.md` (an error if missing), `default.md`, or the only `.md`
-in the dir. It never guesses between masters. Change a job's trail with `L`
+in the dir. It never guesses between masters. Change a job's trail with Ctrl+L
 in the TUI or `trailguide trail <listingId> [trail] [--clear]`.
 
 With regions, each region has its own folder of masters
 (`<resume dir>/<region name>/`, or the region's `resumes`), so the Omaha and
-Bay Area versions of `secplat.md` can say different things. `T` in the TUI
+Bay Area versions of `secplat.md` can say different things. Ctrl+T in the TUI
 tailors with the region you are looking at; `trailguide tailor` uses
 `--region`, else the job's first region in config order. The tailored resume
 remembers which region's master it came from (shown in the TUI's detail
@@ -326,7 +336,7 @@ watch, a title your keywords don't match) can be added by hand:
 trailguide add https://job-boards.greenhouse.io/codeorg/jobs/4727981005 --trail platform
 ```
 
-or `I` in the TUI. Search filters don't apply: the job goes in because you
+or Ctrl+N in the TUI. Search filters don't apply: the job goes in because you
 picked it. Greenhouse, Lever, Ashby, Workable and Workday links are read
 through the board's API, and get the same listing id search would give
 them, so a later search finds the same row. Any other link is read from the

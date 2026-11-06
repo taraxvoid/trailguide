@@ -112,3 +112,28 @@ export function sectionCounts(
   }
   return counts;
 }
+
+/**
+ * A job whose state just changed, held in the list a moment so the change is
+ * seen before the row leaves: `job` is the pre-change snapshot, `index` where
+ * it sat.
+ */
+export interface Lingering {
+  job: StoredJob;
+  index: number;
+  /** Shown on the row, e.g. "Applied". */
+  label: string;
+  tone: SectionTone;
+}
+
+/** `ordered` with the lingering job put back where it was, if it left. */
+export function withLingering(
+  ordered: StoredJob[],
+  lingering: Lingering | null,
+): StoredJob[] {
+  if (!lingering) return ordered;
+  if (ordered.some((j) => j.listingId === lingering.job.listingId))
+    return ordered;
+  const at = Math.min(lingering.index, ordered.length);
+  return [...ordered.slice(0, at), lingering.job, ...ordered.slice(at)];
+}

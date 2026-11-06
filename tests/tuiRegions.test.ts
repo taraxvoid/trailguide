@@ -2,9 +2,9 @@ import { describe, expect, it } from "bun:test";
 import type { StoredJob } from "../src/db.ts";
 import {
   initialRegion,
-  nextRegion,
   nextView,
   regionByKey,
+  stepRegion,
   stripRegions,
 } from "../src/tui/regions.ts";
 
@@ -39,10 +39,18 @@ describe("stripRegions", () => {
   });
 });
 
-describe("nextRegion", () => {
-  it("steps and wraps", () => {
-    expect(nextRegion(["bay", "omaha", "remote"], "bay")).toBe("omaha");
-    expect(nextRegion(["bay", "omaha", "remote"], "remote")).toBe("bay");
+describe("stepRegion", () => {
+  const strip = ["bay", "omaha", "remote"];
+  it("steps forward and wraps", () => {
+    expect(stepRegion(strip, "bay", 1)).toBe("omaha");
+    expect(stepRegion(strip, "remote", 1)).toBe("bay");
+  });
+  it("steps back and wraps", () => {
+    expect(stepRegion(strip, "omaha", -1)).toBe("bay");
+    expect(stepRegion(strip, "bay", -1)).toBe("remote");
+  });
+  it("stays put for an unknown region", () => {
+    expect(stepRegion(strip, "mars", 1)).toBe("mars");
   });
 });
 
