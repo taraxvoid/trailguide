@@ -10,9 +10,11 @@ import {
   requiresClearance,
   resolveTrailChoice,
   runAdd,
+  runRegion,
   type SearchOptions,
   tailorSource,
 } from "../src/cli.ts";
+import { addJobRegions, getJob, openDb, upsertJobs } from "../src/db.ts";
 
 describe("chooseTailorRegion", () => {
   const regions = [
@@ -278,6 +280,63 @@ describe("remove command parsing", () => {
       "t.db",
     ]);
     expect(calls).toEqual([{ listingId: "workday:nelnet:R23243", db: "t.db" }]);
+  });
+});
+
+describe("region command", () => {
+  it("replaces a job's regions and checks they are configured", () => {
+    const dir = mkdtempSync(join(tmpdir(), "trailguide-region-"));
+    const db = join(dir, "t.db");
+    const config = join(dir, "c.toml");
+    writeFileSync(
+      config,
+      '[region.omaha]\nplaces = ["Omaha"]\n[region.bay]\nplaces = ["East Bay"]\n',
+    );
+    const handle = openDb(db);
+    upsertJobs(handle, [
+      {
+        source: "greenhouse",
+        sourceId: "1",
+        title: "t",
+        company: "c",
+        location: "l",
+        remoteType: "onsite",
+        url: "https://x",
+        postedAt: null,
+        description: "d",
+      },
+    ]);
+    addJobRegions(handle, "greenhouse:1", ["omaha"]);
+    handle.close();
+
+    runRegion({ listingId: "greenhouse:1", regions: ["bay"], db, config });
+    const after = openDb(db);
+    expect(getJob(after, "greenhouse:1")?.regions).toEqual(["bay"]);
+    after.close();
+
+    expect(() =>
+      runRegion({ listingId: "greenhouse:1", regions: ["mars"], db, config }),
+    ).toThrow(/unknown region/);
+    expect(() =>
+      runRegion({
+        listingId: "greenhouse:1",
+        regions: ["bay"],
+        clear: true,
+        db,
+        config,
+      }),
+    ).toThrow(/not both/);
+
+    runRegion({
+      listingId: "greenhouse:1",
+      regions: [],
+      clear: true,
+      db,
+      config,
+    });
+    const cleared = openDb(db);
+    expect(getJob(cleared, "greenhouse:1")?.regions).toEqual([]);
+    cleared.close();
   });
 });
 
