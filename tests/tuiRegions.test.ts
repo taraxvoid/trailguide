@@ -44,6 +44,11 @@ describe("nextRegion", () => {
     expect(nextRegion(["bay", "omaha", "remote"], "bay")).toBe("omaha");
     expect(nextRegion(["bay", "omaha", "remote"], "remote")).toBe("bay");
   });
+
+  it("steps backwards and wraps", () => {
+    expect(nextRegion(["bay", "omaha", "remote"], "omaha", -1)).toBe("bay");
+    expect(nextRegion(["bay", "omaha", "remote"], "bay", -1)).toBe("remote");
+  });
 });
 
 describe("regionByKey", () => {
