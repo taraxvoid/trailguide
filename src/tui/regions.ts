@@ -25,9 +25,11 @@ export function initialRegion(
   return strip[0] ?? null;
 }
 
-/** The region after `current`, wrapping around. */
-export function nextRegion(strip: string[], current: string): string {
-  const next = strip[(strip.indexOf(current) + 1) % strip.length];
+/** The region `step` places after `current` (-1: before), wrapping around. */
+export function nextRegion(strip: string[], current: string, step = 1): string {
+  const at = strip.indexOf(current);
+  const next =
+    strip[(((at + step) % strip.length) + strip.length) % strip.length];
   return next ?? current;
 }
 

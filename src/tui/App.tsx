@@ -870,6 +870,14 @@ export default function JobBrowser({
         setSelectedIndex((prev) => Math.min(visibleJobs.length - 1, prev + 1));
         return;
       }
+      if (
+        region !== null &&
+        strip.length > 1 &&
+        (key.leftArrow || key.rightArrow)
+      ) {
+        setRegion(nextRegion(strip, region, key.rightArrow ? 1 : -1));
+        return;
+      }
       if (key.pageUp || key.leftArrow || input === "h") {
         setSelectedIndex((prev) =>
           Math.max(0, prev - Math.max(1, visibleCount)),
