@@ -348,7 +348,8 @@ can't be imported.
 asks; in a script it's required. Adding a job that's already tracked
 refreshes its details and sets the trail you chose, keeping its state and
 applied date. The job joins every region its location matches; if none
-does, it goes in `--region` (the TUI's current region), else the first one.
+does, it goes in `--region`; without that, a terminal asks which region (or
+`none`) and a script leaves it in no region (`unassigned`).
 
 ## Network use
 
