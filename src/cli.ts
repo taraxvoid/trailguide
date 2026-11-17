@@ -2,9 +2,10 @@
 import type { Database } from "bun:sqlite";
 import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
-import { Command } from "commander";
+import { Argument, Command } from "commander";
 import pkg from "../package.json" with { type: "json" };
 import { delegateTarget, runDelegate } from "./checkout.ts";
+import { COMPLETION_SHELLS, generateCompletion } from "./completions.ts";
 import {
   ConfigError,
   configuredRegions,
@@ -1084,6 +1085,26 @@ export function createProgram(
       } finally {
         io.close();
       }
+    });
+
+  program
+    .command("completion")
+    .description("Print a shell completion script (bash, zsh or fish)")
+    .addArgument(
+      new Argument("<shell>", "shell to generate completions for").choices(
+        COMPLETION_SHELLS,
+      ),
+    )
+    .addHelpText(
+      "after",
+      `
+Examples:
+  eval "$(trailguide completion bash)"            # add to ~/.bashrc
+  trailguide completion zsh > ~/.zfunc/_trailguide  # dir must be on fpath
+  trailguide completion fish > ~/.config/fish/completions/trailguide.fish`,
+    )
+    .action((shell: (typeof COMPLETION_SHELLS)[number]) => {
+      process.stdout.write(generateCompletion(program, shell));
     });
 
   return program;
