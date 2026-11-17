@@ -34,6 +34,7 @@ import {
   removeJob,
   SEARCH_RUN_KEY,
   type StoredJob,
+  setJobRegions,
   setJobState,
   setJobTrail,
   startRun,
@@ -353,6 +354,7 @@ export interface TrailCliOptions {
 
 /** The value `--trail` takes for "import with no trail". */
 const NO_TRAIL = "none";
+const NO_REGION = "none";
 
 /**
  * Turns `--trail` (or, in a terminal, an answer to `ask`) into a trail, or
@@ -397,17 +399,60 @@ export async function resolveTrailChoice(
  * `--trail`. End of input answers "".
  */
 async function askTrail(choices: string[], hint?: string): Promise<string> {
+  return askNumbered("Trail for this job:", choices, hint);
+}
+
+async function askNumbered(
+  heading: string,
+  choices: string[],
+  hint?: string,
+): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const closed = new Promise<string>((resolve) =>
     rl.once("close", () => resolve("")),
   );
   try {
     const list = choices.map((c, i) => `  ${i + 1}) ${c}`).join("\n");
-    const question = hint ? `${hint}\n> ` : `Trail for this job:\n${list}\n> `;
+    const question = hint ? `${hint}\n> ` : `${heading}\n${list}\n> `;
     return await Promise.race([rl.question(question), closed]);
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Which region a job whose location matches none should live in: a region
+ * name, or null for none. Enter alone, or end of input, backs out.
+ */
+export async function resolveRegionChoice(
+  regions: string[],
+  ask: (choices: string[], hint?: string) => Promise<string>,
+): Promise<string | null> {
+  const choices = [...regions, NO_REGION];
+  let hint: string | undefined;
+  for (;;) {
+    const answer = (await ask(choices, hint)).trim();
+    if (answer === "") {
+      throw new ConfigError("no region chosen; nothing imported");
+    }
+    const picked = /^\d+$/.test(answer) ? choices[Number(answer) - 1] : answer;
+    if (picked !== undefined && choices.includes(picked)) {
+      return picked === NO_REGION ? null : picked;
+    }
+    hint = `pick 1-${choices.length} or a region name`;
+  }
+}
+
+function askRegionPrompt(
+  job: { location: string },
+  choices: string[],
+  hint?: string,
+): Promise<string> {
+  return askNumbered(
+    `${job.location || "This job's location"} is in none of your regions. Region for this job:`,
+    choices,
+    hint,
+  );
 }
 
 export interface AddCliOptions {
@@ -415,7 +460,7 @@ export interface AddCliOptions {
   trail?: string;
   db?: string;
   config?: string;
-  /** Region for a job whose location matches none (default: the first). */
+  /** Region for a job whose location matches none (default: ask, else none). */
   region?: string;
 }
 
@@ -423,14 +468,24 @@ export async function runAdd(
   options: AddCliOptions,
   deps: {
     ask?: (choices: string[]) => Promise<string>;
+    /** Asks for a region; defaults to a numbered prompt on a terminal. */
+    askRegion?: (
+      job: { location: string },
+      choices: string[],
+      hint?: string,
+    ) => Promise<string>;
     importJob?: typeof importJob;
-  } = { ask: process.stdin.isTTY ? askTrail : undefined },
+  } = {
+    ask: process.stdin.isTTY ? askTrail : undefined,
+    askRegion: process.stdin.isTTY ? askRegionPrompt : undefined,
+  },
 ): Promise<void> {
   const ctx = { db: options.db, config: options.config };
   try {
     const { config } = loadConfig(ctx);
     const regions = configuredRegions(config);
     if (options.region !== undefined) assertRegion(options.region, regions);
+    const askRegion = deps.askRegion;
     const trail = await resolveTrailChoice(
       options.trail,
       configuredTrails(config),
@@ -444,7 +499,14 @@ export async function runAdd(
         trail,
         resolveBoards(config),
         regions,
-        options.region ?? regions[0]?.name,
+        options.region,
+        askRegion && regions.length > 0
+          ? (found) =>
+              resolveRegionChoice(
+                regions.map((r) => r.name),
+                (choices, hint) => askRegion(found, choices, hint),
+              )
+          : undefined,
       );
       console.log(
         `${added ? "Added" : "Already tracked"} ${job.listingId}: ${job.title} @ ${job.company} (${job.location}), ${job.trail ? `trail ${job.trail}` : "no trail"}`,
@@ -490,6 +552,51 @@ export function runTrail(options: TrailCliOptions): void {
   } finally {
     db.close();
   }
+}
+
+export interface RegionCliOptions {
+  listingId: string;
+  regions: string[];
+  clear?: boolean;
+  db?: string;
+  config?: string;
+}
+
+/** Shows a job's regions, or replaces them with the given ones (or none). */
+export function runRegion(options: RegionCliOptions): void {
+  if (options.regions.length > 0 && options.clear) {
+    throw new ConfigError("pass region names or --clear, not both");
+  }
+  const setting = options.regions.length > 0 || options.clear;
+  if (setting) {
+    assertRegionsConfigured(
+      options.regions,
+      configuredRegionsOrNone(options.config, process.cwd(), process.env),
+    );
+  }
+  const db = openDb(resolveDbPath({ db: options.db, config: options.config }));
+  try {
+    const job = getJob(db, options.listingId);
+    if (!job) {
+      console.error(`error: no job found with id ${options.listingId}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (!setting) {
+      console.log(job.regions.join(", ") || "(unassigned)");
+      return;
+    }
+    setJobRegions(db, options.listingId, options.regions);
+    console.log(
+      `${options.listingId}: ${options.regions.length > 0 ? `region ${options.regions.join(", ")}` : "unassigned"}`,
+    );
+  } finally {
+    db.close();
+  }
+}
+
+function assertRegionsConfigured(names: string[], regions: RegionEntry[]) {
+  for (const name of names) assertRegion(name, regions);
 }
 
 export async function runRefresh(options: { db?: string }): Promise<void> {
@@ -915,6 +1022,26 @@ export function createProgram(
         options: { clear?: boolean; db?: string; config?: string },
       ) => {
         runTrail({ ...options, listingId: listingIdArg, trail });
+      },
+    );
+
+  program
+    .command("region")
+    .description(
+      "Show a job's regions, replace them with the given ones, or clear them with --clear (unassigned)",
+    )
+    .argument("<listingId>", "listing id, e.g. workday:acme:R1234")
+    .argument("[region...]", "region name(s) to set")
+    .option("--clear", "remove the job from all regions", false)
+    .option("--db <path>", DB_HELP)
+    .option("--config <path>", CONFIG_HELP)
+    .action(
+      (
+        listingIdArg: string,
+        regions: string[],
+        options: { clear?: boolean; db?: string; config?: string },
+      ) => {
+        runRegion({ ...options, listingId: listingIdArg, regions });
       },
     );
 

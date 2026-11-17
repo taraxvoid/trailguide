@@ -8,11 +8,14 @@ import {
   createProgram,
   isInternship,
   requiresClearance,
+  resolveRegionChoice,
   resolveTrailChoice,
   runAdd,
+  runRegion,
   type SearchOptions,
   tailorSource,
 } from "../src/cli.ts";
+import { addJobRegions, getJob, openDb, upsertJobs } from "../src/db.ts";
 
 describe("chooseTailorRegion", () => {
   const regions = [
@@ -278,6 +281,63 @@ describe("remove command parsing", () => {
       "t.db",
     ]);
     expect(calls).toEqual([{ listingId: "workday:nelnet:R23243", db: "t.db" }]);
+  });
+});
+
+describe("region command", () => {
+  it("replaces a job's regions and checks they are configured", () => {
+    const dir = mkdtempSync(join(tmpdir(), "trailguide-region-"));
+    const db = join(dir, "t.db");
+    const config = join(dir, "c.toml");
+    writeFileSync(
+      config,
+      '[region.omaha]\nplaces = ["Omaha"]\n[region.bay]\nplaces = ["East Bay"]\n',
+    );
+    const handle = openDb(db);
+    upsertJobs(handle, [
+      {
+        source: "greenhouse",
+        sourceId: "1",
+        title: "t",
+        company: "c",
+        location: "l",
+        remoteType: "onsite",
+        url: "https://x",
+        postedAt: null,
+        description: "d",
+      },
+    ]);
+    addJobRegions(handle, "greenhouse:1", ["omaha"]);
+    handle.close();
+
+    runRegion({ listingId: "greenhouse:1", regions: ["bay"], db, config });
+    const after = openDb(db);
+    expect(getJob(after, "greenhouse:1")?.regions).toEqual(["bay"]);
+    after.close();
+
+    expect(() =>
+      runRegion({ listingId: "greenhouse:1", regions: ["mars"], db, config }),
+    ).toThrow(/unknown region/);
+    expect(() =>
+      runRegion({
+        listingId: "greenhouse:1",
+        regions: ["bay"],
+        clear: true,
+        db,
+        config,
+      }),
+    ).toThrow(/not both/);
+
+    runRegion({
+      listingId: "greenhouse:1",
+      regions: [],
+      clear: true,
+      db,
+      config,
+    });
+    const cleared = openDb(db);
+    expect(getJob(cleared, "greenhouse:1")?.regions).toEqual([]);
+    cleared.close();
   });
 });
 
@@ -610,12 +670,30 @@ describe("add command", () => {
     ]);
   });
 
-  it("passes the regions and the first region as the fallback", async () => {
+  it("passes the regions, with no fallback region unless --region is given", async () => {
     const { fn, calls } = fakeImport(true, "platform");
     await runAdd(options("platform"), { importJob: fn });
     const regions = (calls[0]?.[4] ?? []) as { name: string }[];
     expect(regions.map((r) => r.name)).toEqual(["remote"]);
-    expect(calls[0]?.[5]).toBe("remote");
+    expect(calls[0]?.[5]).toBeUndefined();
+    expect(calls[0]?.[6]).toBeUndefined();
+  });
+
+  it("asks for a region only when it can, and only offers configured ones", async () => {
+    const { fn, calls } = fakeImport(true, "platform");
+    const asked: string[][] = [];
+    await runAdd(options("platform"), {
+      importJob: fn,
+      askRegion: async (job, choices) => {
+        asked.push([job.location, ...choices]);
+        return "1";
+      },
+    });
+    const choose = calls[0]?.[6] as (j: {
+      location: string;
+    }) => Promise<unknown>;
+    expect(await choose({ location: "Lincoln, NE" })).toBe("remote");
+    expect(asked).toEqual([["Lincoln, NE", "remote", "none"]]);
   });
 
   it("uses --region as the fallback and rejects an unknown one", async () => {
@@ -654,5 +732,33 @@ describe("add command", () => {
     expect(cmd?.options.map((o) => o.long)).toEqual(
       expect.arrayContaining(["--trail", "--db", "--config"]),
     );
+  });
+});
+
+describe("resolveRegionChoice", () => {
+  const regions = ["bay", "omaha", "remote"];
+  const answers =
+    (...a: string[]) =>
+    async () =>
+      a.shift() ?? "";
+
+  it("takes a number or a name, with none last", async () => {
+    expect(await resolveRegionChoice(regions, answers("2"))).toBe("omaha");
+    expect(await resolveRegionChoice(regions, answers("remote"))).toBe(
+      "remote",
+    );
+    expect(await resolveRegionChoice(regions, answers("4"))).toBeNull();
+  });
+
+  it("asks again after a bad answer and backs out on Enter", async () => {
+    const hints: (string | undefined)[] = [];
+    const ask = async (_c: string[], hint?: string) => {
+      hints.push(hint);
+      return hints.length === 1 ? "9" : "";
+    };
+    await expect(resolveRegionChoice(regions, ask)).rejects.toThrow(
+      "no region chosen",
+    );
+    expect(hints).toEqual([undefined, "pick 1-4 or a region name"]);
   });
 });

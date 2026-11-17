@@ -17,6 +17,7 @@ import {
   removeJob,
   saveImportedJob,
   setJobApplied,
+  setJobRegions,
   setJobState,
   setJobTrail,
   setSetting,
@@ -325,6 +326,26 @@ describe("clearJobs", () => {
 
     clearJobs(db);
     expect(allJobs(db)).toHaveLength(0);
+    db.close();
+  });
+});
+
+describe("setJobRegions", () => {
+  it("replaces a job's regions, can clear them, and rejects unknown jobs", () => {
+    const db = freshDb();
+    upsertJobs(db, [mockJob({ sourceId: "j1", source: "jsearch" })]);
+    addJobRegions(db, "jsearch:j1", ["omaha"]);
+
+    expect(setJobRegions(db, "jsearch:j1", ["bay", "remote"])).toBe(true);
+    expect(getJob(db, "jsearch:j1")?.regions).toEqual(["bay", "remote"]);
+    expect(setJobRegions(db, "jsearch:j1", [])).toBe(true);
+    expect(getJob(db, "jsearch:j1")?.regions).toEqual([]);
+    expect(setJobRegions(db, "jsearch:nope", ["bay"])).toBe(false);
+    expect(
+      db
+        .query("SELECT * FROM job_regions WHERE listing_id = 'jsearch:nope'")
+        .all(),
+    ).toHaveLength(0);
     db.close();
   });
 });

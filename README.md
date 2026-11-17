@@ -190,7 +190,7 @@ trailguide search [--role <query...>] [--region <name...>] [--location <place...
 - `--config`: config file to use instead of the global plus local chain
 
 Other commands: `trailguide tui`, `trailguide add`, `trailguide jobs`, `trailguide refresh`, `trailguide tailor`,
-`trailguide trail`, `trailguide remove <listingId>` (delete one job), `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
+`trailguide trail`, `trailguide remove <listingId>` (delete one job), `trailguide region <listingId> [region...] [--clear]` (show, replace or clear a job's regions, e.g. one `add`ed into the wrong region), `trailguide clear`, `trailguide config`, `trailguide init`; `trailguide --help` lists them.
 
 Every `trailguide search`, including one started by hand, registers itself as the
 db's single search run: it shows in the TUI, and a second one started while
@@ -348,7 +348,8 @@ can't be imported.
 asks; in a script it's required. Adding a job that's already tracked
 refreshes its details and sets the trail you chose, keeping its state and
 applied date. The job joins every region its location matches; if none
-does, it goes in `--region` (the TUI's current region), else the first one.
+does, it goes in `--region`; without that, a terminal asks which region (or
+`none`) and a script leaves it in no region (`unassigned`).
 
 ## Network use
 

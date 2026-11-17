@@ -194,7 +194,9 @@ export async function resolveJobUrl(
 
 /**
  * Resolves a link and stores the job with `trail` (null for none), tagged
- * with the regions its location matches, else with `fallbackRegion`.
+ * with the regions its location matches, else with `fallbackRegion`, else
+ * with what `chooseRegion` answers (null: no region). Nothing is stored if
+ * `chooseRegion` throws, so the user can back out.
  */
 export async function importJob(
   db: Database,
@@ -203,15 +205,16 @@ export async function importJob(
   boards: Board[],
   regions: RegionEntry[] = [],
   fallbackRegion?: string,
+  chooseRegion?: (job: NormalizedJob) => Promise<string | null>,
 ): Promise<{ job: StoredJob; added: boolean }> {
   const resolved = await resolveJobUrl(url, boards);
+  let assigned = regionsFor(resolved, regions);
+  if (assigned.length === 0) {
+    const picked = fallbackRegion ?? (await chooseRegion?.(resolved)) ?? null;
+    assigned = picked ? [picked] : [];
+  }
   const { listingId, added } = saveImportedJob(db, resolved, trail);
-  const matched = regionsFor(resolved, regions);
-  addJobRegions(
-    db,
-    listingId,
-    matched.length > 0 ? matched : fallbackRegion ? [fallbackRegion] : [],
-  );
+  addJobRegions(db, listingId, assigned);
   const job = getJob(db, listingId);
   if (!job) throw new ImportError(`could not save ${url}`);
   return { job, added };

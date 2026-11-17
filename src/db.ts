@@ -220,6 +220,23 @@ export function addJobRegions(
   for (const region of regions) insert.run(listingId, region);
 }
 
+/** Replaces a job's regions (empty: none). False if the job doesn't exist. */
+export function setJobRegions(
+  db: Database,
+  listingId: string,
+  regions: string[],
+): boolean {
+  return db
+    .transaction(() => {
+      if (!db.prepare("SELECT 1 FROM jobs WHERE listing_id = ?").get(listingId))
+        return false;
+      db.prepare("DELETE FROM job_regions WHERE listing_id = ?").run(listingId);
+      addJobRegions(db, listingId, regions);
+      return true;
+    })
+    .immediate();
+}
+
 /** Regions per listing, for `listingIds` only when given. */
 function regionsByListing(
   db: Database,
