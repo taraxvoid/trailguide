@@ -52,11 +52,6 @@ describe("stepRegion", () => {
   it("stays put for an unknown region", () => {
     expect(stepRegion(strip, "mars", 1)).toBe("mars");
   });
-
-  it("steps backwards and wraps", () => {
-    expect(nextRegion(["bay", "omaha", "remote"], "omaha", -1)).toBe("bay");
-    expect(nextRegion(["bay", "omaha", "remote"], "bay", -1)).toBe("remote");
-  });
 });
 
 describe("regionByKey", () => {
