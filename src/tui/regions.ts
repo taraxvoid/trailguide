@@ -28,11 +28,10 @@ export function initialRegion(
 /** The region `step` places after `current` (-1: before), wrapping around. */
 export function stepRegion(
   strip: string[],
-  current: string,
-  step: 1 | -1,
-): string {
+  current: string, step = 1): string {
   const at = strip.indexOf(current);
-  if (at === -1 || strip.length === 0) return current;
+  const next =
+    strip[(((at + step) % strip.length) + strip.length) % strip.length];
   return strip[(at + step + strip.length) % strip.length] ?? current;
 }
 
