@@ -78,6 +78,7 @@ export function footerGroups(ctx: FooterContext): FooterGroup[] {
           active: ctx.archived,
         },
         { key: "Ctrl+L", label: "cycle trail" },
+        { key: "Ctrl+D", label: "delete" },
       ],
     },
     {

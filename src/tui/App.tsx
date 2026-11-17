@@ -32,6 +32,7 @@ import {
   getSetting,
   getTailoredResume,
   getTailorRun,
+  removeJob,
   runningRuns,
   runningTailorIds,
   SEARCH_RUN_KEY,
@@ -283,6 +284,8 @@ export default function JobBrowser({
   >(null);
   const lingerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  // Listing id awaiting a second Ctrl+D / Delete to confirm its removal.
+  const [pendingRemoveId, setPendingRemoveId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Listings with a tailor/regen in flight. Each is a detached `trailguide tailor`
   // process (so it survives quitting the TUI); the runs table is the
@@ -711,6 +714,24 @@ export default function JobBrowser({
     [db, visibleJobs, selectedIndex, viewTab, region, showStatus],
   );
 
+  const handleRemove = useCallback(() => {
+    const job = visibleJobs[selectedIndex];
+    if (!job) return;
+    if (pendingRemoveId !== job.listingId) {
+      setPendingRemoveId(job.listingId);
+      say(
+        `Delete ${job.title} @ ${job.company} (${job.listingId})? Ctrl+D / Delete again to confirm, any other key cancels`,
+        "error",
+      );
+      return;
+    }
+    setPendingRemoveId(null);
+    removeJob(db, job.listingId);
+    setJobs(allJobs(db));
+    setTailoredIds(tailoredListingIds(db));
+    showStatus(`Deleted: ${job.title} @ ${job.company}`, "archived");
+  }, [db, visibleJobs, selectedIndex, pendingRemoveId, say, showStatus]);
+
   // Poll for runs started/finished by (possibly earlier or other) processes.
   useEffect(() => {
     const timer = setInterval(() => {
@@ -881,6 +902,15 @@ export default function JobBrowser({
         setFilterQuery("cancelled" in result ? "" : result.done);
         return;
       }
+      const isRemoveKey = (key.ctrl && input === "d") || key.delete;
+      if (pendingRemoveId && !isRemoveKey) {
+        setPendingRemoveId(null);
+        say(null);
+      }
+      if (isRemoveKey) {
+        if (!lingering) handleRemove();
+        return;
+      }
       if (input === "/") {
         setIsFilterOpen(true);
         return;
@@ -1014,6 +1044,9 @@ export default function JobBrowser({
       handleSearch,
       handleOpenResume,
       handleCopyId,
+      handleRemove,
+      pendingRemoveId,
+      say,
       region,
       strip,
     ],
