@@ -256,6 +256,31 @@ describe("clear command parsing", () => {
   });
 });
 
+describe("remove command parsing", () => {
+  it("passes the listing id and --db", async () => {
+    const calls: { listingId: string; db?: string }[] = [];
+    const program = createProgram(
+      async () => {},
+      async () => {},
+      async () => {},
+      async () => {},
+      async () => {},
+      async (options) => {
+        calls.push(options);
+      },
+    );
+    await program.parseAsync([
+      "node",
+      "trailguide",
+      "remove",
+      "workday:nelnet:R23243",
+      "--db",
+      "t.db",
+    ]);
+    expect(calls).toEqual([{ listingId: "workday:nelnet:R23243", db: "t.db" }]);
+  });
+});
+
 describe("search command parsing", () => {
   function programWithSpy() {
     const calls: SearchOptions[] = [];

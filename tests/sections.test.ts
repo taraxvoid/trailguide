@@ -7,7 +7,32 @@ import {
   sectionCounts,
   sectionOf,
   viewCounts,
+  withLingering,
 } from "../src/tui/sections.ts";
+
+describe("withLingering", () => {
+  const mk = (id: string) => ({ listingId: id }) as StoredJob;
+  const held = {
+    job: mk("b"),
+    index: 1,
+    label: "Applied",
+    tone: "applied",
+  } as const;
+
+  it("puts the job back where it was", () => {
+    const out = withLingering([mk("a"), mk("c")], held);
+    expect(out.map((j) => j.listingId)).toEqual(["a", "b", "c"]);
+  });
+
+  it("clamps the index and ignores jobs still listed", () => {
+    expect(
+      withLingering([mk("a")], { ...held, index: 9 }).map((j) => j.listingId),
+    ).toEqual(["a", "b"]);
+    const listed = [mk("a"), mk("b")];
+    expect(withLingering(listed, held)).toBe(listed);
+    expect(withLingering(listed, null)).toBe(listed);
+  });
+});
 
 function job(
   id: string,
