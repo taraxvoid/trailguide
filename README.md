@@ -6,7 +6,7 @@ trailguide searches company job boards (Greenhouse, Lever, Ashby, Workday, Worka
 aggregators for the roles and places you configure, keeps what it finds in a
 local SQLite database, and lets you browse, triage and apply from a terminal
 UI. For each job it can also tailor your resume: a local model picks and
-orders *which of your own bullets* to show, and a PDF comes out the other end.
+orders _which of your own bullets_ to show, and a PDF comes out the other end.
 
 Everything runs on your machine. Your resume never leaves it; the only network
 traffic is requests to public job-board APIs (see [Network use](#network-use)).
@@ -256,7 +256,7 @@ repeated searches only flag what's `NEW`.
 Highlights, each job's accomplishment bullets, and your Skills section to
 foreground whatever's most relevant to a specific listing, then renders a
 PDF. It never invents, rewrites, or drops factual content: a local model only
-ever picks and orders *which of your own bullets* to show; everything else
+ever picks and orders _which of your own bullets_ to show; everything else
 (your contact info, employer names/dates/titles, education, certifications,
 ...) is reproduced exactly as written.
 
@@ -280,6 +280,7 @@ Setup:
    run `mise install` from the repo. (or [get typst another way](https://github.com/typst/typst#installation)) and
 3. Install [Ollama](https://ollama.com) and pull a thinking-capable model
    (the default is `qwen3:8b`, a good fit for 16GB of RAM):
+
    ```bash
    ollama pull qwen3:8b
    ```
