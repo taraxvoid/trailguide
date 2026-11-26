@@ -59,17 +59,17 @@ config chain ──► SearchPlan ──► sources ──► collectJobs ──
 
 If Ollama, the model or Typst is missing, or the plan is nonsense, you still
 get the untailored resume rather than an error or garbage. A resume master is
-chosen per listing from its *trail* (`<trail>.md`), never guessed.
+chosen per listing from its _trail_ (`<trail>.md`), never guessed.
 
 ## Layout
 
-| path | what |
-|---|---|
-| `src/cli.ts` | commands (commander), `runSearch`, `runTailor`, `runTrail` |
-| `src/config.ts`, `src/paths.ts` | config parsing, merging, XDG paths |
-| `src/search.ts` | collecting, matching and filtering jobs |
-| `src/sources/` | one file per job source, plus location matching |
-| `src/db.ts` | schema, migrations, listings, runs |
-| `src/tailor/` | resume parsing, plan, Ollama client, Typst rendering |
-| `src/tui/` | the Ink terminal UI |
-| `seed/ats-companies.json` | the built-in company boards |
+| path                            | what                                                       |
+| ------------------------------- | ---------------------------------------------------------- |
+| `src/cli.ts`                    | commands (commander), `runSearch`, `runTailor`, `runTrail` |
+| `src/config.ts`, `src/paths.ts` | config parsing, merging, XDG paths                         |
+| `src/search.ts`                 | collecting, matching and filtering jobs                    |
+| `src/sources/`                  | one file per job source, plus location matching            |
+| `src/db.ts`                     | schema, migrations, listings, runs                         |
+| `src/tailor/`                   | resume parsing, plan, Ollama client, Typst rendering       |
+| `src/tui/`                      | the Ink terminal UI                                        |
+| `seed/ats-companies.json`       | the built-in company boards                                |
