@@ -25,4 +25,4 @@ permissions:
 
 jobs:
   validate:
-    uses: taraxvoid/voidflow/.github/workflows/tool-ci.yml@3f6252e4ab9000744b46d9d4d1a0172ee65cf992 # v0.13.1
+    uses: taraxvoid/voidflow/.github/workflows/tool-ci.yml@5693c9455d52f7fa419ff4be747c218bac3814f8 # v0.16.0
